@@ -62,6 +62,18 @@ try {
     const textEdit = structuredClone(original)
     textEdit.name.zhCN += " 文本维护"
     textEdit.preferredDriveDiscs.defaultTwoPieceSetIds = ["moonlight_lullaby", "swing_jazz"]
+    const preferredFourPieceSetId = textEdit.preferredDriveDiscs.defaultSetIds[0]
+    const preferredFourPieceSet = data.driveDiscSets.sets.find(item => item.id === preferredFourPieceSetId)
+    const preferredFourPieceRule = preferredFourPieceSet?.fourPiece?.selfBuff?.effects?.find(item => item.type === "stacked")
+    if (preferredFourPieceRule) {
+        textEdit.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs = {
+            [`driveDisc4pc:${preferredFourPieceSetId}.self`]: {
+                effects: {
+                    [preferredFourPieceRule.id]: { stacks: 1, coverage: 0.5 },
+                },
+            },
+        }
+    }
     for (const invalid of [["missing_drive_disc"], "swing_jazz"]) {
         const rejectedPreference = await write({ ...textEdit, preferredDriveDiscs: { defaultTwoPieceSetIds: invalid } }, match(original))
         assert.equal(rejectedPreference.status, 400, JSON.stringify(rejectedPreference.body))
@@ -72,6 +84,12 @@ try {
     assert.deepEqual(saved.body.savedItem.defaultCalculationConfig.events, original.defaultCalculationConfig.events)
     assert.deepEqual(saved.body.savedItem.defaultCalculationConfig.name, original.defaultCalculationConfig.name)
     assert.deepEqual(saved.body.savedItem.preferredDriveDiscs.defaultTwoPieceSetIds, ["moonlight_lullaby", "swing_jazz"])
+    if (preferredFourPieceRule) {
+        assert.deepEqual(
+            saved.body.savedItem.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs[`driveDisc4pc:${preferredFourPieceSetId}.self`].effects[preferredFourPieceRule.id],
+            { stacks: 1, coverage: 0.5 },
+        )
+    }
     assert.deepEqual((await read()).agents.agents.find(item => item.id === "velina").preferredDriveDiscs.defaultTwoPieceSetIds, ["moonlight_lullaby", "swing_jazz"])
     assert.equal((await write(original, match(original), "DELETE")).status, 412)
 

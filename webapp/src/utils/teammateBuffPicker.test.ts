@@ -4,6 +4,7 @@ import { buildCombatBuffGroups } from "@/utils/combatBuffs"
 import {
   inferBuffPickerState,
   isTeammatePotentialBuff,
+  markManualTeammateKey,
   normalizeBuffPickerState,
   selectedTeammateOwnerIds,
   teammateCinemaLevel,
@@ -71,6 +72,23 @@ describe("teammate Buff picker helpers", () => {
     ] })).toEqual({ teammateSlots: [null, { teammateId: "qianxia", cinemaLevel: 0 }] })
     expect(normalizeBuffPickerState({ teammateSlots: [false, { teammateId: 2, cinemaLevel: 1 }] }))
       .toEqual({ teammateSlots: [null, null] })
+  })
+
+  it("round-trips provenance and manual tombstones without accepting malformed keys", () => {
+    const state = normalizeBuffPickerState({
+      origin: "adminDefault",
+      defaultFingerprint: "fnv1a-test",
+      manualKeys: ["slot:0:teammateId", "slot:0:teammateId", " ", 3 as any],
+      teammateSlots: [null, { teammateId: "qianxia", cinemaLevel: 2 }],
+    })!
+    expect(state).toMatchObject({
+      origin: "adminDefault",
+      defaultFingerprint: "fnv1a-test",
+      manualKeys: ["slot:0:teammateId"],
+    })
+    markManualTeammateKey(state, "cinema:qianxia")
+    expect(state.origin).toBe("adminDefault")
+    expect(state.manualKeys).toEqual(["slot:0:teammateId", "cinema:qianxia"])
   })
 
   it("infers selected owners in authored order without rewriting existing selections", () => {

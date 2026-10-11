@@ -249,10 +249,47 @@ describe('Enka synchronization operations and calculation regressions', () => {
     input.runtimeInputs['yaojiayin.core_andante_atk'] = { effects: { yaojiayin_core_andante_atk_flat: { sourceValue: 2900, coverage: 0.7 } } }
     const result = syncEnkaTeammates(input, sources(), meta, 'ye_shunguang').payload
     expect(result.selectedBuffIds).toEqual(input.selectedBuffIds)
-    expect(result.buffPickerState.teammateSlots[0].cinemaLevel).toBe(0)
-    expect(result.runtimeInputs['yaojiayin.special_aria_buff'].effects.yaojiayin_special_aria_dmg_bonus).toMatchObject({ sourceValue: 12, coverage: 0.5 })
+    expect(result.buffPickerState.teammateSlots[0].cinemaLevel).toBe(6)
+    expect(result.runtimeInputs['yaojiayin.special_aria_buff'].effects.yaojiayin_special_aria_dmg_bonus).toMatchObject({ sourceValue: 16, coverage: 0.5 })
     expect(result.runtimeInputs['yaojiayin.core_andante_atk'].effects.yaojiayin_core_andante_atk_flat).toMatchObject({ sourceValue: 2900, coverage: 0.7 })
     expect(syncEnkaTeammates(result, sources(), meta, 'ye_shunguang').payload).toEqual(result)
+  })
+
+  it('adopts imported cinema and eligible Buffs from an authored default state without creating manual overrides', () => {
+    const input: any = {
+      selectedBuffIds: [], addedBuffs: [], runtimeInputs: {},
+      buffPickerState: {
+        origin: 'adminDefault', defaultFingerprint: 'ellen-default', manualKeys: [],
+        teammateSlots: [{ teammateId: 'yaojiayin', cinemaLevel: 0 }, null],
+      },
+    }
+    const source = sources()
+    source.history.yaojiayin.snapshot.cinemaLevel = 1
+    const result = syncEnkaTeammates(input, source, meta, 'ye_shunguang').payload
+    expect(result.buffPickerState.origin).toBe('enkaAuto')
+    expect(result.buffPickerState.teammateSlots[0].cinemaLevel).toBe(1)
+    expect(result.selectedBuffIds).toContain('yaojiayin.cinema_1.enemy_res_reduction')
+    expect(result.buffPickerState.manualKeys ?? []).toEqual([])
+    expect(result.buffPickerState.enka.overrides['enabled:yaojiayin.cinema_1.enemy_res_reduction']).toBeUndefined()
+  })
+
+  it('keeps manual cinema and Buff choices made before the first Enka adoption', () => {
+    const input: any = {
+      selectedBuffIds: [], addedBuffs: [], runtimeInputs: {},
+      buffPickerState: {
+        origin: 'user', defaultFingerprint: 'ellen-default',
+        manualKeys: ['cinema:yaojiayin', 'enabled:yaojiayin.cinema_1.enemy_res_reduction'],
+        teammateSlots: [{ teammateId: 'yaojiayin', cinemaLevel: 0 }, null],
+      },
+    }
+    const source = sources()
+    source.history.yaojiayin.snapshot.cinemaLevel = 1
+    const result = syncEnkaTeammates(input, source, meta, 'ye_shunguang').payload
+    expect(result.buffPickerState.teammateSlots[0].cinemaLevel).toBe(0)
+    expect(result.selectedBuffIds).not.toContain('yaojiayin.cinema_1.enemy_res_reduction')
+    expect(result.buffPickerState.manualKeys).toEqual(expect.arrayContaining([
+      'cinema:yaojiayin', 'enabled:yaojiayin.cinema_1.enemy_res_reduction',
+    ]))
   })
 
   it.each([

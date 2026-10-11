@@ -37,7 +37,14 @@ export function materializeCorePassiveScalingRule(rule = {}, agent = {}, request
         if (!field || !Number.isFinite(value)) {
             throw new Error(`Invalid core passive scaling source for ${agent?.id ?? "unknown"}: ${field || "missing field"}`)
         }
-        next = { ...next, value, displayValue: value }
+        next = {
+            ...next,
+            value,
+            displayValue: value,
+            ...(rule.type === "stacked" && rule.activationStacks == null
+                ? { valuePerStack: value, displayValuePerStack: value }
+                : {}),
+        }
     }
 
     const parameterSources = rule?.formula?.parameterSources

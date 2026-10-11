@@ -6,8 +6,13 @@ export type TeammateSlot = {
   loadoutId?: string
 }
 
+export type TeammateStateOrigin = 'adminDefault' | 'enkaAuto' | 'legacyUser'
+
 export type BuffPickerState = {
   teammateSlots: [TeammateSlot | null, TeammateSlot | null]
+  origin?: TeammateStateOrigin
+  defaultFingerprint?: string
+  manualKeys?: string[]
   enka?: EnkaTeammateState
 }
 
@@ -79,10 +84,40 @@ export function normalizeBuffPickerState(value: unknown): BuffPickerState | null
       ...(typeof slot.loadoutId === 'string' && slot.loadoutId ? { loadoutId: slot.loadoutId } : {}),
     }
   }
+  const origin = (value as { origin?: unknown }).origin
+  if (origin === 'adminDefault' || origin === 'enkaAuto' || origin === 'legacyUser') {
+    normalized.origin = origin
+  }
+  const defaultFingerprint = (value as { defaultFingerprint?: unknown }).defaultFingerprint
+  if (typeof defaultFingerprint === 'string' && defaultFingerprint) normalized.defaultFingerprint = defaultFingerprint
+  const manualKeys = (value as { manualKeys?: unknown }).manualKeys
+  if (Array.isArray(manualKeys)) {
+    normalized.manualKeys = [...new Set(manualKeys.filter((key): key is string => typeof key === 'string'
+      && /^(slot:[01]:teammateId|loadout:[01]|(?:cinema|enabled|runtime|engine):.+)$/.test(key)))]
+  }
   const enka = (value as { enka?: EnkaTeammateState }).enka
   if (enka?.version === 1 && typeof enka.ownerId === 'string' && typeof enka.uid === 'string'
     && enka.owners && enka.applied && enka.overrides) normalized.enka = JSON.parse(JSON.stringify(enka))
   return normalized
+}
+
+export function hasManualTeammateKey(state: BuffPickerState | null | undefined, key: string): boolean {
+  return Boolean(state?.manualKeys?.includes(key))
+}
+
+export function markManualTeammateKey(state: BuffPickerState, key: string): void {
+  const normalized = String(key ?? '').trim()
+  if (!normalized) return
+  state.manualKeys = [...new Set([...(state.manualKeys ?? []), normalized])]
+  state.origin ??= 'adminDefault'
+}
+
+export function clearManualTeammateKeys(state: BuffPickerState, predicate: (key: string) => boolean): void {
+  for (const key of state.manualKeys ?? []) if (predicate(key)) {
+    if (state.enka) delete state.enka.overrides[key]
+  }
+  state.manualKeys = (state.manualKeys ?? []).filter(key => !predicate(key))
+  if (!state.manualKeys.length) delete state.manualKeys
 }
 
 export function selectedTeammateOwnerIds(buffs: any[], selectedIds: Iterable<string>): Set<string> {

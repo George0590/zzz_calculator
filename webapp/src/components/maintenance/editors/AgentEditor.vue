@@ -18,6 +18,7 @@ import {
 import { internalId, textOf } from "../maintenance-model"
 import { statLabel, storedStatLabel } from "@/utils/format"
 import { SYSTEM_MANAGED_SKILL_GROUP_COUNTS } from "@core/maintenanceValidation.js"
+import { effectRules, effectRuleId } from "@core/shared-combat.js"
 
 const props = defineProps<{ model: any, catalog: any, disabled?: boolean }>()
 const emit = defineEmits<{ change: [] }>()
@@ -41,6 +42,85 @@ function changed() { emit("change") }
 
 function driveDiscOptions() {
   return (props.catalog?.driveDiscSets?.sets ?? []).map((item: any) => ({ label: textOf(item.name), value: item.id }))
+}
+
+function preferredDriveDiscSets() {
+  const ids = new Set(props.model.preferredDriveDiscs?.defaultSetIds ?? [])
+  return (props.catalog?.driveDiscSets?.sets ?? []).filter((set: any) => ids.has(set.id) && set.fourPiece)
+}
+
+function changePreferredFourPieceSets(value: any) {
+  props.model.preferredDriveDiscs.defaultSetIds = value ?? []
+  const selected = new Set(props.model.preferredDriveDiscs.defaultSetIds)
+  const runtimes = props.model.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs ?? {}
+  for (const id of Object.keys(runtimes)) {
+    const match = id.match(/^driveDisc4pc:(.+)\.(self|team)$/)
+    if (match && !selected.has(match[1])) delete runtimes[id]
+  }
+  changed()
+}
+
+function fourPieceBuff(set: any, part: "self" | "team") {
+  const fourPiece = set?.fourPiece
+  if (part === "team") return fourPiece?.teamBuff ?? null
+  return fourPiece?.selfBuff ?? (!fourPiece?.selfBuff && effectRules(fourPiece).length ? fourPiece : null)
+}
+
+function fourPieceRuntimeEntries() {
+  return preferredDriveDiscSets().flatMap((set: any) => (["self", "team"] as const)
+    .map(part => ({ set, part, buff: fourPieceBuff(set, part), id: `driveDisc4pc:${set.id}.${part}` }))
+    .filter(entry => effectRules(entry.buff).length))
+}
+
+function runtimeFor(id: string) {
+  return props.model.preferredDriveDiscs?.defaultFourPieceBuffRuntimeInputs?.[id] ?? {}
+}
+
+function runtimeEffectFor(id: string, rule: any) {
+  return runtimeFor(id)?.effects?.[effectRuleId(rule)] ?? {}
+}
+
+function stackGroups(buff: any) {
+  const groups = new Map<string, any>()
+  for (const rule of effectRules(buff)) {
+    if (rule.type !== "stacked") continue
+    const key = String(rule.stackGroup ?? effectRuleId(rule))
+    if (!groups.has(key)) groups.set(key, { key, label: textOf(rule.stackLabel) || "层数", rules: [] })
+    groups.get(key).rules.push(rule)
+  }
+  return [...groups.values()]
+}
+
+function runtimeStackValue(id: string, group: any) {
+  const configured = group.rules.map((rule: any) => runtimeEffectFor(id, rule).stacks).find((value: any) => value !== undefined)
+  const rule = group.rules[0]
+  return Number(configured ?? rule.defaultStacks ?? rule.maxStacks ?? 1)
+}
+
+function runtimeCoverageValue(id: string, rule: any, buff: any) {
+  const configured = runtimeEffectFor(id, rule).coverage
+  const metadata = rule.coverage ?? buff?.coverage
+  return Number(configured ?? metadata?.default ?? 1)
+}
+
+function updateRuntimeEffect(id: string, rule: any, field: "stacks" | "coverage", value: number | null) {
+  props.model.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs ??= {}
+  const runtime = props.model.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs[id] ?? {}
+  runtime.effects ??= {}
+  const effectId = effectRuleId(rule)
+  const effectRuntime = { ...(runtime.effects[effectId] ?? {}) }
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) delete effectRuntime[field]
+  else effectRuntime[field] = Number(value)
+  if (Object.keys(effectRuntime).length) runtime.effects[effectId] = effectRuntime
+  else delete runtime.effects[effectId]
+  if (!Object.keys(runtime.effects).length) delete runtime.effects
+  if (Object.keys(runtime).length) props.model.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs[id] = runtime
+  else delete props.model.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs[id]
+  changed()
+}
+
+function updateRuntimeStack(id: string, group: any, value: number | null) {
+  for (const rule of group.rules) updateRuntimeEffect(id, rule, "stacks", value)
 }
 
 const SUB_STAT_POOL_FALLBACK = [
@@ -246,6 +326,22 @@ function enableCoreSkill(enabled: boolean) {
   } : null
   changed()
 }
+
+function defaultTeammateOptions() {
+  const teammates = props.catalog?.combatBuffs?.teammates ?? props.catalog?.teammateCombatBuffGroups ?? []
+  return teammates.filter((teammate: any) => teammate.id !== props.model.id)
+    .map((teammate: any) => option(teammate.id, textOf(teammate.name)))
+}
+
+function addDefaultTeammate() {
+  props.model.defaultTeammates ??= []
+  const selected = new Set(props.model.defaultTeammates.map((slot: any) => slot.teammateId))
+  const candidate = defaultTeammateOptions().find((item: any) => !selected.has(item.value))
+  if (candidate && props.model.defaultTeammates.length < 2) {
+    props.model.defaultTeammates.push({ teammateId: candidate.value, cinemaLevel: 0 })
+    changed()
+  }
+}
 </script>
 
 <template>
@@ -264,6 +360,15 @@ function enableCoreSkill(enabled: boolean) {
         <label class="maintenance-switch-field"><span>首页/优化器显示</span><NSwitch :value="model.hidden !== true" :disabled="disabled" @update:value="model.hidden = !$event; changed()" /></label>
       </div>
       <SourceListEditor :sources="model.sources" :disabled="disabled" @change="changed" />
+    </MaintenanceSection>
+
+    <MaintenanceSection title="默认队友" description="首次选择角色时应用；已有保存配置及手动取消项优先。队友影画可在工作台调整。">
+      <template #actions><NButton size="small" :disabled="disabled || (model.defaultTeammates?.length ?? 0) >= 2" @click="addDefaultTeammate"><template #icon><Plus :size="15" /></template>添加队友</NButton></template>
+      <div v-for="(slot, index) in model.defaultTeammates ?? []" :key="index" class="maintenance-grid">
+        <label class="maintenance-field"><span>队友</span><NSelect v-model:value="slot.teammateId" :options="defaultTeammateOptions()" :disabled="disabled" @update:value="changed" /></label>
+        <label class="maintenance-field"><span>影画</span><NInputNumber v-model:value="slot.cinemaLevel" :min="0" :max="6" :precision="0" :disabled="disabled" @update:value="changed" /></label>
+        <NButton size="small" :disabled="disabled" @click="model.defaultTeammates.splice(index, 1); changed()"><template #icon><Trash2 :size="15" /></template>移除</NButton>
+      </div>
     </MaintenanceSection>
 
     <MaintenanceSection title="60 级面板">
@@ -285,9 +390,23 @@ function enableCoreSkill(enabled: boolean) {
 
     <MaintenanceSection title="优先驱动盘" description="默认 2 件套留空时自动匹配任意套装，多选时在候选套装之间择优。玩家可在工作台修改或清空。">
       <div class="maintenance-grid">
-        <label class="maintenance-field"><span>默认 4 件套</span><NSelect multiple filterable clearable v-model:value="model.preferredDriveDiscs.defaultSetIds" :options="driveDiscOptions()" :disabled="disabled" @update:value="changed" /></label>
+        <label class="maintenance-field"><span>默认 4 件套</span><NSelect multiple filterable clearable :value="model.preferredDriveDiscs.defaultSetIds" :options="driveDiscOptions()" :disabled="disabled" @update:value="changePreferredFourPieceSets($event)" /></label>
         <label class="maintenance-field"><span>默认 2 件套</span><NSelect multiple filterable clearable v-model:value="model.preferredDriveDiscs.defaultTwoPieceSetIds" :options="driveDiscOptions()" :disabled="disabled" @update:value="changed" /></label>
         <label v-for="slot in [4, 5, 6]" :key="slot" class="maintenance-field"><span>{{ slot }} 号位主属性</span><NSelect multiple clearable v-model:value="model.preferredDriveDiscs.mainStatLimits[String(slot)]" :options="MAIN_STAT_OPTIONS[slot]" :disabled="disabled" @update:value="changed" /></label>
+      </div>
+      <div v-if="fourPieceRuntimeEntries().length" class="maintenance-subcard">
+        <header class="maintenance-section-head"><div><h4>推荐 4 件套默认触发参数</h4><p>仅用于优化器的手动配置；用户首次打开时采用这些值，之后可自行修改。</p></div></header>
+        <article v-for="entry in fourPieceRuntimeEntries()" :key="entry.id" class="maintenance-subcard">
+          <header class="maintenance-section-head"><div><h4>{{ textOf(entry.set.name) }} · {{ entry.part === 'team' ? '团队效果' : '装备者效果' }}</h4><p v-if="entry.buff.condition">{{ entry.buff.condition }}</p></div></header>
+          <div v-for="group in stackGroups(entry.buff)" :key="group.key" class="maintenance-grid">
+            <label class="maintenance-field"><span>{{ group.label }}</span><NInputNumber :value="runtimeStackValue(entry.id, group)" :min="0" :max="Number(group.rules[0].maxStacks ?? 99)" :precision="0" :step="1" :disabled="disabled" @update:value="updateRuntimeStack(entry.id, group, $event)" /></label>
+          </div>
+          <div class="maintenance-grid">
+            <template v-for="rule in effectRules(entry.buff)" :key="effectRuleId(rule)">
+              <label v-if="rule.coverage || entry.buff.coverage" class="maintenance-field"><span>{{ textOf(rule.label) || rule.stat || effectRuleId(rule) }} 覆盖率</span><NInputNumber :value="runtimeCoverageValue(entry.id, rule, entry.buff)" :min="Number(rule.coverage?.min ?? entry.buff.coverage?.min ?? 0)" :max="Number(rule.coverage?.max ?? entry.buff.coverage?.max ?? 1)" :step="Number(rule.coverage?.step ?? entry.buff.coverage?.step ?? 0.1)" :precision="2" :disabled="disabled" @update:value="updateRuntimeEffect(entry.id, rule, 'coverage', $event)" /></label>
+            </template>
+          </div>
+        </article>
       </div>
     </MaintenanceSection>
 
@@ -343,7 +462,7 @@ function enableCoreSkill(enabled: boolean) {
           <label class="maintenance-field"><span>生效范围</span><NSelect :value="model.combatBuffs[entry.key].scope" :options="SCOPE_OPTIONS" :disabled="disabled" @update:value="setBuffScope(model.combatBuffs[entry.key], String($event))" /></label>
           <label class="maintenance-field maintenance-field-wide"><span>Buff 描述</span><NInput type="textarea" :value="textOf(model.combatBuffs[entry.key].description)" :disabled="disabled" @update:value="model.combatBuffs[entry.key].description = { zhCN: String($event) }; changed()" /></label>
         </div>
-        <EffectRulesEditor :model="model.combatBuffs[entry.key]" :catalog="catalog" :disabled="disabled" :allow-coverage="model.combatBuffs[entry.key].scope === 'inCombat'" :preferred-skill-id="catalog?.agentSkills?.agentSkills?.find((skill: any) => skill.agentId === model.id)?.id" :core-passive-scaling="entry.key === 'corePassive' ? model.coreSkill?.corePassiveScaling : null" :potential-vision-scaling="entry.key === 'additionalAbility' ? model.potentialVision?.scaling : null" @change="changed" />
+        <EffectRulesEditor :model="model.combatBuffs[entry.key]" :catalog="catalog" :disabled="disabled" :allow-coverage="model.combatBuffs[entry.key].scope === 'inCombat'" :preferred-skill-id="catalog?.agentSkills?.agentSkills?.find((skill: any) => skill.agentId === model.id)?.id" :core-passive-scaling="entry.key === 'corePassive' ? model.coreSkill?.corePassiveScaling : null" :potential-vision-scaling="model.potentialVision?.scaling" @change="changed" />
         <div class="buff-modifier-block"><div class="maintenance-row-head"><strong>Buff 修饰</strong></div><BuffModifiersEditor :model="model.combatBuffs[entry.key]" :catalog="catalog" :disabled="disabled" @change="changed" /></div>
       </template>
     </MaintenanceSection>
@@ -378,7 +497,7 @@ function enableCoreSkill(enabled: boolean) {
         </div>
         <div class="skill-table-wrap potential-scaling-table-wrap">
           <table class="skill-multiplier-table">
-            <thead><tr><th>潜能</th><th v-for="field in potentialScalingFields()" :key="field">{{ field === "assaultCritDmgPct" ? "强击暴击伤害提升%" : field }}</th></tr></thead>
+            <thead><tr><th>潜能</th><th v-for="field in potentialScalingFields()" :key="field">{{ field === "assaultCritDmgPct" ? "强击暴击伤害提升%" : statLabel(field, catalog?.meta) }}</th></tr></thead>
             <tbody><tr v-for="row in model.potentialVision.scaling.levels" :key="row.level"><td>P{{ row.level }}</td><td v-for="field in potentialScalingFields()" :key="field"><NInputNumber v-model:value="row[field]" :disabled="disabled" :step="0.1" @update:value="changed" /></td></tr></tbody>
           </table>
         </div>

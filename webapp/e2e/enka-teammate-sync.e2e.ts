@@ -44,7 +44,11 @@ async function seed(page: Page) {
   await page.evaluate(({ special, core }) => {
     const config = {
       agentLevel: 60,
-      buffPickerState: { teammateSlots: [{ teammateId: 'yaojiayin', cinemaLevel: 6 }, null] },
+      buffPickerState: {
+        origin: 'user',
+        manualKeys: [`enabled:${core}`],
+        teammateSlots: [{ teammateId: 'yaojiayin', cinemaLevel: 0 }, null],
+      },
       combat: { activeBuffIds: [special], addedBuffs: [], runtimeInputs: {
         [special]: { effects: { yaojiayin_special_aria_dmg_bonus: { sourceValue: 16, coverage: 0.5 } } },
         [core]: { effects: { yaojiayin_core_andante_atk_flat: { sourceValue: 2900 } } },

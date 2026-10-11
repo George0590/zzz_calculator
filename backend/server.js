@@ -1066,6 +1066,41 @@ function cleanPreferredDriveDiscs(preferredDriveDiscs = null) {
         : rawTwoPieceSetIds
     const hasTwoPieceDefaults = Array.isArray(defaultTwoPieceSetIds)
         ? defaultTwoPieceSetIds.length > 0 : defaultTwoPieceSetIds !== undefined
+    const rawFourPieceRuntimeDefaults = preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs
+    let defaultFourPieceBuffRuntimeInputs = rawFourPieceRuntimeDefaults
+    if (rawFourPieceRuntimeDefaults
+        && typeof rawFourPieceRuntimeDefaults === "object"
+        && !Array.isArray(rawFourPieceRuntimeDefaults)) {
+        defaultFourPieceBuffRuntimeInputs = {}
+        for (const [buffId, runtime] of Object.entries(rawFourPieceRuntimeDefaults)) {
+            if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+                defaultFourPieceBuffRuntimeInputs[buffId] = runtime
+                continue
+            }
+            const nextRuntime = {}
+            if (runtime.effects !== undefined) {
+                nextRuntime.effects = runtime.effects
+                    && typeof runtime.effects === "object"
+                    && !Array.isArray(runtime.effects)
+                    ? Object.fromEntries(Object.entries(runtime.effects).map(([effectId, effectRuntime]) => {
+                        if (!effectRuntime || typeof effectRuntime !== "object" || Array.isArray(effectRuntime)) {
+                            return [effectId, effectRuntime]
+                        }
+                        const nextEffectRuntime = {}
+                        if (Object.prototype.hasOwnProperty.call(effectRuntime, "stacks")) nextEffectRuntime.stacks = effectRuntime.stacks
+                        if (Object.prototype.hasOwnProperty.call(effectRuntime, "coverage")) nextEffectRuntime.coverage = effectRuntime.coverage
+                        return [effectId, nextEffectRuntime]
+                    }))
+                    : runtime.effects
+            }
+            defaultFourPieceBuffRuntimeInputs[buffId] = nextRuntime
+        }
+    }
+    const hasFourPieceRuntimeDefaults = rawFourPieceRuntimeDefaults !== undefined
+        && (typeof defaultFourPieceBuffRuntimeInputs !== "object"
+            || defaultFourPieceBuffRuntimeInputs === null
+            || Array.isArray(defaultFourPieceBuffRuntimeInputs)
+            || Object.keys(defaultFourPieceBuffRuntimeInputs).length > 0)
     const source = preferredDriveDiscs.mainStatLimits
         ?? preferredDriveDiscs.mainStats
         ?? preferredDriveDiscs
@@ -1076,12 +1111,13 @@ function cleanPreferredDriveDiscs(preferredDriveDiscs = null) {
         mainStatLimits[slot] = [...new Set(values.filter(Boolean).map(String))]
     }
     const hasMainStatLimits = Object.values(mainStatLimits).some(values => values.length)
-    if (!defaultSetIds.length && !hasTwoPieceDefaults && !hasMainStatLimits) {
+    if (!defaultSetIds.length && !hasTwoPieceDefaults && !hasMainStatLimits && !hasFourPieceRuntimeDefaults) {
         return null
     }
     return {
         ...(defaultSetIds.length ? { defaultSetIds } : {}),
         ...(hasTwoPieceDefaults ? { defaultTwoPieceSetIds } : {}),
+        ...(hasFourPieceRuntimeDefaults ? { defaultFourPieceBuffRuntimeInputs } : {}),
         ...(hasMainStatLimits ? { mainStatLimits } : {}),
     }
 }
@@ -2077,10 +2113,12 @@ async function saveMaintenanceItem(resource, item, headers = {}) {
             validationContext.agentSkills = agentSkillsPayload.agentSkills ?? []
         }
         if (resource === "agents") {
-            const [anomalyEffectsPayload, driveDiscSetsPayload] = await Promise.all([
+            const [anomalyEffectsPayload, driveDiscSetsPayload, combatBuffsPayload] = await Promise.all([
                 readDataFile("anomaly_effects.json"),
                 readDataFile("drive_disc_sets.json"),
+                readDataFile("combat_buffs.json"),
             ])
+            validationContext.combatBuffs = combatBuffsPayload
             validationContext.anomalyEffects = anomalyEffectsForType(anomalyEffectsPayload, "attribute")
             validationContext.turbulenceEffects = anomalyEffectsForType(anomalyEffectsPayload, "turbulence")
             validationContext.disorderEffects = anomalyEffectsForType(anomalyEffectsPayload, "disorder")

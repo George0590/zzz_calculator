@@ -267,6 +267,7 @@ const SKILL_TARGET_STAT_VALUES = new Set([
     "windDmg",
     "sharpDmgBonus",
     "lacerationDmg",
+    "critRate",
     ...ELEMENT_SHARP_DMG_STATS,
     "critDmg",
     "disorderDamageBonus",
@@ -626,6 +627,18 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
     if (rule.requirement?.eventStunned !== undefined && typeof rule.requirement.eventStunned !== "boolean") {
         add(errors, `${path}.requirement.eventStunned`, "失衡状态要求必须是布尔值。")
     }
+    for (const key of ["minPotentialLevel", "maxPotentialLevel"]) {
+        if (rule.requirement?.[key] == null) continue
+        const level = Number(rule.requirement[key])
+        if (sourceType !== "self" || !context.agent?.potentialVision) {
+            add(errors, `${path}.requirement.${key}`, "潜能条件只能用于具有潜能影像的角色自身效果。")
+        } else if (!Number.isInteger(level) || level < 0 || level > Number(context.agent.potentialVision.maxLevel)) {
+            add(errors, `${path}.requirement.${key}`, "潜能条件必须位于 P0 到角色最高潜能等级之间。")
+        }
+    }
+    if (Number(rule.requirement?.minPotentialLevel) > Number(rule.requirement?.maxPotentialLevel)) {
+        add(errors, `${path}.requirement`, "最低潜能等级不能高于最高潜能等级。")
+    }
     if (rule.requirement?.agentIds !== undefined) {
         const ids = rule.requirement.agentIds
         if (!Array.isArray(ids)) {
@@ -721,8 +734,8 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
     }
     if (rule.valueSource !== undefined) {
         const source = rule.valueSource ?? {}
-        if (type !== "fixed") {
-            add(errors, `${path}.valueSource`, "动态数值来源只支持固定值规则。")
+        if (type !== "fixed" && type !== "stacked") {
+            add(errors, `${path}.valueSource`, "动态数值来源只支持固定值或叠层规则。")
         }
         requireEnum(errors, source.kind, EFFECT_VALUE_SOURCE_KIND_VALUES, `${path}.valueSource.kind`)
         const field = String(source.field ?? "").trim()
@@ -1117,7 +1130,7 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             && rule.value !== ""
         const valueKey = hasFixedActivationValue ? "value" : "valuePerStack"
         const value = requireFinite(errors, hasFixedActivationValue ? rule.value : rule.valuePerStack ?? rule.value, `${path}.${valueKey}`)
-        if (Number.isFinite(value) && value === 0) {
+        if (Number.isFinite(value) && value === 0 && !rule.valueSource) {
             add(errors, `${path}.${valueKey}`, hasFixedActivationValue ? "激活数值不能为 0。" : "每层数值不能为 0。")
         }
         const maxStacks = requireFinite(errors, rule.maxStacks, `${path}.maxStacks`)
@@ -1426,6 +1439,82 @@ function validatePreferredDriveDiscs(errors, preferredDriveDiscs, context = {}) 
         for (const [index, stat] of values.entries()) {
             if (!STAT_VALUES.has(stat)) {
                 add(errors, `preferredDriveDiscs.mainStatLimits.${slot}[${index}]`, "不是支持的属性。")
+            }
+        }
+    }
+
+    const runtimeDefaults = preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs
+    if (runtimeDefaults === undefined) return
+    if (!runtimeDefaults || typeof runtimeDefaults !== "object" || Array.isArray(runtimeDefaults)) {
+        add(errors, "preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs", "四件套默认触发参数必须是对象。")
+        return
+    }
+    const recommendedSetIds = new Set(Array.isArray(preferredDriveDiscs.defaultSetIds)
+        ? preferredDriveDiscs.defaultSetIds
+        : preferredDriveDiscs.defaultSetId ? [preferredDriveDiscs.defaultSetId] : [])
+    const driveDiscSets = Array.isArray(context.driveDiscSets) ? context.driveDiscSets : []
+    const findRule = (buff, effectId) => rulesOf(buff).find(rule => String(rule?.id ?? rule?.stat ?? "") === effectId)
+    for (const [buffId, runtime] of Object.entries(runtimeDefaults)) {
+        const match = String(buffId).match(/^driveDisc4pc:(.+)\.(self|team)$/)
+        if (!match) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "必须使用 driveDisc4pc:<套装>.self 或 .team 格式。")
+            continue
+        }
+        const [, setId, part] = match
+        if (!recommendedSetIds.has(setId)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "默认触发参数只能配置推荐的 4 件套。")
+            continue
+        }
+        if (!driveDiscSets.length) continue
+        const set = driveDiscSets.find(item => item?.id === setId)
+        const fourPiece = set?.fourPiece
+        const buff = part === "team"
+            ? fourPiece?.teamBuff
+            : fourPiece?.selfBuff ?? (!fourPiece?.selfBuff && rulesOf(fourPiece).length ? fourPiece : null)
+        if (!buff || !rulesOf(buff).length) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "对应套装没有可配置的 4 件套 Buff。")
+            continue
+        }
+        if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "默认触发参数必须是对象。")
+            continue
+        }
+        const effects = runtime.effects
+        if (effects === undefined) continue
+        if (!effects || typeof effects !== "object" || Array.isArray(effects)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}.effects`, "效果默认参数必须是对象。")
+            continue
+        }
+        for (const [effectId, effectRuntime] of Object.entries(effects)) {
+            const path = `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}.effects.${effectId}`
+            const rule = findRule(buff, effectId)
+            if (!rule) {
+                add(errors, path, "效果规则不存在。")
+                continue
+            }
+            if (!effectRuntime || typeof effectRuntime !== "object" || Array.isArray(effectRuntime)) {
+                add(errors, path, "效果默认参数必须是对象。")
+                continue
+            }
+            if (effectRuntime.stacks !== undefined) {
+                const stacks = requireFinite(errors, effectRuntime.stacks, `${path}.stacks`)
+                const maxStacks = Number(rule.maxStacks)
+                if (Number.isFinite(stacks) && (!Number.isInteger(stacks) || stacks < 0 || (Number.isFinite(maxStacks) && stacks > maxStacks))) {
+                    add(errors, `${path}.stacks`, "默认层数必须是范围内的整数。")
+                }
+            }
+            if (effectRuntime.coverage !== undefined) {
+                const coverage = requireFinite(errors, effectRuntime.coverage, `${path}.coverage`)
+                const metadata = rule.coverage ?? buff.coverage
+                if (!metadata) {
+                    add(errors, `${path}.coverage`, "该效果规则未开放覆盖率配置。")
+                    continue
+                }
+                const min = Number(metadata.min ?? 0)
+                const max = Number(metadata.max ?? 1)
+                if (Number.isFinite(coverage) && (coverage < min || coverage > max)) {
+                    add(errors, `${path}.coverage`, "默认覆盖率超出规则范围。")
+                }
             }
         }
     }
@@ -2504,6 +2593,27 @@ function validateAgent(item, context) {
         add(errors, "damageElement", "特殊显示属性必须填写真实伤害结算属性。")
     }
     validateOptionalSources(errors, item, item?.images?.portrait ?? item?.images?.icon)
+    if (item?.defaultTeammates !== undefined) {
+        if (!Array.isArray(item.defaultTeammates) || item.defaultTeammates.length > 2) {
+            add(errors, "defaultTeammates", "默认队友必须是最多两项的数组。")
+        } else {
+            const seen = new Set([item.id])
+            const teammates = context.combatBuffs?.teammates ?? context.teammateCombatBuffGroups ?? []
+            item.defaultTeammates.forEach((slot, index) => {
+                const path = `defaultTeammates[${index}]`
+                const id = slot?.teammateId
+                requireId(errors, { id }, `${path}.teammateId`)
+                if (seen.has(id)) add(errors, `${path}.teammateId`, "默认队友不能重复或选择自身。")
+                seen.add(id)
+                if (teammates.length && !teammates.some(teammate => teammate.id === id)) {
+                    add(errors, `${path}.teammateId`, "队友 Buff 目录中不存在此角色。")
+                }
+                if (!isDefaultCalculationCinemaLevel(slot?.cinemaLevel)) {
+                    add(errors, `${path}.cinemaLevel`, "队友影画必须是 0 到 6 的整数。")
+                }
+            })
+        }
+    }
 
     for (const stat of AGENT_LEVEL_STATS) {
         const value = requireFinite(errors, item?.level60?.[stat], `level60.${stat}`)
@@ -2539,7 +2649,7 @@ function validateAgent(item, context) {
 
     validateEffectSet(errors, item?.combatBuffs?.corePassive, "combatBuffs.corePassive", {
         sourceType: "self",
-        context: { ...context, agent: item, allowCorePassiveScalingSource: true },
+        context: { ...context, agent: item, allowCorePassiveScalingSource: true, allowPotentialVisionScalingSource: true },
     })
     validatePotentialVision(errors, item?.potentialVision)
     validateEffectSet(errors, item?.combatBuffs?.additionalAbility, "combatBuffs.additionalAbility", {

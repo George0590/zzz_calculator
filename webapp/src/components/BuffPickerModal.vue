@@ -10,6 +10,8 @@ import { thumbnailForBuff } from "@/utils/assets"
 import {
   inferBuffPickerState,
   isTeammatePotentialBuff,
+  clearManualTeammateKeys,
+  hasManualTeammateKey,
   normalizeBuffPickerState,
   teammateCinemaLevel,
   teammateOwnerId,
@@ -110,9 +112,36 @@ function syncTeammates(operation: TeammateSyncOperation = { kind: 'refresh' }) {
 function setTeammateLoadout(index: number, value: string | null) {
   const slot = draftBuffPickerState.value.teammateSlots[index]
   if (!slot) return
+  recordEnkaTeammateEdit(draftBuffPickerState.value, `loadout:${index}`, value || null)
   if (value) slot.loadoutId = value
   else delete slot.loadoutId
   syncTeammates()
+}
+
+function clearImportedOverride(key: string) {
+  clearManualTeammateKeys(draftBuffPickerState.value, candidate => candidate === key)
+  if (draftBuffPickerState.value.enka?.overrides) delete draftBuffPickerState.value.enka.overrides[key]
+  syncTeammates({ kind: 'restore', key })
+}
+
+function teammateSourceLabel(buff: any): string {
+  const enabledKey = `enabled:${buff.id}`
+  const runtimeKey = `runtime:${buff.id}`
+  if (hasManualTeammateKey(draftBuffPickerState.value, enabledKey)
+    || hasManualTeammateKey(draftBuffPickerState.value, runtimeKey)
+    || Object.prototype.hasOwnProperty.call(draftBuffPickerState.value.enka?.overrides ?? {}, enabledKey)
+    || Object.prototype.hasOwnProperty.call(draftBuffPickerState.value.enka?.overrides ?? {}, runtimeKey)) return '用户修改'
+  const owner = teammateOwnerId(buff)
+  const imported = Boolean(props.teammateSources?.uid
+    && props.teammateSources.history[owner]?.uid === props.teammateSources.uid
+    && props.teammateSources.history[owner]?.completeness === 'full')
+  if (imported) return 'Enka 导入'
+  return draftBuffPickerState.value.origin === 'adminDefault' ? '管理员默认' : ''
+}
+
+function canRestoreTeammateBuff(buff: any): boolean {
+  const source = teammateSourceLabel(buff)
+  return source === '用户修改' && Boolean(props.teammateSources?.uid)
 }
 const fieldVersion = ref("")
 const fieldPeriod = ref("")
@@ -640,6 +669,8 @@ function setTeammateSlot(index: number, value: string | null) {
   if ((previousId ?? "") === teammateId || (teammateId && (slots[1 - index]?.teammateId === teammateId
     || !teammateOwners.value.some(owner => owner.value === teammateId)))) return
 
+  recordEnkaTeammateEdit(draftBuffPickerState.value, `slot:${index}:teammateId`, teammateId || null, previousId || null)
+
   if (previousId) {
     // Include catalog entries that are no longer displayed when removing an owner.
     const meta = props.meta ?? {}
@@ -650,6 +681,8 @@ function setTeammateSlot(index: number, value: string | null) {
     })
     const ids = new Set([...groupedBuffs.value.teammate, ...allCandidates]
       .filter(buff => teammateOwnerId(buff) === previousId).map(buff => buff.id))
+    clearManualTeammateKeys(draftBuffPickerState.value, key => key === `cinema:${previousId}`
+      || [...ids].some(id => key === `enabled:${id}` || key === `runtime:${id}` || key === `engine:${id}`))
     draft.value = new Set([...draft.value].filter(id => !ids.has(id)))
     draftRuntimeInputs.value = Object.fromEntries(Object.entries(draftRuntimeInputs.value)
       .filter(([id]) => !ids.has(id) && id !== `teammate:${previousId}`))
@@ -670,6 +703,7 @@ function setTeammateCinema(index: number, value: number) {
   const slot = draftBuffPickerState.value.teammateSlots[index]
   const cinemaLevel = Math.max(0, Math.min(6, Math.trunc(Number(value) || 0)))
   if (!slot || slot.cinemaLevel === cinemaLevel) return
+  recordEnkaTeammateEdit(draftBuffPickerState.value, `cinema:${slot.teammateId}`, cinemaLevel, slot.cinemaLevel)
   const slots = [...draftBuffPickerState.value.teammateSlots] as BuffPickerState["teammateSlots"]
   slots[index] = { ...slot, cinemaLevel }
   draftBuffPickerState.value = { ...draftBuffPickerState.value, teammateSlots: slots }
@@ -683,6 +717,24 @@ function setTeammateCinema(index: number, value: number) {
     const level = teammateCinemaLevel(buff)
     if (teammateOwnerId(buff) === slot.teammateId && level !== null) toggle(buff.id, level <= cinemaLevel)
   }
+}
+
+function teammateCinemaSource(index: number): string {
+  const slot = draftBuffPickerState.value.teammateSlots[index]
+  if (!slot) return ''
+  if (hasManualTeammateKey(draftBuffPickerState.value, `cinema:${slot.teammateId}`)
+    || Object.prototype.hasOwnProperty.call(draftBuffPickerState.value.enka?.overrides ?? {}, `cinema:${slot.teammateId}`)) return '用户修改'
+  const imported = Boolean(props.teammateSources?.uid
+    && props.teammateSources.history[slot.teammateId]?.uid === props.teammateSources.uid
+    && props.teammateSources.history[slot.teammateId]?.completeness === 'full')
+  if (imported) return 'Enka 导入'
+  return draftBuffPickerState.value.origin === 'adminDefault' ? '管理员默认' : ''
+}
+
+function restoreTeammateCinema(index: number) {
+  const slot = draftBuffPickerState.value.teammateSlots[index]
+  if (!slot) return
+  clearImportedOverride(`cinema:${slot.teammateId}`)
 }
 
 const categoryBuffs = computed(() => {
@@ -903,7 +955,7 @@ function displayStatLabelForRule(rule: any) {
 }
 
 function updateRuntime(buff: any, runtime: any) {
-  recordEnkaTeammateEdit(draftBuffPickerState.value, `runtime:${buff.id}`, runtime, runtimeFor(buff))
+  if (isTeammateOwnedBuff(buff)) recordEnkaTeammateEdit(draftBuffPickerState.value, `runtime:${buff.id}`, runtime, runtimeFor(buff))
   draftRuntimeInputs.value = {
     ...draftRuntimeInputs.value,
     [buff.id]: normalizeRuntimeForBuff(buff, runtime),
@@ -966,11 +1018,15 @@ function setStacks(buff: any, group: any, value: number | null) {
 
 const imbuementBuffIds = ["system.imbuement", "roxy.additional_ability"]
 
+function isTeammateOwnedBuff(buff: any): boolean {
+  return Boolean(buff?.isTeammateWEngine || buff?.sourceType === 'teammate' || teammateOwnerId(buff))
+}
+
 function toggle(id: string, checked: boolean) {
-  recordEnkaTeammateEdit(draftBuffPickerState.value, `enabled:${id}`, checked)
   const next = new Set(draft.value)
   const nextRuntime = { ...draftRuntimeInputs.value }
   const buff = Object.values(groupedBuffs.value).flat().find((item: any) => item?.id === id) as any
+  if (isTeammateOwnedBuff(buff)) recordEnkaTeammateEdit(draftBuffPickerState.value, `enabled:${id}`, checked)
   if (checked) {
     if (imbuementBuffIds.includes(id)) {
       for (const otherId of imbuementBuffIds) {
@@ -1260,6 +1316,13 @@ async function apply() {
                   :aria-label="`${section.label}影画`"
                   @update:value="setTeammateCinema(section.slotIndex, $event)"
                 />
+                <span v-if="teammateCinemaSource(section.slotIndex)" class="teammate-source-tag">{{ teammateCinemaSource(section.slotIndex) }}</span>
+                <NButton
+                  v-if="teammateCinemaSource(section.slotIndex) === '用户修改' && teammateSources"
+                  size="tiny"
+                  quaternary
+                  @click="restoreTeammateCinema(section.slotIndex)"
+                >恢复导入</NButton>
               </div>
             <span class="teammate-selection-count">已选 {{ section.selectedCount }}</span>
             <NSelect
@@ -1359,11 +1422,14 @@ async function apply() {
               :runtime="runtimeFor(buff)"
               :effect-rows="effectRowsFor(buff)"
               :modifier-lines="modifierLinesFor(buff)"
+              :source-label="teammateSourceLabel(buff)"
+              :can-restore="canRestoreTeammateBuff(buff)"
               @toggle="toggle(buff.id, $event)"
               @coverage="(rule, value) => setRuleCoverage(buff, rule, value)"
               @source-value="(group, value) => setSourceValue(buff, group, value)"
               @stacks="(group, value) => setStacks(buff, group, value)"
               @parameter="(definition, value) => setRuntimeParameterValue(buff, definition, value)"
+              @restore="clearImportedOverride(`enabled:${buff.id}`)"
             />
             <article
               v-else
@@ -1632,6 +1698,12 @@ async function apply() {
   gap: 8px;
   flex-shrink: 0;
   padding-bottom: 8px;
+}
+
+.teammate-source-tag {
+  color: var(--app-muted);
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .teammate-column-title {

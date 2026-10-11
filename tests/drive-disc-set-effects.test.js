@@ -56,6 +56,8 @@ assert.deepEqual(dawnSet.twoPiece.effects[0].target.skillTargets, [{ kind: "skil
 
 const basicDamage = skillDamage("basic", "quick_sword", "hit_1")
 const ultimateDamage = skillDamage("chain", "ultimate_cut_delusion_open_heaven", "damage")
+const dashDamage = skillDamage("dodge", "dash_shadow_rush", "damage")
+const dodgeCounterDamage = skillDamage("dodge", "dodge_counter_swallow", "damage")
 const onePieceBasic = calculate({ setId: dawnSet.id, count: 1, damage: basicDamage })
 const twoPieceBasic = calculate({ setId: dawnSet.id, count: 2, damage: basicDamage })
 const twoPieceUltimate = calculate({ setId: dawnSet.id, count: 2, damage: ultimateDamage })
@@ -235,6 +237,7 @@ const expectedFourPieceRules = {
     puffer_electro: 2,
     inferno_metal: 1,
     thunder_metal: 1,
+    polar_metal: 2,
 }
 for (const [setId, expectedCount] of Object.entries(expectedFourPieceRules)) {
     const set = catalog.driveDiscSetsMap.get(setId)
@@ -314,6 +317,48 @@ const infernoRule = catalog.driveDiscSetsMap.get("inferno_metal").fourPiece.self
 assert.deepEqual([infernoRule.stat, infernoRule.value, infernoRule.durationSeconds, infernoRule.coverage.default], ["critRate", 28, 8, 1])
 const thunderRule = catalog.driveDiscSetsMap.get("thunder_metal").fourPiece.selfBuff.effects[0]
 assert.deepEqual([thunderRule.stat, thunderRule.value, thunderRule.basis, thunderRule.coverage.default], ["atkPct", 28, "baseAtk", 1])
+
+const polarId = "polar_metal"
+const polarSet = catalog.driveDiscSetsMap.get(polarId)
+assert.equal(polarSet.fourPiece.teamBuff, null)
+assert.deepEqual(polarSet.fourPiece.selfBuff.effects.map(rule => [rule.stat, rule.value, rule.durationSeconds ?? null]), [
+    ["dmgBonus", 20, null],
+    ["dmgBonus", 20, 12],
+])
+const polarTargets = polarSet.fourPiece.selfBuff.effects.map(rule => rule.target.skillTargets)
+assert.deepEqual(polarTargets[0], [
+    { kind: "skillType", skillType: "basic" },
+    { kind: "skillTag", skillTag: "dashAttack" },
+])
+assert.deepEqual(polarTargets[1], polarTargets[0])
+assert.deepEqual(polarSet.fourPiece.selfBuff.effects[1].coverage, { default: 1, min: 0, max: 1, step: 0.1 })
+assert.match(polarSet.fourPiece.modelingNotes.zhCN, /不由时间轴自动推导/)
+
+const polarBuffId = `driveDisc4pc:${polarId}.self`
+const polarBasic = calculate({ setId: polarId, count: 4, activeBuffIds: [polarBuffId], damage: basicDamage })
+const polarDash = calculate({ setId: polarId, count: 4, activeBuffIds: [polarBuffId], damage: dashDamage })
+const polarCounter = calculate({ setId: polarId, count: 4, activeBuffIds: [polarBuffId], damage: dodgeCounterDamage })
+const polarThreePiece = calculate({ setId: polarId, count: 3, activeBuffIds: [polarBuffId], damage: basicDamage })
+approx(polarBasic.damage.multipliers.directDamageBonus, 0.4, "Polar Metal Basic Attack full window bonus")
+approx(polarDash.damage.multipliers.directDamageBonus, 0.4, "Polar Metal Dash Attack full window bonus")
+approx(polarCounter.damage.multipliers.directDamageBonus, 0, "Polar Metal Dodge Counter exclusion")
+approx(polarThreePiece.damage.multipliers.directDamageBonus, 0, "Polar Metal requires four pieces")
+for (const [coverage, expected] of [[1, 0.4], [0.5, 0.3], [0, 0.2]]) {
+    const result = calculate({
+        setId: polarId,
+        count: 4,
+        activeBuffIds: [polarBuffId],
+        runtimeInputs: {
+            [polarBuffId]: {
+                effects: {
+                    effect_wiki_189_4pc_frozen_shatter_dmg: { coverage },
+                },
+            },
+        },
+        damage: basicDamage,
+    })
+    approx(result.damage.multipliers.directDamageBonus, expected, `Polar Metal trigger coverage ${coverage}`)
+}
 
 for (const setId of Object.keys(expectedFourPieceRules)) {
     const set = catalog.driveDiscSetsMap.get(setId)

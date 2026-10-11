@@ -42,6 +42,8 @@ This document owns shared model semantics. Start character work with the
 | Accounts, inventory and loadouts | Browser IndexedDB `zzz-calculator-user-store` and existing localStorage fallback; [adapter](../webapp/src/runtime/local-store.js) |
 | Build/optimizer selections | Browser stores and existing versioned localStorage payloads; [build](../webapp/src/stores/build.ts), [optimizer](../webapp/src/stores/optimizer.ts) |
 
+角色的 `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs` 保存推荐 4 件套的优化器手动触发快照，键使用现有的 `driveDisc4pc:<setId>.self/team`，效果项只保存明确维护的 `stacks` 与 `coverage`。它只作为用户首次初始化优化器时的基础值；用户已有的运行时字段优先，普通工作台 Buff 仍读取驱动盘规则自身默认值。
+
 Local maintenance writes catalog JSON. Saving does not commit a record or update
 production. Packaging uses committed tracked files: reconcile intentional catalog
 edits, including deletions, before assembling a release. Legacy server inventory
@@ -96,6 +98,13 @@ effect mentioning a move.
 | Stacks | Shared controls retain shared identity; `activationStacks` thresholds are not extra unconditional effects |
 | Buff modifiers | Modify a referenced rule once; an absent source Buff cannot produce an independent modifier benefit |
 | Duration/cooldown | Descriptive or explicit formula parameters, not automatically derived uptime |
+
+Self effects may specify `requirement.minPotentialLevel` / `maxPotentialLevel`.
+Potential materialization filters inactive rules before panel/event compilation;
+it does not prevent selecting authored moves at P0. Dynamic `valueSource` supports
+fixed and stacked rules. For ordinary stacks the resolved value is the per-stack
+value; with `activationStacks` it is the fixed activated amount. A P0 compatibility
+value of zero is valid when its structured scaling source is present.
 
 `dmgBonus` enters the damage-bonus zone; `skillMultiplierBonus` adds to the selected
 skill multiplier. PEN Ratio, DEF Ignore and DEF reduction remain separate.
@@ -159,6 +168,15 @@ the body only, without an implicit Assault Directive:
   scaling; P0 does not receive P2-P6 Buff values.
 - Workbench loads administrator configurations as runtime `adminDefault`; user
   custom configurations retain separate persistence semantics.
+- Optional `defaultTeammates` applies only when a character has no saved teammate
+  picker or explicit Buff selection. It selects the two authored teammates and
+  their Buffs up to the authored Cinema levels. Saved empty selections are also
+  authoritative. Defaults do not grant teammate equipment or infer uptime.
+  Teammate state uses the precedence **manual user edits > complete Enka import >
+  administrator default**. A complete Enka snapshot may update fields that have no
+  manual override; ordinary refresh never replaces a manual field. Legacy saved
+  teammate states without provenance are treated as user-owned and are not adopted
+  automatically by Enka.
 - Characters may intentionally omit administrator defaults and groups. Vivian's
   profile-aware single Release fallback is such a case, not missing content.
 

@@ -345,7 +345,7 @@ const DISORDER_TYPE_VALUES = new Set(["normal", "polarized"])
 // Kept in the accepted data vocabulary for old saved effects, but this legacy
 // modifier is intentionally ignored by every calculation path.
 const IGNORED_DAMAGE_MODIFIER_KINDS = new Set(["enemyDamageTakenBonus"])
-const DAMAGE_MODIFIER_KINDS = ["imbuementDmgBonus", "enemyDamageTakenBonus", "anomalyDamageBonus", "turbulenceDamageBonus", "disorderDamageBonus", "alienationCoefficientBonus", "baseMultiplierBonus", "turbulenceBaseMultiplierBonus", "disorderBaseMultiplierBonus", "anomalyCritRate", "anomalyCritDmg", "anomalyCritRatePerInitialMasteryAbove100", "anomalyDurationBonusSeconds", "releaseProficiencyYieldBonus", "stunDmgMultiplierBonus", "stunDmgMultiplierBonusAlways", "stunDmgMultiplierBonusCapAlways", "directDamageBonus", "sheerDmgBonus", "physicalSheerDmg", "fireSheerDmg", "iceSheerDmg", "electricSheerDmg", "etherSheerDmg", "windSheerDmg", "sharpDmgBonus", ...ELEMENT_SHARP_DMG_STATS, "lacerationDmg", "skillMultiplierBonus", ...ELEMENT_CRIT_DMG_STATS, ...ELEMENT_DEF_IGNORE_STATS]
+const DAMAGE_MODIFIER_KINDS = ["imbuementDmgBonus", "enemyDamageTakenBonus", "anomalyDamageBonus", "turbulenceDamageBonus", "disorderDamageBonus", "alienationCoefficientBonus", "baseMultiplierBonus", "turbulenceBaseMultiplierBonus", "disorderBaseMultiplierBonus", "anomalyCritRate", "anomalyCritDmg", "anomalyCritRatePerInitialMasteryAbove100", "anomalyDurationBonusSeconds", "releaseProficiencyYieldBonus", "stunDmgMultiplierBonus", "stunDmgMultiplierBonusAlways", "stunDmgMultiplierBonusCapAlways", "directDamageBonus", "sheerDmgBonus", "physicalSheerDmg", "fireSheerDmg", "iceSheerDmg", "electricSheerDmg", "etherSheerDmg", "windSheerDmg", "sharpDmgBonus", ...ELEMENT_SHARP_DMG_STATS, "lacerationDmg", "critRate", "skillMultiplierBonus", ...ELEMENT_CRIT_DMG_STATS, ...ELEMENT_DEF_IGNORE_STATS]
 const EVENT_MODIFIER_STAT_KEYS = new Set([
     "imbuementDmgBonus",
     "enemyDamageTakenBonus",
@@ -405,6 +405,7 @@ const SKILL_TARGET_STAT_KEYS = new Set([
     "sharpDmgBonus",
     ...ELEMENT_SHARP_DMG_STATS,
     "lacerationDmg",
+    "critRate",
     "critDmg",
     "anomalyDamageBonus",
     "turbulenceDamageBonus",
@@ -2127,6 +2128,7 @@ function agentCombatBuffEntries(agent, coreSkillLevel, potentialLevel) {
     const skillEntries = (Array.isArray(combatBuffs.skillBuffs) ? combatBuffs.skillBuffs : [])
         .filter(buff => buff)
         .map(buff => materializeCorePassiveScalingEffect(buff, agent, coreSkillLevel))
+        .map(buff => materializePotentialVisionEffect(buff, agent, potentialLevel))
         .map(buff => ({
             id: `agent:${agent.id}.skill.${buff.id}`,
             key: `skill.${buff.id}`,
@@ -3801,8 +3803,8 @@ function damageCritRate(panel) {
     return Math.max(0, Math.min(1, Number(panel.critRate ?? 0)))
 }
 
-function critMultiplierForMode(panel, mode, critDmgBonus = 0) {
-    const critRate = damageCritRate(panel)
+function critMultiplierForMode(panel, mode, critDmgBonus = 0, critRateBonus = 0) {
+    const critRate = Math.max(0, Math.min(1, damageCritRate(panel) + Number(critRateBonus ?? 0)))
     const critDmg = Number(panel.critDmg ?? 0) + Number(critDmgBonus ?? 0)
 
     if (mode === "crit") {
@@ -4251,6 +4253,7 @@ function eventTargetTotalsForElement(bonusTotals, event) {
         : 0
     return {
         imbuementDmgBonus: sumDamageModifiers(bonusTotals, event, "imbuementDmgBonus"),
+        critRate: sumDamageModifiers(bonusTotals, event, "critRate"),
         critDmg: sumDamageModifiers(bonusTotals, event, "critDmg"),
         dmgBonus: sumDamageModifiers(bonusTotals, event, "dmgBonus"),
         [elementDmgKey]: sumDamageModifiers(bonusTotals, event, elementDmgKey),
@@ -4435,13 +4438,20 @@ function critDmgBonusWhiteBoxText(skillTargetedCritDmgBonus, elementCritDmgBonus
     ].filter(Boolean).join(" + ")
 }
 
-function directDamageWhiteBoxRows({ event, damageBasisValue, critMultiplier, critRateForDamage, critDmg, baseCritDmg, skillTargetedCritDmgBonus, elementCritDmgBonus, selectedDmgBonus, directDamageBonus, dmgMultiplier, imbuementMultiplier = 1, targetBreakdown, skillMultiplierBonus, effectiveSkillMultiplier, finalDamage, singleDamage }) {
+function critRateBonusWhiteBoxText(skillTargetedCritRateBonus) {
+    return skillTargetedCritRateBonus
+        ? `定向暴击率 ${formatDamagePercent(skillTargetedCritRateBonus)}`
+        : ""
+}
+
+function directDamageWhiteBoxRows({ event, damageBasisValue, critMultiplier, critRateForDamage, critDmg, baseCritDmg, skillTargetedCritRateBonus = 0, skillTargetedCritDmgBonus, elementCritDmgBonus, selectedDmgBonus, directDamageBonus, dmgMultiplier, imbuementMultiplier = 1, targetBreakdown, skillMultiplierBonus, effectiveSkillMultiplier, finalDamage, singleDamage }) {
     const critModeLabel = {
         expected: "期望",
         crit: "暴击",
         nonCrit: "非暴击",
     }[event.critMode]
     const damageElementText = damageElementLabel(event.damageElement)
+    const critRateBonusText = critRateBonusWhiteBoxText(skillTargetedCritRateBonus)
     const critDmgBonusText = critDmgBonusWhiteBoxText(skillTargetedCritDmgBonus, elementCritDmgBonus)
     const rows = [
         {
@@ -4461,7 +4471,7 @@ function directDamageWhiteBoxRows({ event, damageBasisValue, critMultiplier, cri
         {
             label: "暴击乘区",
             formula: event.critMode === "expected"
-                ? `${formatDamagePercent(critRateForDamage)} × (1 + ${formatDamagePercent(baseCritDmg)}${critDmgBonusText ? ` + ${critDmgBonusText}` : ""}) + (1 - ${formatDamagePercent(critRateForDamage)})`
+                ? `${formatDamagePercent(critRateForDamage)}${critRateBonusText ? `（${critRateBonusText}）` : ""} × (1 + ${formatDamagePercent(baseCritDmg)}${critDmgBonusText ? ` + ${critDmgBonusText}` : ""}) + (1 - ${formatDamagePercent(critRateForDamage)})`
                 : critDmgBonusText
                     ? `${critModeLabel}（面板暴击伤害 ${formatDamagePercent(baseCritDmg)} + ${critDmgBonusText}）`
                     : critModeLabel,
@@ -4515,7 +4525,7 @@ function sheerDefenseWhiteBoxRow() {
     }
 }
 
-function sheerDamageWhiteBoxRows({ event, hp, atk, sheerForceFlat, sheerForce, critMultiplier, critRateForDamage, critDmg, baseCritDmg, skillTargetedCritDmgBonus, elementCritDmgBonus, selectedDmgBonus, skillDamageBonus, dmgMultiplier, imbuementMultiplier = 1, targetBreakdown, skillMultiplierBonus, effectiveSkillMultiplier, sheerDmgBonus, sheerDmgMultiplier, finalDamage, singleDamage }) {
+function sheerDamageWhiteBoxRows({ event, hp, atk, sheerForceFlat, sheerForce, critMultiplier, critRateForDamage, critDmg, baseCritDmg, skillTargetedCritRateBonus = 0, skillTargetedCritDmgBonus, elementCritDmgBonus, selectedDmgBonus, skillDamageBonus, dmgMultiplier, imbuementMultiplier = 1, targetBreakdown, skillMultiplierBonus, effectiveSkillMultiplier, sheerDmgBonus, sheerDmgMultiplier, finalDamage, singleDamage }) {
     const critModeLabel = {
         expected: "期望",
         crit: "暴击",
@@ -4523,6 +4533,7 @@ function sheerDamageWhiteBoxRows({ event, hp, atk, sheerForceFlat, sheerForce, c
     }[event.critMode]
     const damageElementText = damageElementLabel(event.damageElement)
     const critDmgBonusText = critDmgBonusWhiteBoxText(skillTargetedCritDmgBonus, elementCritDmgBonus)
+    const critRateBonusText = critRateBonusWhiteBoxText(skillTargetedCritRateBonus)
     const rows = [
         {
             label: "局内贯穿力",
@@ -4547,7 +4558,7 @@ function sheerDamageWhiteBoxRows({ event, hp, atk, sheerForceFlat, sheerForce, c
         {
             label: "暴击乘区",
             formula: event.critMode === "expected"
-                ? `${formatDamagePercent(critRateForDamage)} × (1 + ${formatDamagePercent(baseCritDmg)}${critDmgBonusText ? ` + ${critDmgBonusText}` : ""}) + (1 - ${formatDamagePercent(critRateForDamage)})`
+                ? `${formatDamagePercent(critRateForDamage)}${critRateBonusText ? `（${critRateBonusText}）` : ""} × (1 + ${formatDamagePercent(baseCritDmg)}${critDmgBonusText ? ` + ${critDmgBonusText}` : ""}) + (1 - ${formatDamagePercent(critRateForDamage)})`
                 : critDmgBonusText
                     ? `${critModeLabel}（面板暴击伤害 ${formatDamagePercent(baseCritDmg)} + ${critDmgBonusText}）`
                     : critModeLabel,
@@ -4808,7 +4819,7 @@ function calculateDirectDamageEventCore({ event, panel, bonusTotals, target, inc
     const atk = Number(panel.atk ?? 0)
     const damageBasisValue = directDamageBasisValue(panel, event)
     const rawCritRate = Number(panel.critRate ?? 0)
-    const critRateForDamage = damageCritRate(panel)
+    const baseCritRateForDamage = damageCritRate(panel)
     const baseCritDmg = Number(panel.critDmg ?? 0)
     const selectedDmgBonus = selectedDmgBonusForElement(panel, event.damageElement)
     const eventTotals = eventTargetTotalsForElement(bonusTotals, event)
@@ -4816,6 +4827,8 @@ function calculateDirectDamageEventCore({ event, panel, bonusTotals, target, inc
     const elementDmgKey = `${event.damageElement}Dmg`
     const elementCritDmgKey = CRIT_DMG_KEY_BY_ELEMENT[event.damageElement]
     const elementCritDmgBonus = Number(eventTotals[elementCritDmgKey] ?? 0)
+    const skillTargetedCritRateBonus = Number(eventTotals.critRate ?? 0)
+    const critRateForDamage = Math.max(0, Math.min(1, baseCritRateForDamage + skillTargetedCritRateBonus))
     const skillTargetedCritDmgBonus = Number(eventTotals.critDmg ?? 0)
     const targetedCritDmgBonus = skillTargetedCritDmgBonus + elementCritDmgBonus
     const critDmg = baseCritDmg + targetedCritDmgBonus
@@ -4835,7 +4848,7 @@ function calculateDirectDamageEventCore({ event, panel, bonusTotals, target, inc
         * targetBreakdown.activeStunMultiplier
         * event.damageScale
     const damageVariant = mode => {
-        const critMultiplier = critMultiplierForMode(panel, mode, targetedCritDmgBonus)
+        const critMultiplier = critMultiplierForMode(panel, mode, targetedCritDmgBonus, skillTargetedCritRateBonus)
         const singleDamage = baseSingleDamage * critMultiplier
         return {
             critMode: mode,
@@ -4872,6 +4885,7 @@ function calculateDirectDamageEventCore({ event, panel, bonusTotals, target, inc
             anomalyProficiency: Number(panel.anomalyProficiency ?? 0),
             critRate: rawCritRate,
             effectiveCritRate: critRateForDamage,
+            targetedCritRateBonus: skillTargetedCritRateBonus,
             critDmg,
             baseCritDmg,
             elementCritDmgBonus,
@@ -4917,6 +4931,7 @@ function calculateDirectDamageEventCore({ event, panel, bonusTotals, target, inc
                 critRateForDamage,
                 critDmg,
                 baseCritDmg,
+                skillTargetedCritRateBonus,
                 skillTargetedCritDmgBonus,
                 elementCritDmgBonus,
                 selectedDmgBonus,
@@ -5411,7 +5426,7 @@ function calculateSheerDamageEvent({ event, agent, panel, bonusTotals, target, i
     const sheerForceFlat = isRuptureAgent(agent) ? Number(panel.sheerForceFlat ?? 0) : 0
     const sheerForce = effectiveSheerForceFromPanel(agent, panel)
     const rawCritRate = Number(panel.critRate ?? 0)
-    const critRateForDamage = damageCritRate(panel)
+    const baseCritRateForDamage = damageCritRate(panel)
     const baseCritDmg = Number(panel.critDmg ?? 0)
     const selectedDmgBonus = selectedDmgBonusForElement(panel, event.damageElement)
     const eventTotals = eventTargetTotalsForElement(bonusTotals, event)
@@ -5420,6 +5435,8 @@ function calculateSheerDamageEvent({ event, agent, panel, bonusTotals, target, i
     const elementSheerDmgKey = SHEER_DMG_KEY_BY_ELEMENT[event.damageElement]
     const elementCritDmgKey = CRIT_DMG_KEY_BY_ELEMENT[event.damageElement]
     const elementCritDmgBonus = Number(eventTotals[elementCritDmgKey] ?? 0)
+    const skillTargetedCritRateBonus = Number(eventTotals.critRate ?? 0)
+    const critRateForDamage = Math.max(0, Math.min(1, baseCritRateForDamage + skillTargetedCritRateBonus))
     const skillTargetedCritDmgBonus = Number(eventTotals.critDmg ?? 0)
     const targetedCritDmgBonus = skillTargetedCritDmgBonus + elementCritDmgBonus
     const critDmg = baseCritDmg + targetedCritDmgBonus
@@ -5439,7 +5456,7 @@ function calculateSheerDamageEvent({ event, agent, panel, bonusTotals, target, i
         * targetBreakdown.activeStunMultiplier
         * event.damageScale
     const damageVariant = mode => {
-        const critMultiplier = critMultiplierForMode(panel, mode, targetedCritDmgBonus)
+        const critMultiplier = critMultiplierForMode(panel, mode, targetedCritDmgBonus, skillTargetedCritRateBonus)
         const singleDamage = baseSingleDamage * critMultiplier
         return {
             critMode: mode,
@@ -5479,6 +5496,7 @@ function calculateSheerDamageEvent({ event, agent, panel, bonusTotals, target, i
             sheerForce,
             critRate: rawCritRate,
             effectiveCritRate: critRateForDamage,
+            targetedCritRateBonus: skillTargetedCritRateBonus,
             critDmg,
             baseCritDmg,
             elementCritDmgBonus,
@@ -5522,6 +5540,7 @@ function calculateSheerDamageEvent({ event, agent, panel, bonusTotals, target, i
                 critRateForDamage,
                 critDmg,
                 baseCritDmg,
+                skillTargetedCritRateBonus,
                 skillTargetedCritDmgBonus,
                 elementCritDmgBonus,
                 selectedDmgBonus,
@@ -6314,6 +6333,7 @@ function calculateDirectDamageFinalValueCore(event, panel, bonusTotals, target) 
     const elementDmgKey = `${event.damageElement}Dmg`
     const elementCritDmgKey = CRIT_DMG_KEY_BY_ELEMENT[event.damageElement]
     const selectedDmgBonus = selectedDmgBonusForElement(panel, event.damageElement)
+    const targetedCritRateBonus = Number(eventTotals.critRate ?? 0)
     const directDamageBonus = sumDamageModifiers(bonusTotals, event, "directDamageBonus")
         + Number(eventTotals.dmgBonus ?? 0)
         + Number(eventTotals[elementDmgKey] ?? 0)
@@ -6328,6 +6348,7 @@ function calculateDirectDamageFinalValueCore(event, panel, bonusTotals, target) 
             panel,
             event.critMode,
             Number(eventTotals.critDmg ?? 0) + Number(eventTotals[elementCritDmgKey] ?? 0),
+            targetedCritRateBonus,
         )
         * event.damageScale
         * Number(event.count ?? 1)
@@ -6396,6 +6417,7 @@ function calculateSheerDamageFinalValue(event, panel, bonusTotals, target, agent
     const elementSheerDmgKey = SHEER_DMG_KEY_BY_ELEMENT[event.damageElement]
     const elementCritDmgKey = CRIT_DMG_KEY_BY_ELEMENT[event.damageElement]
     const selectedDmgBonus = selectedDmgBonusForElement(panel, event.damageElement)
+    const targetedCritRateBonus = Number(eventTotals.critRate ?? 0)
     const skillDamageBonus = Number(eventTotals.dmgBonus ?? 0) + Number(eventTotals[elementDmgKey] ?? 0)
     const sheerDmgBonus = Number(eventTotals.sheerDmgBonus ?? 0) + Number(eventTotals[elementSheerDmgKey] ?? 0)
     const skillMultiplierBonus = Number(eventTotals.skillMultiplierBonus ?? 0)
@@ -6407,6 +6429,7 @@ function calculateSheerDamageFinalValue(event, panel, bonusTotals, target, agent
             panel,
             event.critMode,
             Number(eventTotals.critDmg ?? 0) + Number(eventTotals[elementCritDmgKey] ?? 0),
+            targetedCritRateBonus,
         )
         * (1 + selectedDmgBonus + skillDamageBonus)
         * targetResistanceMultiplierForElement(panel, bonusTotals, target, event.damageElement, eventTotals)
@@ -6603,7 +6626,7 @@ function compiledTargetDamageMultiplier(panel, bonusTotals, target, compiledEven
 }
 
 function compiledCritMultiplier(panel, critMode, compiledEvent, sums) {
-    const critRate = damageCritRate(panel)
+    const critRate = Math.max(0, Math.min(1, damageCritRate(panel) + compiledModifierSum(sums, "critRate")))
     const critDmg = Number(panel.critDmg ?? 0)
         + compiledModifierSum(sums, "critDmg")
         + compiledModifierSum(sums, compiledEvent.elementCritDmgKey)
@@ -6862,7 +6885,7 @@ function denseTargetDamageMultiplier(panelValues, combatValues, target, compiled
 }
 
 function denseCritMultiplier(panelValues, critMode, compiledEvent, sums) {
-    const critRate = clampNumber(densePanelValue(panelValues, "critRate"), 0, 1)
+    const critRate = clampNumber(densePanelValue(panelValues, "critRate") + denseModifierSum(sums, "critRate"), 0, 1)
     const critDmg = densePanelValue(panelValues, "critDmg")
         + denseModifierSum(sums, "critDmg")
         + denseModifierSum(sums, compiledEvent.elementCritDmgKey)
@@ -8205,6 +8228,7 @@ export function buildMeta(catalog) {
         combatBuffs: agent.combatBuffs ?? {},
         cinemaDescriptions: agent.cinemaDescriptions ?? [],
         preferredDriveDiscs: agent.preferredDriveDiscs ?? null,
+        defaultTeammates: agent.defaultTeammates ?? [],
         importantSubStats: agent.importantSubStats ?? [],
         importantPanelStats: agent.importantPanelStats ?? [],
         skillGroups: agent.skillGroups ?? [],
@@ -9081,6 +9105,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                         + denseModifierSum(sums, event.elementDmgKey),
                     targetedCritDmgBonus: denseModifierSum(sums, "critDmg")
                         + denseModifierSum(sums, event.elementCritDmgKey),
+                    targetedCritRateBonus: denseModifierSum(sums, "critRate"),
                     targetedPenRatio: denseModifierSum(sums, "penRatio"),
                     targetDefenseAfterReduction,
                     levelCoefficient: Number(target.levelCoefficient ?? DEFAULT_DAMAGE_LEVEL_COEFFICIENT),
@@ -9163,12 +9188,13 @@ export function createInCombatPanelCalculator(catalog, input) {
                             0.01,
                             2,
                         )
+                    const effectiveCritRate = clampNumber(critRate + event.targetedCritRateBonus, 0, 1)
                     const effectiveCritDmg = critDmg + event.targetedCritDmgBonus
                     const critMultiplier = event.critMode === "crit"
                         ? 1 + effectiveCritDmg
                         : event.critMode === "nonCrit"
                             ? 1
-                            : critRate * (1 + effectiveCritDmg) + (1 - critRate)
+                            : effectiveCritRate * (1 + effectiveCritDmg) + (1 - effectiveCritRate)
                     total += atk
                         * event.effectiveSkillMultiplier
                         * event.imbuementMultiplier
@@ -9298,7 +9324,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                                 0.01,
                                 2,
                             )
-                        const critRate = clampNumber(panelValues[PANEL_KEY_LOOKUP.critRate], 0, 1)
+                        const critRate = clampNumber(panelValues[PANEL_KEY_LOOKUP.critRate] + event.targetedCritRateBonus, 0, 1)
                         const critDmg = panelValues[PANEL_KEY_LOOKUP.critDmg]
                         const effectiveCritDmg = critDmg + event.targetedCritDmgBonus
                         const critMultiplier = event.critMode === "crit"
@@ -9391,6 +9417,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                     skillDamageBonus,
                     targetedCritDmgBonus: denseModifierSum(sums, "critDmg")
                         + denseModifierSum(sums, event.elementCritDmgKey),
+                    targetedCritRateBonus: denseModifierSum(sums, "critRate"),
                     targetedPenRatio: denseModifierSum(sums, "penRatio"),
                     sheerDmgBonus: denseModifierSum(sums, "sheerDmgBonus")
                         + denseModifierSum(sums, event.elementSheerDmgKey),
@@ -9631,12 +9658,13 @@ export function createInCombatPanelCalculator(catalog, input) {
                             0.01,
                             2,
                         )
+                    const effectiveCritRate = clampNumber(critRate + event.targetedCritRateBonus, 0, 1)
                     const effectiveCritDmg = critDmg + event.targetedCritDmgBonus
                     const critMultiplier = event.critMode === "crit"
                         ? 1 + effectiveCritDmg
                         : event.critMode === "nonCrit"
                             ? 1
-                            : critRate * (1 + effectiveCritDmg) + (1 - critRate)
+                            : effectiveCritRate * (1 + effectiveCritDmg) + (1 - effectiveCritRate)
                     if (event.kind === "sheer") {
                         total += sheerForce
                             * event.effectiveSkillMultiplier

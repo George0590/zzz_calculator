@@ -75,6 +75,37 @@ function inventoryStore(overrides: any = {}) {
 }
 
 describe("optimizer store", () => {
+  it("seeds preferred four-piece runtime defaults once and preserves user overrides", () => {
+    const agent = {
+      id: "agent_a",
+      preferredDriveDiscs: {
+        defaultSetIds: ["woodpecker_electro", "fanged_metal"],
+        defaultFourPieceBuffRuntimeInputs: {
+          "driveDisc4pc:woodpecker_electro.self": {
+            effects: {
+              stacks: { stacks: 2, coverage: 0.6 },
+              coverageOnly: { coverage: 0.4 },
+            },
+          },
+          "driveDisc4pc:fanged_metal.team": { effects: { team: { coverage: 0.5 } } },
+        },
+      },
+    }
+    const store = useOptimizerStore()
+    store.initialize({ driveDiscSets: [{ id: "woodpecker_electro" }, { id: "fanged_metal" }] }, agent)
+    expect(store.fourPieceBuffRuntimeInputs["driveDisc4pc:woodpecker_electro.self"]).toEqual({
+      effects: { stacks: { stacks: 2, coverage: 0.6 }, coverageOnly: { coverage: 0.4 } },
+    })
+    expect(store.fourPieceBuffRuntimeInputs["driveDisc4pc:fanged_metal.team"]).toEqual({ effects: { team: { coverage: 0.5 } } })
+    expect(JSON.parse(localStorage.getItem("zzz-calculator.webapp.optimizer.v1")!).byAgent.agent_a.preferredFourPieceBuffDefaultsVersion).toBe(1)
+
+    store.setFourPieceBuffRuntimeInput("driveDisc4pc:woodpecker_electro.self", { effects: { stacks: { coverage: 0.2 } } })
+    const changedAgent = structuredClone(agent)
+    changedAgent.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs["driveDisc4pc:woodpecker_electro.self"].effects.stacks.coverage = 0.9
+    store.loadAgentSettings(changedAgent, { driveDiscSets: [{ id: "woodpecker_electro" }, { id: "fanged_metal" }] })
+    expect(store.fourPieceBuffRuntimeInputs["driveDisc4pc:woodpecker_electro.self"]).toEqual({ effects: { stacks: { coverage: 0.2 } } })
+  })
+
   const energyAgent = {
     ...preferredAgentA,
     preferredDriveDiscs: { defaultSetIds: ["woodpecker_electro"], defaultTwoPieceSetIds: ["swing_jazz", "fanged_metal"] },
