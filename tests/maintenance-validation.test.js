@@ -642,6 +642,14 @@ const validSkillBuffAgent = {
 }
 const skillBuffContext = { agentSkills: [validAgentSkill] }
 assertValid("agents", validSkillBuffAgent, skillBuffContext)
+const categorySkillBuff = clone(validSkillBuffAgent)
+delete categorySkillBuff.combatBuffs.skillBuffs[0].sourceSkillRef.moveId
+assertValid("agents", categorySkillBuff, skillBuffContext)
+for (const moveId of [null, "", "missing_move"]) {
+    const invalid = clone(categorySkillBuff)
+    invalid.combatBuffs.skillBuffs[0].sourceSkillRef.moveId = moveId
+    assertInvalid("agents", invalid, "技能招式不存在", skillBuffContext)
+}
 
 const nonArraySkillBuffs = clone(validSkillBuffAgent)
 nonArraySkillBuffs.combatBuffs.skillBuffs = {}
@@ -1822,6 +1830,16 @@ const validReleaseAgent = {
 assertValid("agents", validReleaseAgent, validCalculationContext)
 const cleanedReleaseAgent = cleanMaintenanceItem("agents", validReleaseAgent)
 assert.deepEqual(cleanedReleaseAgent.defaultCalculationConfig.events[0], validReleaseEvent)
+for (const critMode of ["expected", "crit", "nonCrit"]) {
+    const withCrit = { ...validReleaseAgent, defaultCalculationConfig: {
+        ...validReleaseAgent.defaultCalculationConfig, events: [{ ...validReleaseEvent, critMode }],
+    } }
+    assertValid("agents", withCrit, validCalculationContext)
+    assert.equal(cleanMaintenanceItem("agents", withCrit).defaultCalculationConfig.events[0].critMode, critMode)
+}
+assertInvalid("agents", { ...validReleaseAgent, defaultCalculationConfig: {
+    ...validReleaseAgent.defaultCalculationConfig, events: [{ ...validReleaseEvent, critMode: "sharpCrit" }],
+} }, "critMode", validCalculationContext)
 assert.equal(cleanedReleaseAgent.anomalyReleaseProfiles[0].expression.args[0].whiteBoxRole, "conversionSource")
 assert.equal(cleanedReleaseAgent.defaultCalculationConfig.events[0].anomalyVariant, undefined)
 assert.equal(cleanedReleaseAgent.defaultCalculationConfig.events[0].procCount, undefined)

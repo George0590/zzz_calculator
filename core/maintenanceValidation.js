@@ -17,6 +17,7 @@ import {
 import { validateAnomalyReleaseProfile, VELINA_RELEASE_SOURCES } from "./anomalyRelease.js"
 import { damageSkillRowsWithGeneratedTotals } from "./skillMultiplierCandidates.js"
 import {
+    isAllowedInCombatFormulaOutput,
     IN_COMBAT_FORMULA_SOURCE_STATS,
     formulaExpressionVariables,
     isAllowedInCombatFormulaSourceStat,
@@ -106,6 +107,16 @@ export function repairDynamicValueSourceFallbacks(agent, repairs = []) {
     const visit = (effectSet, basePath) => {
         const effects = Array.isArray(effectSet?.effects) ? effectSet.effects : []
         effects.forEach((rule, index) => {
+            for (const [name, parameterSource] of Object.entries(rule?.formula?.parameterSources ?? {})) {
+                if (parameterSource?.kind !== "corePassiveScaling" || !rule.formula?.parameters
+                    || !Object.prototype.hasOwnProperty.call(rule.formula.parameters, name)) continue
+                const field = String(parameterSource.field ?? "")
+                const firstValue = Number(coreLevels?.[0]?.[field])
+                if (!field || !Number.isFinite(firstValue) || Number(rule.formula.parameters[name]) === firstValue) continue
+                repairs.push({ path: `${basePath}.effects[${index}].formula.parameters.${name}`,
+                    sourceKind: "corePassiveScaling", field, from: rule.formula.parameters[name], to: firstValue })
+                rule.formula.parameters[name] = firstValue
+            }
             const source = rule?.valueSource
             if (!source || typeof source !== "object") return
             const levels = source.kind === "corePassiveScaling"
@@ -936,10 +947,11 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             }
             requireName(errors, source.label, `${path}.source.label`)
             requireEnum(errors, source.unit, FORMULA_VALUE_UNIT_VALUES, `${path}.source.unit`)
-            if (targetKind !== "default") {
+            const extendedPanelFormula = isAllowedInCombatFormulaOutput(rule, sourceType)
+            if (!extendedPanelFormula && targetKind !== "default") {
                 add(errors, `${path}.target.kind`, "局内面板公式首版只能作用于常规属性 / 全局效果。")
             }
-            if (rule.stat !== "dmgBonus") {
+            if (!extendedPanelFormula && rule.stat !== "dmgBonus") {
                 add(errors, `${path}.stat`, "局内面板公式首版只能输出通用伤害加成。")
             }
             if ((rule.mode ?? "flat") !== "flat") {
@@ -999,6 +1011,40 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             }
             requireFinite(errors, value, `${path}.formula.parameters.${name}`)
             parameterNames.push(name)
+        }
+        const parameterSources = rule.formula?.parameterSources
+        if (parameterSources !== undefined
+            && (!parameterSources || typeof parameterSources !== "object" || Array.isArray(parameterSources))) {
+            add(errors, `${path}.formula.parameterSources`, "公式参数来源必须是对象。")
+        }
+        for (const [name, source] of Object.entries(parameterSources ?? {})) {
+            if (!parameterNames.includes(name)) {
+                add(errors, `${path}.formula.parameterSources.${name}`, "参数来源必须引用已声明的公式参数。")
+                continue
+            }
+            if (!source || typeof source !== "object" || Array.isArray(source)) {
+                add(errors, `${path}.formula.parameterSources.${name}`, "参数来源必须是对象。")
+                continue
+            }
+            if (source.kind !== "corePassiveScaling") {
+                add(errors, `${path}.formula.parameterSources.${name}.kind`, "当前只支持核心被动成长表参数来源。")
+                continue
+            }
+            if (!context.allowCorePassiveScalingSource) {
+                add(errors, `${path}.formula.parameterSources.${name}`, "核心成长参数仅支持角色核心被动或技能来源 Buff。")
+            }
+            if (rule.formula?.modificationValues?.[name] !== undefined) {
+                add(errors, `${path}.formula.parameterSources.${name}`, "同一参数不能同时引用核心成长与音擎改装。")
+            }
+            const field = String(source.field ?? "").trim()
+            const levels = context.agent?.coreSkill?.corePassiveScaling?.levels
+            if (!/^[A-Za-z][A-Za-z0-9]*$/.test(field) || !Array.isArray(levels)
+                || levels.length !== (context.agent?.coreSkill?.levels?.length ?? 0) + 1
+                || levels.some(level => !Number.isFinite(Number(level?.[field])))) {
+                add(errors, `${path}.formula.parameterSources.${name}.field`, "核心被动参数来源必须引用完整的核心成长字段。")
+            } else if (Number(parameters[name]) !== Number(levels[0][field])) {
+                add(errors, `${path}.formula.parameters.${name}`, "兼容参数值必须与核心被动倍率第一档一致。")
+            }
         }
         const modificationValues = rule.formula?.modificationValues
         if (modificationValues !== undefined
@@ -1540,7 +1586,7 @@ function validateSkillBuffSourceRef(errors, skillRef, path, context = {}, agentI
         add(errors, path, "必须选择来源技能。")
         return
     }
-    for (const key of ["agentSkillId", "categoryId", "moveId"]) {
+    for (const key of ["agentSkillId", "categoryId"]) {
         if (!String(skillRef[key] ?? "").trim()) {
             add(errors, `${path}.${key}`, "必填。")
         }
@@ -1562,7 +1608,7 @@ function validateSkillBuffSourceRef(errors, skillRef, path, context = {}, agentI
         add(errors, `${path}.categoryId`, "技能大类不存在。")
         return
     }
-    if (!(category.moves ?? []).some(item => item.id === skillRef.moveId)) {
+    if (skillRef.moveId !== undefined && !(category.moves ?? []).some(item => item.id === skillRef.moveId)) {
         add(errors, `${path}.moveId`, "技能招式不存在。")
     }
 }
@@ -1696,6 +1742,9 @@ function validateCalculationEvent(errors, event, path, context = {}, agentId = "
         : (ANOMALY_SETTLEMENT_TYPE_VALUES.has(event.settlementType) ? event.settlementType : "attribute")
     if (event.settlementType !== undefined) {
         requireEnum(errors, event.settlementType, ANOMALY_SETTLEMENT_TYPE_VALUES, `${path}.settlementType`)
+    }
+    if (["attribute", "turbulence", "release"].includes(settlementType) && event.critMode !== undefined) {
+        requireEnum(errors, event.critMode, new Set(["expected", "crit", "nonCrit"]), `${path}.critMode`)
     }
     if (settlementType === "attribute") {
         if (!calculationAnomalyIds(context, "anomaly").has(event.anomalyEffect)) {

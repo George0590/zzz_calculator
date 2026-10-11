@@ -6599,6 +6599,7 @@
       },
       "rarity": "S",
       "specialty": "anomaly",
+      "relatedAgentId": "jane_doe",
       "attribute": "physical",
       "images": {
         "icon": "/assets/w-engines/zzz_wiki_760.png",

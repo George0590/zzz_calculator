@@ -1,4 +1,5 @@
 import { evaluateFormulaExpression } from "./formulaEvaluator.js"
+import { anomalyCritMultiplierForMode, anomalyDamageVariants, normalizeAnomalyCritMode, resolveAnomalyCritState, supportsAnomalyCrit } from "./anomalyCrit.js"
 import {
     damageSkillRowsWithGeneratedTotals,
     defaultSkillLevel as defaultLevelForSkill,
@@ -83,6 +84,7 @@ import {
     evaluateInCombatFormulaRule,
     formulaParameterValues,
     formulaSourceValue,
+    isAllowedInCombatFormulaOutput,
     isAllowedInCombatFormulaSourceStat,
     isAllowedInCombatFormulaSourceType,
     isInCombatFormulaRule,
@@ -2666,8 +2668,7 @@ function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
     if (!isInCombatFormulaRule(rule)
         || !isAllowedInCombatFormulaSourceType(entry?.sourceType)
         || !isAllowedInCombatFormulaSourceStat(rule?.source?.stat)
-        || rule?.stat !== "dmgBonus"
-        || (rule?.target?.kind ?? "default") !== "default") {
+        || !isAllowedInCombatFormulaOutput(rule, entry?.sourceType)) {
         return null
     }
     if (!effectRuleRequirementMatches(rule, {
@@ -2691,8 +2692,8 @@ function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
         id: rule.id ?? rule.stat ?? "formula",
         label: rule.label ?? null,
         type: "formula",
-        stat: "dmgBonus",
-        mode: "flat",
+        stat: canonicalBuffStat(rule.stat ?? "dmgBonus"),
+        mode: rule.mode ?? "flat",
         basis: null,
         target: normalizedRuleTarget(rule),
         coverage,
@@ -2711,54 +2712,78 @@ function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
     })
 }
 
+function dynamicFormulaTargetAppliesTo(rule = {}) {
+    const target = normalizedRuleTarget(rule)
+    if (target.kind === "skill") {
+        return {
+            ...(rule.appliesTo ?? {}),
+            skillTargets: target.skillTargets,
+            ...(target.damageKinds.length ? { damageKinds: target.damageKinds } : {}),
+        }
+    }
+    if (target.kind === "anomaly") {
+        return {
+            ...(rule.appliesTo ?? {}),
+            damageKinds: [target.settlementType === "disorder"
+                ? "disorder"
+                : target.settlementType === "turbulence" ? "turbulence" : "anomaly"],
+            settlementTypes: [target.settlementType],
+            ...(target.anomalyEffects.length ? { anomalyEffects: target.anomalyEffects } : {}),
+            ...(target.anomalyVariants.length ? { anomalyVariants: target.anomalyVariants } : {}),
+        }
+    }
+    return rule.appliesTo ?? null
+}
+
+// The only panel-producing dynamic rule is AP -> ATK. Damage formulas then
+// read that updated panel, while target-specific crit stays in event modifiers.
+function resolveDynamicCombatFormulas(entries, panel, outOfCombatPanel) {
+    if (!entries.length) return []
+    const attack = entries.filter(entry => entry.rule.stat === "atkFlat")
+        .map(entry => ({ entry, resolved: resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) }))
+        .filter(item => item.resolved)
+    const attackBonus = attack.reduce((total, item) => total + item.resolved.value, 0)
+    const withAttack = attackBonus ? new Proxy(panel, {
+        get(target, key) {
+            return key === "atk" ? Number(target.atk ?? 0) + attackBonus : target[key]
+        },
+    }) : panel
+    const rest = entries.filter(entry => entry.rule.stat !== "atkFlat")
+        .map(entry => ({ entry, resolved: resolveDynamicCombatFormula(entry, withAttack, outOfCombatPanel) }))
+        .filter(item => item.resolved)
+    return [...attack, ...rest]
+}
+
 function applyDynamicCombatFormulas(agent, outOfCombat, bonusTotals) {
     const base = calculateCombatPanelFromTotals(agent, outOfCombat, bonusTotals)
-    const entries = Array.isArray(bonusTotals?.dynamicFormulas)
-        ? bonusTotals.dynamicFormulas
-        : []
-    const resolvedEntries = entries
-        .map(entry => ({ entry, resolved: resolveDynamicCombatFormula(entry, base.panel, outOfCombat.panel) }))
-        .filter(item => item.resolved)
-    const dynamicFormulaResults = resolvedEntries.map(item => item.resolved)
-    const dynamicDmgBonus = dynamicFormulaResults.reduce(
-        (total, result) => total + Number(result.value ?? 0),
-        0,
-    )
-    for (const { entry, resolved: result } of resolvedEntries) {
-        const activeEffect = entry?.activeEffect
-        if (!activeEffect) continue
-        activeEffect.resolvedDynamicFormulas ??= []
-        activeEffect.resolvedDynamicFormulas.push(result)
-        activeEffect.resolvedStats ??= []
-        activeEffect.resolvedStats.push({ ...result, value: Number(result.value ?? 0) })
-        activeEffect.stats ??= []
-        activeEffect.stats.push({
-            ...result,
-            value: Number(result.value ?? 0),
-            stat: "dmgBonus",
-            mode: "flat",
-        })
-    }
-    const panel = dynamicDmgBonus === 0
-        ? base.panel
-        : {
-            ...base.panel,
-            dmgBonus: Number(base.panel.dmgBonus ?? 0) + dynamicDmgBonus,
-        }
+    const entries = bonusTotals.dynamicFormulas ?? []
+    const resolvedEntries = resolveDynamicCombatFormulas(entries, base.panel, outOfCombat.panel)
     const effectiveBonusTotals = entries.length
-        ? {
-            ...bonusTotals,
-            dmgBonus: Number(bonusTotals.dmgBonus ?? 0) + dynamicDmgBonus,
-            dynamicDmgBonus,
-        }
+        ? { ...bonusTotals, damageModifiers: [...bonusTotals.damageModifiers] }
         : bonusTotals
-    return {
-        panel,
-        selectedDmgBonus: Number(base.selectedDmgBonus ?? 0) + dynamicDmgBonus,
-        dynamicDmgBonus,
-        dynamicFormulaResults,
-        bonusTotals: effectiveBonusTotals,
+    let dynamicDmgBonus = 0
+    for (const { entry, resolved } of resolvedEntries) {
+        const isEvent = resolved.target.kind !== "default"
+        if (isEvent) {
+            const modifier = { ...resolved, type: "eventModifier", kind: resolved.stat,
+                appliesTo: dynamicFormulaTargetAppliesTo(resolved) }
+            effectiveBonusTotals.damageModifiers.push(modifier)
+            entry.activeEffect?.resolvedDamageModifiers.push(modifier)
+        } else {
+            effectiveBonusTotals[resolved.stat] += resolved.value
+            if (resolved.stat === "dmgBonus") dynamicDmgBonus += resolved.value
+            entry.activeEffect?.resolvedStats.push(resolved)
+            entry.activeEffect?.stats.push(resolved)
+        }
+        entry.activeEffect?.resolvedDynamicFormulas.push(resolved)
     }
+    const calculated = resolvedEntries.length
+        ? calculateCombatPanelFromTotals(agent, outOfCombat, effectiveBonusTotals)
+        : base
+    if (entries.length) effectiveBonusTotals.dynamicDmgBonus = dynamicDmgBonus
+    return { ...calculated, dynamicDmgBonus,
+        dynamicFormulaResults: resolvedEntries.map(item => item.resolved),
+        bonusTotals: effectiveBonusTotals }
 }
 
 function damageTargetPreset(id) {
@@ -3462,6 +3487,7 @@ function normalizeTurbulenceDamageEvent(event = {}, agent = {}, catalog = {}, in
         kind: "anomaly",
         settlementType: "turbulence",
         normalized: true,
+        critMode: normalizeAnomalyCritMode(event.critMode),
         anomalyEffect: effect.id,
         anomalyLabel: effect.label,
         label: normalizeDamageEventLabel(event),
@@ -3517,6 +3543,7 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
             kind: "anomaly",
             settlementType: releaseSettlement ? "release" : "attribute",
             normalized: true,
+            critMode: normalizeAnomalyCritMode(event.critMode),
             anomalyEffect: String(event.anomalyEffect ?? ""),
             anomalyVariant: releaseSettlement
                 ? undefined
@@ -3557,6 +3584,7 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
         kind: "anomaly",
         settlementType: releaseSettlement ? "release" : "attribute",
         normalized: true,
+        critMode: normalizeAnomalyCritMode(event.critMode),
         anomalyEffect: effect.id,
         anomalyLabel: effect.label,
         anomalyVariant,
@@ -4289,17 +4317,16 @@ function releaseCritRateBonusForEvent(event, panel = {}, outOfCombatPanel = pane
     }).value)
 }
 
-function anomalyCritMultiplier(bonusTotals, event, panel = {}, outOfCombatPanel = panel) {
-    if (isDisorderDamageEvent(event)) {
+export function resolveAnomalyCritForEvent(event, bonusTotals = {}, panel = {}, outOfCombatPanel = panel) {
+    if (!supportsAnomalyCrit(event)) {
         return {
             baseCritRate: 0,
             convertedCritRate: 0,
-            critRate: 0,
-            critDmg: 0,
-            multiplier: 1,
+            ...resolveAnomalyCritState({ critMode: event.critMode, supported: false }),
         }
     }
-
+    // Preserve Release's existing trigger-only, explicitly targeted CRIT rules.
+    if (isReleaseSettlement(event)) bonusTotals = releaseOnlyBonusTotals(bonusTotals)
     const baseCritRate = sumDamageModifiers(bonusTotals, event, "anomalyCritRate")
     const conversionModifiers = matchingDamageModifiers(
         bonusTotals,
@@ -4324,9 +4351,7 @@ function anomalyCritMultiplier(bonusTotals, event, panel = {}, outOfCombatPanel 
         convertedCritRate,
         critRatePerInitialMasteryPoint,
         initialAnomalyMastery,
-        critRate,
-        critDmg,
-        multiplier: critRate > 0 && critDmg > 0 ? 1 + critRate * critDmg : 1,
+        ...resolveAnomalyCritState({ critRate, critDmg, critMode: event.critMode }),
     }
 }
 
@@ -4722,12 +4747,19 @@ function anomalyDamageWhiteBoxRows({ event, atk, selectedDmgBonus, skillDamageBo
             displayValue: formatDamageNumber(alienation.multiplier, 4),
         })
     }
-    if (!isDisorder) {
+    if (anomalyCrit.available) {
+        const anomalyCritFormula = anomalyCrit.effectiveMode === "nonCrit"
+            ? "1"
+            : anomalyCrit.effectiveMode === "crit"
+                ? `1 + ${formatDamagePercent(anomalyCrit.critDmg)}`
+                : `1 + ${formatDamagePercent(anomalyCrit.critRate)} × ${formatDamagePercent(anomalyCrit.critDmg)}`
         rows.push({
             label: "异常暴击区",
-            formula: anomalyCrit.multiplier === 1
-                ? "未启用异常暴击"
-                : `1 + ${formatDamagePercent(anomalyCrit.critRate)} × ${formatDamagePercent(anomalyCrit.critDmg)}`,
+            formulaLines: [
+                `当前模式：${{ expected: "期望", crit: "暴击", nonCrit: "非暴击" }[anomalyCrit.effectiveMode]}；异常暴击率 ${formatDamagePercent(anomalyCrit.critRate)}；异常暴击伤害 ${formatDamagePercent(anomalyCrit.critDmg)}`,
+                `${anomalyCrit.effectiveMode === "nonCrit" ? "非暴击" : anomalyCrit.effectiveMode === "crit" ? "暴击" : "期望"}乘区 = ${anomalyCritFormula}`,
+            ],
+            formula: anomalyCritFormula,
             value: anomalyCrit.multiplier,
             displayValue: formatDamageNumber(anomalyCrit.multiplier, 4),
         })
@@ -4762,7 +4794,7 @@ function anomalyDamageWhiteBoxRows({ event, atk, selectedDmgBonus, skillDamageBo
                 formatDamageNumber(levelMultiplier, 4),
                 formatDamageNumber(anomalyDamageBonus, 4),
                 ...(alienation?.active ? [formatDamageNumber(alienation.multiplier, 4)] : []),
-                ...(!isDisorder ? [formatDamageNumber(anomalyCrit.multiplier, 4)] : []),
+                ...(anomalyCrit.available ? [formatDamageNumber(anomalyCrit.multiplier, 4)] : []),
                 ...(event.damageScale !== 1 ? [formatDamagePercent(event.damageScale)] : []),
             ].join(" × ")
             : `${formatDamageNumber(singleDamage)} × ${formatDamageNumber(event.count)}`,
@@ -5608,7 +5640,7 @@ export function calculateAnomalyUnitDamage({
     const anomalyDamageBonus = 1 + Number(eventTotals.anomalyDamageBonus ?? 0)
     const alienation = alienationBreakdownForEvent(bonusTotals, sourceEvent)
     const anomalyCrit = includeCrit
-        ? anomalyCritMultiplier(bonusTotals, sourceEvent, panel, outOfCombatPanel)
+        ? resolveAnomalyCritForEvent(sourceEvent, bonusTotals, panel, outOfCombatPanel)
         : { critRate: 0, critDmg: 0, multiplier: 1 }
     const damage = Number(panel.atk ?? 0)
         * effectiveBaseMultiplier
@@ -5662,8 +5694,8 @@ function calculateTurbulenceDamageEvent({ event, panel, outOfCombatPanel = panel
     const turbulenceDamageBonusMultiplier = 1 + Number(eventTotals.turbulenceDamageBonus ?? 0)
     const baseMultiplierBonus = sumDamageModifiers(bonusTotals, sourceEvent, "turbulenceBaseMultiplierBonus")
     const effectiveBaseMultiplier = Math.max(0, Number(event.baseMultiplier ?? 0) + baseMultiplierBonus)
-    const anomalyCrit = anomalyCritMultiplier(bonusTotals, sourceEvent, panel, outOfCombatPanel)
-    const singleDamage = Number(panel.atk ?? 0)
+    const anomalyCrit = resolveAnomalyCritForEvent(sourceEvent, bonusTotals, panel, outOfCombatPanel)
+    const baseSingleDamage = Number(panel.atk ?? 0)
         * effectiveBaseMultiplier
         * dmgMultiplier
         * targetBreakdown.defenseMultiplier
@@ -5672,8 +5704,8 @@ function calculateTurbulenceDamageEvent({ event, panel, outOfCombatPanel = panel
         * anomalyProficiencyMultiplier
         * levelMultiplier
         * anomalyDamageBonus
-        * anomalyCrit.multiplier
         * event.damageScale
+    const singleDamage = baseSingleDamage * anomalyCrit.multiplier
     const finalDamage = singleDamage * event.count
     return {
         id: event.id,
@@ -5682,6 +5714,8 @@ function calculateTurbulenceDamageEvent({ event, panel, outOfCombatPanel = panel
         label: event.label ?? `乱流（${localizedName(event.anomalyLabel, event.anomalyEffect)}）`,
         finalDamage,
         singleDamage,
+        critInfo: anomalyCrit,
+        ...(includeWhiteBox && anomalyCrit.available ? { damageVariants: anomalyDamageVariants(baseSingleDamage, event.count, anomalyCrit) } : {}),
         count: event.count,
         input: { ...event, target, agentLevel: normalizeAgentLevel(agentLevel) },
         panelSnapshot: {
@@ -5778,8 +5812,8 @@ function calculateReleaseDamageEvent({ event, panel, outOfCombatPanel, bonusTota
     const releaseAnomalyDamageBonus = Number(triggerEventTotals.anomalyDamageBonus ?? 0)
     const anomalyDamageBonus = sourceAnomalyDamageBonus + releaseAnomalyDamageBonus
     const alienation = sourceUnit.alienation
-    const anomalyCrit = anomalyCritMultiplier(triggerBonusTotals, event, panel, outOfCombatPanel)
-    const singleDamage = Number(source.panel.atk ?? 0)
+    const anomalyCrit = resolveAnomalyCritForEvent(event, triggerBonusTotals, panel, outOfCombatPanel)
+    const baseSingleDamage = Number(source.panel.atk ?? 0)
         * effectiveBaseMultiplier
         * dmgMultiplier
         * targetBreakdown.defenseMultiplier
@@ -5789,8 +5823,8 @@ function calculateReleaseDamageEvent({ event, panel, outOfCombatPanel, bonusTota
         * sourceUnit.levelMultiplier
         * anomalyDamageBonus
         * alienation.multiplier
-        * anomalyCrit.multiplier
         * event.damageScale
+    const singleDamage = baseSingleDamage * anomalyCrit.multiplier
     const finalDamage = singleDamage * event.count
 
     return {
@@ -5800,6 +5834,8 @@ function calculateReleaseDamageEvent({ event, panel, outOfCombatPanel, bonusTota
         label: event.label ?? "异放",
         finalDamage,
         singleDamage,
+        critInfo: anomalyCrit,
+        ...(includeWhiteBox && anomalyCrit.available ? { damageVariants: anomalyDamageVariants(baseSingleDamage, event.count, anomalyCrit) } : {}),
         count: event.count,
         input: { ...event, target, agentLevel: normalizeAgentLevel(agentLevel) },
         panelSnapshot: {
@@ -6071,8 +6107,8 @@ function calculateAnomalyDamageEvent({ event, panel, outOfCombatPanel = panel, b
     const baseMultiplierScale = isDisorder ? disorderMultiplierScale(event.disorderType) : 1
     const baseMultiplier = Number(event.baseMultiplier ?? 0)
     const effectiveBaseMultiplier = Math.max(0, baseMultiplier + baseMultiplierBonus) * baseMultiplierScale
-    const anomalyCrit = anomalyCritMultiplier(bonusTotals, event, panel, outOfCombatPanel)
-    const singleDamage = atk
+    const anomalyCrit = resolveAnomalyCritForEvent(event, bonusTotals, panel, outOfCombatPanel)
+    const baseSingleDamage = atk
         * effectiveBaseMultiplier
         * dmgMultiplier
         * targetBreakdown.defenseMultiplier
@@ -6082,8 +6118,8 @@ function calculateAnomalyDamageEvent({ event, panel, outOfCombatPanel = panel, b
         * levelMultiplier
         * anomalyDamageBonus
         * alienation.multiplier
-        * anomalyCrit.multiplier
         * event.damageScale
+    const singleDamage = baseSingleDamage * anomalyCrit.multiplier
     const finalDamage = singleDamage * event.count
 
     return {
@@ -6097,6 +6133,8 @@ function calculateAnomalyDamageEvent({ event, panel, outOfCombatPanel = panel, b
             : localizedName(event.anomalyLabel, event.anomalyEffect ?? event.previousAnomalyEffect)),
         finalDamage,
         singleDamage,
+        critInfo: anomalyCrit,
+        ...(includeWhiteBox && anomalyCrit.available ? { damageVariants: anomalyDamageVariants(baseSingleDamage, event.count, anomalyCrit) } : {}),
         count: event.count,
         input: {
             ...event,
@@ -6338,7 +6376,7 @@ function calculateAnomalyDamageFinalValue(event, panel, bonusTotals, target, age
     const effectiveBaseMultiplier = Math.max(0, baseMultiplier + baseMultiplierBonus) * baseMultiplierScale
     const anomalyDamageBonus = 1 + Number(eventTotals.anomalyDamageBonus ?? 0)
     const alienationMultiplier = alienationBreakdownForEvent(bonusTotals, event).multiplier
-    const anomalyCritMultiplierValue = anomalyCritMultiplier(bonusTotals, event, panel, outOfCombatPanel).multiplier
+    const anomalyCritMultiplierValue = resolveAnomalyCritForEvent(event, bonusTotals, panel, outOfCombatPanel).multiplier
     return Number(panel.atk ?? 0)
         * effectiveBaseMultiplier
         * (1 + selectedDmgBonus + skillDamageBonus)
@@ -6589,7 +6627,7 @@ function compiledAnomalyCritMultiplier(compiledEvent, sums, initialAnomalyMaster
         : 0
     const critRate = clampNumber(baseCritRate + masteryCritRate, 0, 1)
     const critDmg = Math.max(0, compiledModifierSum(sums, "anomalyCritDmg"))
-    return critRate > 0 && critDmg > 0 ? 1 + critRate * critDmg : 1
+    return anomalyCritMultiplierForMode(critRate, critDmg, compiledEvent.critMode)
 }
 
 function calculateCompiledDamageScoreValue({ agent, panel, outOfCombatPanel = panel, bonusTotals, compiledDamageTarget }) {
@@ -6779,7 +6817,7 @@ function denseOutOfCombatStatRequirementMatches(requirement = {}, panelValues = 
 function fillDenseModifierSums(sums, eventModifierEntries = [], activeEntryFlags = [], outOfCombatPanelValues = null) {
     sums.fill(0)
     for (const modifier of eventModifierEntries ?? []) {
-        if (activeEntryFlags[modifier.entryIndex]
+        if ((modifier.entryIndex === null || modifier.entryIndex === undefined || activeEntryFlags[modifier.entryIndex])
             && denseOutOfCombatStatRequirementMatches(modifier.requirement, outOfCombatPanelValues)) {
             sums[modifier.kindIndex] = combineDamageModifierValue(
                 DAMAGE_MODIFIER_SUM_KEYS[modifier.kindIndex], sums[modifier.kindIndex], modifier.value,
@@ -6856,7 +6894,7 @@ function denseAnomalyCritMultiplier(compiledEvent, sums, panel = {}, outOfCombat
             : 0
     const critRate = clampNumber(baseCritRate + convertedCritRate, 0, 1)
     const critDmg = Math.max(0, denseModifierSum(sums, "anomalyCritDmg"))
-    return critRate > 0 && critDmg > 0 ? 1 + critRate * critDmg : 1
+    return anomalyCritMultiplierForMode(critRate, critDmg, compiledEvent.critMode)
 }
 
 function denseSelectedDmgBonusForElement(panelValues, damageElement) {
@@ -8943,16 +8981,17 @@ export function createInCombatPanelCalculator(catalog, input) {
                 }
                 panelValues[PANEL_KEY_LOOKUP.dmgBonus] = densePanelValue(outPanelValues, "dmgBonus")
                     + denseCombatValue(combatValues, "dmgBonus")
-                const dynamicDmgBonus = dynamicFormulaEntries
-                    .filter(entry => activeEntryFlags[entry.entryIndex])
-                    .map(entry => resolveDynamicCombatFormula(
-                        entry,
-                        densePanelProxy(panelValues),
-                        densePanelProxy(outPanelValues),
-                    ))
-                    .filter(Boolean)
-                    .reduce((total, result) => total + Number(result.value ?? 0), 0)
+                const dynamicFormulaResults = resolveDynamicCombatFormulas(
+                    dynamicFormulaEntries.filter(entry => activeEntryFlags[entry.entryIndex]),
+                    densePanelProxy(panelValues), densePanelProxy(outPanelValues),
+                ).map(item => item.resolved)
+                const dynamicDmgBonus = dynamicFormulaResults
+                    .filter(result => result.stat === "dmgBonus")
+                    .reduce((total, result) => total + result.value, 0)
                 panelValues[PANEL_KEY_LOOKUP.dmgBonus] += dynamicDmgBonus
+                for (const result of dynamicFormulaResults) {
+                    if (result.stat === "atkFlat") panelValues[PANEL_KEY_LOOKUP.atk] += result.value
+                }
                 result.dynamicDmgBonus = dynamicDmgBonus
                 scalarResult.dynamicDmgBonus = dynamicDmgBonus
                 for (const element of DAMAGE_ELEMENTS) {
@@ -8964,7 +9003,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                     ? densePanelValue(outPanelValues, "sheerForceFlat") + denseCombatValue(combatValues, "sheerForceFlat")
                     : 0
                 panelValues[PANEL_KEY_LOOKUP.sheerForce] = isRupture
-                    ? Math.max(0, (hp * SHEER_FORCE_HP_RATIO) + (atk * SHEER_FORCE_ATK_RATIO) + panelValues[PANEL_KEY_LOOKUP.sheerForceFlat])
+                    ? Math.max(0, (hp * SHEER_FORCE_HP_RATIO) + (panelValues[PANEL_KEY_LOOKUP.atk] * SHEER_FORCE_ATK_RATIO) + panelValues[PANEL_KEY_LOOKUP.sheerForceFlat])
                     : 0
 
                 if (includePanel) for (const key of OUTPUT_PANEL_KEYS) {
@@ -8972,13 +9011,34 @@ export function createInCombatPanelCalculator(catalog, input) {
                 }
                 result.selectedDmgBonus = densePanelValue(panelValues, "dmgBonus")
                     + densePanelValue(panelValues, selectedAttributeBonusKey)
+                const dynamicEventModifierEntries = dynamicFormulaResults.length ? compiledDamageTarget.events.map(compiledEvent => {
+                    const event = compiledEvent.event ?? compiledEvent
+                    return dynamicFormulaResults
+                        .filter(result => (result.target?.kind ?? "default") !== "default")
+                        .filter(result => damageModifierAppliesToCompiledEvent({
+                            ...result,
+                            kind: canonicalBuffStat(result.stat),
+                            value: Number(result.value ?? 0),
+                            appliesTo: dynamicFormulaTargetAppliesTo(result),
+                        }, event))
+                        .map(result => ({
+                            entryIndex: null,
+                            kindIndex: DAMAGE_MODIFIER_SUM_KEY_LOOKUP[canonicalBuffStat(result.stat)],
+                            value: Number(result.value ?? 0),
+                            requirement: result.requirement ?? null,
+                        }))
+                        .filter(modifier => modifier.kindIndex !== undefined)
+                }) : null
                 result.finalDamage = calculateCompiledDamageScoreValueDense({
                     agent,
                     panelValues,
                     outOfCombatPanelValues: outPanelValues,
                     combatValues,
                     compiledDamageTarget,
-                    eventModifierEntries,
+                    eventModifierEntries: dynamicEventModifierEntries ? eventModifierEntries.map((entries, index) => [
+                        ...entries,
+                        ...(dynamicEventModifierEntries[index] ?? []),
+                    ]) : eventModifierEntries,
                     activeEntryFlags,
                     modifierSums,
                 })
@@ -9691,9 +9751,12 @@ export function createInCombatPanelCalculator(catalog, input) {
                                 }).max)
                                 : releaseCritRateBonusForEvent(event, formulaInCombatPanel, formulaOutOfCombatPanel)
                             : 0
-                    const anomalyCritMultiplier = !event.isDisorder && event.anomalyCritDmg > 0
-                        ? 1 + clampNumber(event.anomalyCritRate + releaseMasteryCritRate, 0, 1) * event.anomalyCritDmg
-                        : 1
+                    const anomalyCritMultiplier = anomalyCritMultiplierForMode(
+                        event.anomalyCritRate + releaseMasteryCritRate,
+                        event.anomalyCritDmg,
+                        event.critMode,
+                        !event.isDisorder,
+                    )
                     total += atk
                         * effectiveBaseMultiplier
                         * (1 + dmgBonus + elementDmg + event.skillDamageBonus)

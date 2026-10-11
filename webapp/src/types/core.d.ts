@@ -5,6 +5,7 @@ declare module "@runtime/catalog-loader.js" {
 }
 
 declare module "@core/calculator-core.js" {
+  export function resolveAnomalyCritForEvent(event: any, bonusTotals?: any, panel?: any, outOfCombatPanel?: any): any
   export function buildMeta(catalog: any): any
   export function normalizeCatalog(catalog: any): any
   export function calculateOutOfCombatPanel(catalog: any, input: any): any
@@ -50,6 +51,7 @@ declare module "@core/sharpDamage.js" {
 declare module "@core/effectFormula.js" {
   export const IN_COMBAT_FORMULA_SOURCE_STATS: readonly string[]
   export const IN_COMBAT_FORMULA_SOURCE_TYPES: readonly string[]
+  export function isAllowedInCombatFormulaOutput(rule?: any, sourceType?: string): boolean
   export function isInCombatFormulaRule(rule?: any): boolean
   export function isOutOfCombatFormulaRule(rule?: any): boolean
   export function isAllowedInCombatFormulaSourceStat(stat?: unknown): boolean
