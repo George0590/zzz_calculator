@@ -17,6 +17,8 @@ const props = defineProps<{
   runtime: any
   effectRows: Array<{ id: string, rule: any, text: string, coverage: any }>
   modifierLines: string[]
+  sourceLabel?: string
+  canRestore?: boolean
 }>()
 const emit = defineEmits<{
   toggle: [checked: boolean]
@@ -24,6 +26,7 @@ const emit = defineEmits<{
   sourceValue: [group: any, value: number]
   stacks: [group: any, value: number]
   parameter: [definition: any, value: unknown]
+  restore: []
 }>()
 
 const fullName = computed(() => buffDisplayName(props.buff))
@@ -75,6 +78,8 @@ function parameterLabel(definition: any) {
       <button type="button" class="buff-row-toggle" :aria-label="fullName" :aria-pressed="selected" @click="emit('toggle', !selected)">
         {{ title }}
       </button>
+      <span v-if="sourceLabel" class="buff-source-tag">{{ sourceLabel }}</span>
+      <button v-if="canRestore" type="button" class="buff-restore-button" @click="emit('restore')">恢复导入</button>
     </div>
     <div v-if="effectRows.length || modifierLines.length" class="buff-effect-lines">
       <div v-for="row in effectRows" :key="row.id" class="buff-effect-row">
@@ -162,6 +167,26 @@ function parameterLabel(definition: any) {
   min-width: 0;
 }
 .buff-check { flex: 0 0 auto; }
+.buff-source-tag {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.buff-restore-button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--app-blue);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
 .buff-row-toggle {
   min-height: 32px;
   min-width: 0;

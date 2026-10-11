@@ -9362,7 +9362,7 @@
           ],
           "buffModifiers": [],
           "description": {
-            "zhCN": "蓄力剪击和急冻普攻获得50%/58.3%/66.6%/75%/83.3%/91.6%/100%暴伤。潜能1后连携、大招、霜锋、冰刃浪也获得该加成；强化E两段不获得此核心暴伤。"
+            "zhCN": "蓄力剪击和急冻普攻获得50%/58.3%/66.6%/75%/83.3%/91.6%/100%暴伤。潜能1后连携、大招、霜锋、冰刃浪也获得该加成。"
           }
         },
         "additionalAbility": {
@@ -9373,7 +9373,7 @@
           "defaultChecked": true,
           "buffModifiers": [],
           "description": {
-            "zhCN": "原版需同属性或同阵营队友；潜能1后击破队友也可触发，琉音满足条件。冰伤命中后每层增加3%冰伤，最多10层，持续10秒。潜能2至6每层额外暴伤为1.6%/2.4%/3.2%/4%/4.8%；仅10层时无视3.3%/5%/6.7%/8.3%/10%冰抗。默认按失衡前已叠满、轴内保持满层；层数和覆盖率可调。"
+            "zhCN": "原版需同属性或同阵营队友；潜能1后击破队友也可触发。冰伤命中后每层增加3%冰属性伤害，最多10层，持续10秒。潜能2至6每层额外增加暴击伤害为1.6%/2.4%/3.2%/4%/4.8%；满10层时额外无视3.3%/5%/6.7%/8.3%/10%冰属性抗性。"
           },
           "effects": [
             {
@@ -9397,7 +9397,8 @@
                 "min": 0,
                 "max": 1,
                 "step": 0.1
-              }
+              },
+              "valuePerStack": 3
             },
             {
               "id": "storm-potential-crit-dmg",
@@ -9424,7 +9425,8 @@
               "valueSource": {
                 "kind": "potentialVisionScaling",
                 "field": "stormCritDmgPerStackPct"
-              }
+              },
+              "valuePerStack": 0
             },
             {
               "id": "storm-potential-ice-res-ignore",
@@ -9452,7 +9454,8 @@
               "valueSource": {
                 "kind": "potentialVisionScaling",
                 "field": "stormIceResIgnorePct"
-              }
+              },
+              "valuePerStack": 0
             }
           ]
         },
@@ -9489,7 +9492,8 @@
                   "min": 0,
                   "max": 1,
                   "step": 0.1
-                }
+                },
+                "valuePerStack": 2
               }
             ],
             "buffModifiers": []
@@ -9536,48 +9540,9 @@
                   "max": 1,
                   "step": 0.1
                 },
-                "condition": "强化特殊技发动时拥有至少3点急冻充能；不足时按覆盖率调低"
+                "condition": ""
               }
             ],
-            "buffModifiers": []
-          },
-          {
-            "cinemaLevel": 3,
-            "cinemaName": {
-              "zhCN": "永不加班"
-            },
-            "scope": "inCombat",
-            "defaultChecked": true,
-            "description": {
-              "zhCN": "[普通攻击]、[闪避]、[支援技]、[特殊技]、[连携技] 技能等级+2"
-            },
-            "effects": [],
-            "buffModifiers": []
-          },
-          {
-            "cinemaLevel": 4,
-            "cinemaName": {
-              "zhCN": "无休寒潮"
-            },
-            "scope": "inCombat",
-            "defaultChecked": true,
-            "description": {
-              "zhCN": "队伍中任意角色对敌人施加[冻结]效果或使敌人失衡时，自身获得6点[急冻充能]和[快蓄]效果，并回复4点能量，能量回复效果10秒内最多触发一次。"
-            },
-            "effects": [],
-            "buffModifiers": []
-          },
-          {
-            "cinemaLevel": 5,
-            "cinemaName": {
-              "zhCN": "睡眠充足"
-            },
-            "scope": "inCombat",
-            "defaultChecked": true,
-            "description": {
-              "zhCN": "[普通攻击]、[闪避]、[支援技]、[特殊技]、[连携技] 技能等级+2"
-            },
-            "effects": [],
             "buffModifiers": []
           },
           {
@@ -9695,7 +9660,7 @@
         {
           "id": "icy_waves_full",
           "name": {
-            "zhCN": "冰刃浪：两段完整命中"
+            "zhCN": "冰刃浪：一、二段"
           },
           "defaultCount": 1,
           "minCount": 0,
@@ -9744,13 +9709,13 @@
         "mode": "custom",
         "cinemaLevel": 0,
         "name": {
-          "zhCN": "0影原版参考轴：2大＋2套急冻A＋强化E两段＋连携"
+          "zhCN": "0影原版参考轴：2大＋2套急冻A＋强化E两段＋单连携"
         },
         "events": [
           {
             "id": "ultimate_1",
             "kind": "direct",
-            "count": 1,
+            "count": 2,
             "stunned": true,
             "critMode": "expected",
             "skillRef": {
@@ -9764,7 +9729,7 @@
             "id": "basic_string_1",
             "kind": "skillGroup",
             "skillGroupId": "flash_freeze_full",
-            "count": 1,
+            "count": 2,
             "stunned": true
           },
           {
@@ -9805,26 +9770,6 @@
               "moveId": "chain_avalanche",
               "rowId": "damage"
             }
-          },
-          {
-            "id": "ultimate_2",
-            "kind": "direct",
-            "count": 1,
-            "stunned": true,
-            "critMode": "expected",
-            "skillRef": {
-              "agentSkillId": "ellen_joe",
-              "categoryId": "chain",
-              "moveId": "ultimate_endless_winter",
-              "rowId": "damage"
-            }
-          },
-          {
-            "id": "basic_string_2",
-            "kind": "skillGroup",
-            "skillGroupId": "flash_freeze_full",
-            "count": 1,
-            "stunned": true
           }
         ],
         "selectedEventId": "ultimate_1",
@@ -9833,13 +9778,13 @@
             "mode": "custom",
             "cinemaLevel": 0,
             "name": {
-              "zhCN": "0影艾莲＋琉音＋千夏：2大2套A2冰刃浪（大体型，含3霜锋）"
+              "zhCN": "0影带琉音轴：2大2套A2冰刃浪（含3霜锋）"
             },
             "events": [
               {
                 "id": "ultimate_1",
                 "kind": "direct",
-                "count": 1,
+                "count": 2,
                 "stunned": true,
                 "critMode": "expected",
                 "skillRef": {
@@ -9853,13 +9798,13 @@
                 "id": "basic_string_1",
                 "kind": "skillGroup",
                 "skillGroupId": "flash_freeze_full",
-                "count": 1,
+                "count": 2,
                 "stunned": true
               },
               {
                 "id": "frost_edge_1",
                 "kind": "direct",
-                "count": 1,
+                "count": 3,
                 "stunned": true,
                 "critMode": "expected",
                 "skillRef": {
@@ -9873,7 +9818,7 @@
                 "id": "icy_waves_1",
                 "kind": "skillGroup",
                 "skillGroupId": "icy_waves_full",
-                "count": 1,
+                "count": 2,
                 "stunned": true
               },
               {
@@ -9903,19 +9848,6 @@
                 }
               },
               {
-                "id": "frost_edge_2",
-                "kind": "direct",
-                "count": 1,
-                "stunned": true,
-                "critMode": "expected",
-                "skillRef": {
-                  "agentSkillId": "ellen_joe",
-                  "categoryId": "basic",
-                  "moveId": "frost_edge_large",
-                  "rowId": "damage"
-                }
-              },
-              {
                 "id": "chain_1",
                 "kind": "direct",
                 "count": 1,
@@ -9927,46 +9859,6 @@
                   "moveId": "chain_avalanche",
                   "rowId": "damage"
                 }
-              },
-              {
-                "id": "ultimate_2",
-                "kind": "direct",
-                "count": 1,
-                "stunned": true,
-                "critMode": "expected",
-                "skillRef": {
-                  "agentSkillId": "ellen_joe",
-                  "categoryId": "chain",
-                  "moveId": "ultimate_endless_winter",
-                  "rowId": "damage"
-                }
-              },
-              {
-                "id": "basic_string_2",
-                "kind": "skillGroup",
-                "skillGroupId": "flash_freeze_full",
-                "count": 1,
-                "stunned": true
-              },
-              {
-                "id": "frost_edge_3",
-                "kind": "direct",
-                "count": 1,
-                "stunned": true,
-                "critMode": "expected",
-                "skillRef": {
-                  "agentSkillId": "ellen_joe",
-                  "categoryId": "basic",
-                  "moveId": "frost_edge_large",
-                  "rowId": "damage"
-                }
-              },
-              {
-                "id": "icy_waves_2",
-                "kind": "skillGroup",
-                "skillGroupId": "icy_waves_full",
-                "count": 1,
-                "stunned": true
               }
             ],
             "selectedEventId": "ultimate_1",
@@ -9979,8 +9871,24 @@
         "defaultSetIds": [
           "shadow_harmony",
           "polar_metal",
-          "zzz_wiki_2029"
+          "hormone_punk"
         ],
+        "defaultFourPieceBuffRuntimeInputs": {
+          "driveDisc4pc:polar_metal.self": {
+            "effects": {
+              "effect_wiki_189_4pc_frozen_shatter_dmg": {
+                "coverage": 0.7
+              }
+            }
+          },
+          "driveDisc4pc:hormone_punk.self": {
+            "effects": {
+              "effect_w8d5k2lm": {
+                "coverage": 0.7
+              }
+            }
+          }
+        },
         "mainStatLimits": {
           "4": [
             "critRate",

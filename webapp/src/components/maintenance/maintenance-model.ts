@@ -134,6 +134,7 @@ const FIELD_LABELS: Record<string, string> = {
   defaultSetId: "默认套装",
   defaultSetIds: "默认 4 件套",
   defaultTwoPieceSetIds: "默认 2 件套",
+  defaultFourPieceBuffRuntimeInputs: "推荐 4 件套默认触发参数",
   mainStatLimits: "主词条限制",
   importantSubStats: "重要副词条",
   importantPanelStats: "重要面板属性",
@@ -425,6 +426,7 @@ export function prepareDraft(resource: ResourceValue, input: any): any {
     const legacyDefaultSetId = String(item.preferredDriveDiscs.defaultSetId ?? item.preferredDriveDiscs.defaultSet ?? "").trim()
     item.preferredDriveDiscs.defaultSetIds ??= legacyDefaultSetId ? [legacyDefaultSetId] : []
     item.preferredDriveDiscs.defaultTwoPieceSetIds ??= []
+    item.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs ??= {}
     delete item.preferredDriveDiscs.defaultSetId
     delete item.preferredDriveDiscs.defaultSet
     item.preferredDriveDiscs.mainStatLimits ??= {}
@@ -672,7 +674,7 @@ export function blankRecord(resource: ResourceValue, catalog: any, options: Crea
       attackTypes: [], faction: "", images: { portrait: "", source: "" },
       level60: { hpBase: 1, atkBase: 1, defBase: 1, critRate: 5, critDmg: 50, impact: 0, anomalyProficiency: 0, anomalyMastery: 0, energyRegen: 120, penRatio: 0 },
       combatBuffs: { corePassive: null, additionalAbility: null, skillBuffs: [], cinemaBuffs: [] },
-      preferredDriveDiscs: { mainStatLimits: { 4: [], 5: [], 6: [] } }, importantSubStats: [], importantPanelStats: [], skillGroups: [], defaultCalculationConfig: null,
+      preferredDriveDiscs: { defaultSetIds: [], defaultTwoPieceSetIds: [], defaultFourPieceBuffRuntimeInputs: {}, mainStatLimits: { 4: [], 5: [], 6: [] } }, importantSubStats: [], importantPanelStats: [], skillGroups: [], defaultCalculationConfig: null,
       potentialVision: null,
       sources: [], verification: {}, hidden: false,
     })
@@ -856,7 +858,7 @@ export function searchableText(resource: ResourceValue, item: any): string {
 export function maskedPreview(value: any, driveDiscSets: any[] = []): any {
   if (Array.isArray(value)) return value.map(item => maskedPreview(item, driveDiscSets))
   if (!value || typeof value !== "object") return value
-  const discPreferenceFields = ["defaultSetIds", "defaultTwoPieceSetIds"]
+  const discPreferenceFields = ["defaultSetIds", "defaultTwoPieceSetIds", "defaultFourPieceBuffRuntimeInputs"]
   return Object.fromEntries(Object.entries(value)
     .filter(([key]) => discPreferenceFields.includes(key) || (!key.startsWith("_")
       && key !== "id"
@@ -870,8 +872,10 @@ export function maskedPreview(value: any, driveDiscSets: any[] = []): any {
       && key !== "step"
       && key !== "authoredCountRange"
       && key !== "maintenanceType"))
-    .map(([key, child]) => discPreferenceFields.includes(key)
-      ? [fieldLabel(key), (Array.isArray(child) ? child : []).map(id => textOf(driveDiscSets.find(set => set.id === id)?.name) || "未知套装")]
+    .map(([key, child]) => key === "defaultFourPieceBuffRuntimeInputs"
+      ? [fieldLabel(key), maskedPreview(child, driveDiscSets)]
+      : discPreferenceFields.includes(key)
+        ? [fieldLabel(key), (Array.isArray(child) ? child : []).map(id => textOf(driveDiscSets.find(set => set.id === id)?.name) || "未知套装")]
       : key === "coverage" && child && typeof child === "object"
       ? [key, { default: `${Number((Number((child as any).default ?? 1) * 100).toFixed(2))}%` }]
       : [key, maskedPreview(child, driveDiscSets)]))

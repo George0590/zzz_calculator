@@ -1,6 +1,6 @@
 import { buffModifiers, defaultRuntimeForBuff, effectRules, localizedText, normalizeRuntimeForBuff, runtimeParameterDefinitions, runtimeSourceGroups } from '@core/shared-combat.js'
 import { teammateBuffCandidates, teammateDriveDiscBuffCandidates, teamWEngineBuffCandidates } from './combatBuffs'
-import { isTeammatePotentialBuff, normalizeBuffPickerState, teammateCinemaLevel, teammateOwnerId, type BuffPickerState } from './teammateBuffPicker'
+import { clearManualTeammateKeys, hasManualTeammateKey, isTeammatePotentialBuff, markManualTeammateKey, normalizeBuffPickerState, teammateCinemaLevel, teammateOwnerId, type BuffPickerState } from './teammateBuffPicker'
 
 export type TeammateSources = {
   ownerId: string
@@ -21,6 +21,7 @@ export type EnkaTeammateState = {
 export type TeammateSyncOperation =
   | { kind: 'refresh' | 'resync' }
   | { kind: 'select' | 'cinema'; slotIndex: number }
+  | { kind: 'restore'; key: string }
 
 export function teammateImportStatus(sources: TeammateSources | undefined, agentId: string): 'imported' | 'missing' | 'partial' {
   const record = sources?.history[agentId]
@@ -47,11 +48,13 @@ function changedFields(current: any, previous: any): any {
 }
 // Record deliberate edits even when a user returns to the automatic default.
 export function recordEnkaTeammateEdit(state: BuffPickerState, key: string, value: any, previousValue?: any) {
+  markManualTeammateKey(state, key)
   const enka = state.enka
   if (!enka?.owners[key]) return
   enka.overrides[key] = key.startsWith('runtime:')
     ? mergeFields(enka.overrides[key], changedFields(value, previousValue ?? enka.applied[key])) : clone(value)
 }
+
 // Stable catalog IDs bind imported skill levels; translated labels are display-only.
 const skillSources: Record<string, Record<string, string>> = {
   'yaojiayin.special_aria_buff': { yaojiayin_special_aria_dmg_bonus: 'special', yaojiayin_special_aria_crit_dmg: 'special' },
@@ -125,6 +128,7 @@ export function syncEnkaTeammates(input: any, sources: TeammateSources, meta: an
   const ownEngineBuffId = `wEngine:${currentWEngineId}.team`
   const scopeMatches = previous?.ownerId === sources.ownerId && previous?.uid === sources.uid
   const overrides: Record<string, any> = scopeMatches ? clone(previous?.overrides ?? {}) : {}
+  const manualKeys = new Set(picker.manualKeys ?? [])
   const characterBuffs = teammateBuffCandidates(meta)
   const setBuffs = teammateDriveDiscBuffCandidates(meta?.driveDiscSets ?? [])
   const byId = new Map([...characterBuffs, ...teamWEngineBuffCandidates(meta, '', payload.addedBuffs ?? []), ...setBuffs].map(buff => [buff.id, buff]))
@@ -134,6 +138,8 @@ export function syncEnkaTeammates(input: any, sources: TeammateSources, meta: an
   const activeOwners = new Set(picker.teammateSlots.filter(Boolean).map(slot => slot!.teammateId))
   const targetOwner = 'slotIndex' in operation ? picker.teammateSlots[operation.slotIndex]?.teammateId : undefined
   const initializes = (owner: string) => operation.kind === 'resync' || (operation.kind === 'select' && targetOwner === owner)
+  const hasManual = (key: string) => manualKeys.has(key)
+    || (operation.kind !== 'resync' && Object.prototype.hasOwnProperty.call(overrides, key))
   const read = (key: string): any => {
     const split = key.indexOf(':'); const kind = key.slice(0, split); const id = key.slice(split + 1)
     if (kind === 'cinema') return picker.teammateSlots.find(slot => slot?.teammateId === id)?.cinemaLevel
@@ -144,11 +150,25 @@ export function syncEnkaTeammates(input: any, sources: TeammateSources, meta: an
   if (scopeMatches) for (const [key, value] of Object.entries(previous?.applied ?? {})) {
     if (!activeOwners.has(previous!.owners[key]!)) continue
     const current = read(key)
-    if (current !== undefined && !sameTeammateValue(current, value)) overrides[key] = key.startsWith('runtime:')
-      ? mergeFields(overrides[key], changedFields(current, value)) : clone(current)
+    if (key !== (operation.kind === 'restore' ? operation.key : '')
+      && current !== undefined && !sameTeammateValue(current, value)) {
+      const changed = changedFields(current, value)
+      overrides[key] = key.startsWith('runtime:')
+        ? mergeFields(overrides[key], withoutImportedFields(changed, key.slice('runtime:'.length)))
+        : clone(current)
+    }
+  }
+  if (operation.kind === 'resync') {
+    clearManualTeammateKeys(picker, key => !key.startsWith('slot:'))
+    manualKeys.clear()
+    for (const key of picker.manualKeys ?? []) manualKeys.add(key)
   }
   if (previous && !scopeMatches) for (const slot of picker.teammateSlots) if (slot) delete slot.loadoutId
-  const availableSlots = picker.teammateSlots.filter(slot => slot && slot.teammateId !== agentId
+  // Legacy saved states have no provenance. Keep them stable until the user
+  // explicitly chooses a teammate or requests a resync.
+  const allowFirstAdoption = picker.origin === 'adminDefault' || picker.origin === 'enkaAuto'
+    || Boolean(previous) || operation.kind === 'resync' || operation.kind === 'select' || operation.kind === 'restore'
+  const availableSlots = (allowFirstAdoption ? picker.teammateSlots : []).filter(slot => slot && slot.teammateId !== agentId
     && characterBuffs.some(buff => teammateOwnerId(buff) === slot.teammateId)
     && teammateImportStatus(sources, slot.teammateId) === 'imported')
   // Choose the owner before materializing shared engine effects and defaults.
@@ -165,9 +185,12 @@ export function syncEnkaTeammates(input: any, sources: TeammateSources, meta: an
   const put = (owner: string, key: string, baseline: any) => {
     if (key in values) return
     if (previous?.owners[key] && previous.owners[key] !== owner) delete overrides[key]
-    if (initializes(owner) && !key.startsWith('runtime:')) delete overrides[key]
-    const firstAdoption = !Object.values(previous?.owners ?? {}).includes(owner)
-    if (key.startsWith('enabled:') && firstAdoption && !initializes(owner)) overrides[key] = selected.has(key.slice(8))
+    const manual = hasManual(key)
+    if (initializes(owner) && !manual && !key.startsWith('runtime:')) delete overrides[key]
+    if (manual && !Object.prototype.hasOwnProperty.call(overrides, key)) {
+      const current = read(key)
+      if (current !== undefined) overrides[key] = clone(current)
+    }
     values[key] = baseline; owners[key] = owner
   }
   const putBuff = (owner: string, buff: any, snapshot: any, enabled: boolean) => {
@@ -177,17 +200,18 @@ export function syncEnkaTeammates(input: any, sources: TeammateSources, meta: an
     const sameOwner = scopeMatches && previous?.owners[key] === owner
     const native = !previous?.owners[key] || sameOwner ? payload.runtimeInputs[buff.id] ?? {} : {}
     const runtime = normalizeRuntimeForBuff(buff, native)
-    if (!previous?.owners[key]) {
+    if (!previous?.owners[key] && !hasManual(key)) {
       // First adoption overwrites imported facts, preserving only scenario inputs.
       const contextual = withoutImportedFields(changedFields(runtime, defaultRuntimeForBuff(buff)), buff.id)
       if (Object.keys(contextual).length) overrides[key] = contextual
     }
-    if (initializes(owner) && overrides[key]) overrides[key] = withoutImportedFields(overrides[key], buff.id)
+    if (initializes(owner) && overrides[key] && !hasManual(key)) overrides[key] = withoutImportedFields(overrides[key], buff.id)
     put(owner, key, normalizeRuntimeForBuff(buff, mergeFields(runtime, auto.imported)))
     return auto
   }
   for (const slot of picker.teammateSlots) {
     if (!slot) continue
+    if (!allowFirstAdoption && !previous) continue
     const owner = slot.teammateId
     if (owner === agentId || !characterBuffs.some(buff => teammateOwnerId(buff) === owner)) { notices.push('队友已不在可用目录中，自动效果已清理'); continue }
     const record = sources.history[owner]
@@ -233,7 +257,11 @@ export function syncEnkaTeammates(input: any, sources: TeammateSources, meta: an
   // Clean only adapter-owned fields. Manual choices survive loss of a source.
   for (const [key, owner] of Object.entries(previous?.owners ?? {})) {
     if (key.slice(key.indexOf(':') + 1) === ownEngineBuffId || key in values) continue
-    if (scopeMatches && activeOwners.has(owner) && key in overrides) {
+    if (manualKeys.has(key)) {
+      const current = read(key)
+      if (current !== undefined) values[key] = current
+      owners[key] = owner
+    } else if (scopeMatches && activeOwners.has(owner) && key in overrides) {
       values[key] = key.startsWith('runtime:') ? read(key) : overrides[key]; owners[key] = owner
     } else if (key.startsWith('enabled:')) {
       selected.delete(key.slice(8))
@@ -262,6 +290,11 @@ export function syncEnkaTeammates(input: any, sources: TeammateSources, meta: an
   for (const key of Object.keys(overrides)) if (!(key in owners) || (typeof overrides[key] === 'object' && !Object.keys(overrides[key] ?? {}).length)) delete overrides[key]
   payload.selectedBuffIds = [...selected]
   const applied = Object.fromEntries(Object.keys(values).map(key => [key, read(key)]).filter(([, value]) => value !== undefined))
-  if (previous || Object.keys(owners).length) picker.enka = { version: 1, ownerId: sources.ownerId, uid: sources.uid, owners, applied, overrides }
+  if (Object.keys(owners).length) {
+    if (picker.origin === 'adminDefault' && !picker.manualKeys?.length) picker.origin = 'enkaAuto'
+    picker.enka = { version: 1, ownerId: sources.ownerId, uid: sources.uid, owners, applied, overrides }
+  } else if (previous) {
+    picker.enka = { version: 1, ownerId: sources.ownerId, uid: sources.uid, owners, applied, overrides }
+  }
   return { payload, notices: [...new Set(notices)] }
 }

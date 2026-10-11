@@ -163,9 +163,10 @@ function makeCatalog() {
   }
 }
 
-async function mountView(options: { failCatalogAfterSave?: boolean, delayFieldSave?: boolean, dynamicCore?: boolean, dynamicMismatch?: boolean, failAgentSave?: boolean, initialAgent?: any, turbulenceEffect?: any, expectedText?: string } = {}) {
+async function mountView(options: { failCatalogAfterSave?: boolean, delayFieldSave?: boolean, dynamicCore?: boolean, dynamicMismatch?: boolean, failAgentSave?: boolean, initialAgent?: any, initialDriveDiscSet?: any, turbulenceEffect?: any, expectedText?: string } = {}) {
   let currentCatalog = structuredClone(makeCatalog())
   if (options.initialAgent) currentCatalog.agents.agents[0] = structuredClone(options.initialAgent)
+  if (options.initialDriveDiscSet) currentCatalog.driveDiscSets.sets = [structuredClone(options.initialDriveDiscSet)]
   if (options.turbulenceEffect) currentCatalog.anomalyEffects.effects.push(structuredClone(options.turbulenceEffect))
   if (options.dynamicCore) {
     const agent = currentCatalog.agents.agents[0]
@@ -844,6 +845,8 @@ describe("MaintenanceView structured editor", () => {
     expect(field(rule, "招式").text()).toContain("该角色此大类的全部招式")
     expect(field(rule, "增幅类型").text()).toContain("技能目标伤害加成%")
     expect(field(rule, "增幅类型").text()).toContain("技能倍率加算%")
+    expect(field(rule, "增幅类型").text()).toContain("暴击率%")
+    expect(field(rule, "增幅类型").text()).toContain("暴击伤害%")
     await field(rule, "招式").find("select").setValue("move")
     expect(field(rule, "倍率行").text()).toContain("伤害倍率")
     expect(rule.find(".skill-target-specific-grid").exists()).toBe(true)
@@ -1053,6 +1056,48 @@ describe("MaintenanceView structured editor", () => {
     })
     expect(body.fourPiece.teamBuff.scope).toBeUndefined()
     expect(body.fourPiece.teamBuff.appliesToOutOfCombatPanel).toBeUndefined()
+  })
+
+  it("shows and preserves mixed skill type and tag targets", async () => {
+    const initialSet = structuredClone(makeCatalog().driveDiscSets.sets[0])
+    initialSet.fourPiece.selfBuff.effects[0] = {
+      id: "mixed-disc-effect",
+      type: "fixed",
+      stat: "dmgBonus",
+      value: 20,
+      mode: "flat",
+      target: {
+        kind: "skill",
+        skillTargets: [
+          { kind: "skillType", skillType: "basic" },
+          { kind: "skillTag", skillTag: "dashAttack" },
+        ],
+      },
+    }
+    const { wrapper, fetchMock } = await mountView({ initialDriveDiscSet: initialSet })
+    await switchResource(wrapper, "drive-disc-sets")
+    const selfBuffCard = wrapper.findAll(".maintenance-subcard").find(item => item.text().includes("佩戴者效果"))!
+    const rule = selfBuffCard.find(".maintenance-rule-card")
+    expect(rule.text()).toContain("混合技能目标")
+    const skillTypes = field(rule, "技能大类").find("select")
+    const skillTags = field(rule, "招式标签").find("select")
+    expect([...skillTypes.element.selectedOptions].map(option => option.value)).toEqual(["basic"])
+    expect([...skillTags.element.selectedOptions].map(option => option.value)).toEqual(["dashAttack"])
+
+    await skillTypes.setValue(["basic", "ultimate"])
+    expect([...skillTags.element.selectedOptions].map(option => option.value)).toEqual(["dashAttack"])
+    await skillTags.setValue([])
+    await button(wrapper, "保存").trigger("click")
+    await vi.waitFor(() => expect(wrapper.text()).toContain("完整目录已刷新"))
+
+    const call = fetchMock.mock.calls.find(([url, init]) => url === "/api/maintenance/drive-disc-sets" && init?.method === "POST")!
+    const body = JSON.parse(String(call[1]?.body ?? "{}"))
+    expect(body.fourPiece.selfBuff.effects[0].target.skillTargets).toEqual([
+      { kind: "skillType", skillType: "basic" },
+      { kind: "skillType", skillType: "ultimate" },
+    ])
+    expect(body.fourPiece.selfBuff.scope).toBeUndefined()
+    expect(body.fourPiece.selfBuff.effects[0].appliesTo).toBeUndefined()
   })
 
   it("preserves multiple sources separately from image provenance", async () => {

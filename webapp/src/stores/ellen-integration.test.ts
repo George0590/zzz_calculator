@@ -17,6 +17,8 @@ it("initializes Ellen's reference team without teammate equipment", () => {
   const store = useBuildStore()
   store.applyAgentConfig("ellen_joe", meta, {})
   expect(store.potentialLevel).toBe(6)
+  expect(store.buffPickerState?.origin).toBe("adminDefault")
+  expect(store.buffPickerState?.defaultFingerprint).toMatch(/^fnv1a-/)
   expect(store.buffPickerState?.teammateSlots.map(slot => slot?.teammateId)).toEqual(["liuyin", "qianxia"])
   for (const owner of ["liuyin", "qianxia"]) {
     const core = meta.teammateCombatBuffGroups.find((group: any) => group.id === owner)
@@ -58,6 +60,20 @@ it("keeps an existing team and chosen cinema", () => {
   const store = useBuildStore()
   const picker = { teammateSlots: [{ teammateId: "qianxia", cinemaLevel: 2 }, null] }
   store.applyAgentConfig("ellen_joe", meta, { buffPickerState: picker, selectedBuffIds: [] })
-  expect(store.buffPickerState).toEqual(picker)
+  expect(store.buffPickerState?.teammateSlots).toEqual(picker.teammateSlots)
   expect(store.selectedBuffIds).toEqual([])
+})
+
+it("migrates an old saved teammate state conservatively as a legacy user configuration", async () => {
+  const store = useBuildStore()
+  store.applyAgentConfig("ellen_joe", meta, {
+    buffPickerState: { teammateSlots: [{ teammateId: "qianxia", cinemaLevel: 0 }, null] },
+    selectedBuffIds: [],
+  })
+  await store.persist()
+  setActivePinia(createPinia())
+  const restored = useBuildStore()
+  restored.initialize({}, meta)
+  expect(restored.buffPickerState?.origin).toBe("legacyUser")
+  expect(restored.buffPickerState?.teammateSlots).toEqual([{ teammateId: "qianxia", cinemaLevel: 0 }, null])
 })

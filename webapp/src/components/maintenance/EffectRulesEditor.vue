@@ -7,7 +7,7 @@ import { statLabel } from "@/utils/format"
 import SkillTargetEditor from "./SkillTargetEditor.vue"
 import {
   ANOMALY_SETTLEMENT_OPTIONS, ANOMALY_VARIANT_OPTIONS, ATTRIBUTE_OPTIONS, BASIS_OPTIONS, DERIVED_SOURCE_KIND_OPTIONS, EFFECT_MODE_OPTIONS, EFFECT_TYPE_OPTIONS, EVENT_STAT_KEYS, FORMULA_SOURCE_KIND_OPTIONS, FORMULA_VALUE_UNIT_OPTIONS, IN_COMBAT_FORMULA_SOURCE_STAT_OPTIONS, OUT_OF_COMBAT_EFFECT_SOURCE_STAT_OPTIONS, SCOPE_OPTIONS,
-  OUT_OF_COMBAT_REQUIREMENT_STAT_OPTIONS, SPECIALTY_OPTIONS, TARGET_KIND_OPTIONS, anomalyOptions, defaultEffectRule, defaultGeneralSkillTargets, defaultModeForStat, defaultSkillTarget, option, statOptions,
+  OUT_OF_COMBAT_REQUIREMENT_STAT_OPTIONS, SPECIALTY_OPTIONS, TARGET_KIND_OPTIONS, anomalyOptions, defaultEffectRule, defaultGeneralSkillTargets, defaultMixedSkillTargets, defaultModeForStat, defaultSkillTarget, option, statOptions,
 } from "./maintenance-options"
 import { internalId, textOf } from "./maintenance-model"
 
@@ -105,6 +105,16 @@ function changeTarget(rule: any, kind: string) {
   } else if (kind === "skillTag") {
     const existing = (rule.target?.skillTargets ?? []).filter((target: any) => target?.kind === "skillTag")
     rule.target = { kind: "skill", skillTargets: existing.length ? existing : [{ kind: "skillTag", skillTag: "dashAttack" }] }
+  } else if (kind === "mixed") {
+    const existingTypes = (rule.target?.skillTargets ?? []).filter((target: any) => target?.kind === "skillType")
+    const existingTags = (rule.target?.skillTargets ?? []).filter((target: any) => target?.kind === "skillTag")
+    rule.target = {
+      kind: "skill",
+      skillTargets: [
+        ...(existingTypes.length ? existingTypes : defaultMixedSkillTargets().filter(target => target.kind === "skillType")),
+        ...(existingTags.length ? existingTags : defaultMixedSkillTargets().filter(target => target.kind === "skillTag")),
+      ],
+    }
   } else if (kind === "anomaly") {
     rule.target = {
       kind: "anomaly",
@@ -123,11 +133,15 @@ function changeTarget(rule: any, kind: string) {
   emit("change")
 }
 
-function targetMode(rule: any): "default" | "anomaly" | "specific" | "skillType" | "skillTag" {
+function targetMode(rule: any): "default" | "anomaly" | "specific" | "skillType" | "skillTag" | "mixed" {
   if (rule.target?.kind === "anomaly") return "anomaly"
   if (rule.target?.kind !== "skill") return "default"
-  if ((rule.target.skillTargets ?? []).some((target: any) => target?.kind === "skillTag")) return "skillTag"
-  return (rule.target.skillTargets ?? []).some((target: any) => target?.kind === "skillType") ? "skillType" : "specific"
+  const targets = rule.target.skillTargets ?? []
+  const hasSkillType = targets.some((target: any) => target?.kind === "skillType")
+  const hasSkillTag = targets.some((target: any) => target?.kind === "skillTag")
+  if (hasSkillType && hasSkillTag) return "mixed"
+  if (hasSkillTag) return "skillTag"
+  return hasSkillType ? "skillType" : "specific"
 }
 
 function changeStat(rule: any, stat: string) {
@@ -668,8 +682,8 @@ function setRuleLabel(rule: any, value: string) {
       </div>
 
       <div v-if="rule.target?.kind === 'skill'" class="maintenance-nested-panel">
-        <strong>{{ targetMode(rule) === 'skillType' ? '通用技能大类' : targetMode(rule) === 'skillTag' ? '通用招式标签' : '指定角色招式' }}</strong>
-        <SkillTargetEditor :targets="ensureSkillTargets(rule)" :mode="targetMode(rule) === 'skillType' ? 'skillType' : targetMode(rule) === 'skillTag' ? 'skillTag' : 'specific'" :catalog="catalog" :disabled="disabled" :preferred-skill-id="preferredSkillId" @change="emit('change')" />
+        <strong>{{ targetMode(rule) === 'skillType' ? '通用技能大类' : targetMode(rule) === 'skillTag' ? '通用招式标签' : targetMode(rule) === 'mixed' ? '混合技能目标' : '指定角色招式' }}</strong>
+        <SkillTargetEditor :targets="ensureSkillTargets(rule)" :mode="targetMode(rule) === 'skillType' ? 'skillType' : targetMode(rule) === 'skillTag' ? 'skillTag' : targetMode(rule) === 'mixed' ? 'mixed' : 'specific'" :catalog="catalog" :disabled="disabled" :preferred-skill-id="preferredSkillId" @change="emit('change')" />
       </div>
 
       <div v-if="rule.target?.kind === 'anomaly'" class="maintenance-nested-panel maintenance-grid">

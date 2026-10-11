@@ -267,6 +267,7 @@ const SKILL_TARGET_STAT_VALUES = new Set([
     "windDmg",
     "sharpDmgBonus",
     "lacerationDmg",
+    "critRate",
     ...ELEMENT_SHARP_DMG_STATS,
     "critDmg",
     "disorderDamageBonus",
@@ -1438,6 +1439,82 @@ function validatePreferredDriveDiscs(errors, preferredDriveDiscs, context = {}) 
         for (const [index, stat] of values.entries()) {
             if (!STAT_VALUES.has(stat)) {
                 add(errors, `preferredDriveDiscs.mainStatLimits.${slot}[${index}]`, "不是支持的属性。")
+            }
+        }
+    }
+
+    const runtimeDefaults = preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs
+    if (runtimeDefaults === undefined) return
+    if (!runtimeDefaults || typeof runtimeDefaults !== "object" || Array.isArray(runtimeDefaults)) {
+        add(errors, "preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs", "四件套默认触发参数必须是对象。")
+        return
+    }
+    const recommendedSetIds = new Set(Array.isArray(preferredDriveDiscs.defaultSetIds)
+        ? preferredDriveDiscs.defaultSetIds
+        : preferredDriveDiscs.defaultSetId ? [preferredDriveDiscs.defaultSetId] : [])
+    const driveDiscSets = Array.isArray(context.driveDiscSets) ? context.driveDiscSets : []
+    const findRule = (buff, effectId) => rulesOf(buff).find(rule => String(rule?.id ?? rule?.stat ?? "") === effectId)
+    for (const [buffId, runtime] of Object.entries(runtimeDefaults)) {
+        const match = String(buffId).match(/^driveDisc4pc:(.+)\.(self|team)$/)
+        if (!match) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "必须使用 driveDisc4pc:<套装>.self 或 .team 格式。")
+            continue
+        }
+        const [, setId, part] = match
+        if (!recommendedSetIds.has(setId)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "默认触发参数只能配置推荐的 4 件套。")
+            continue
+        }
+        if (!driveDiscSets.length) continue
+        const set = driveDiscSets.find(item => item?.id === setId)
+        const fourPiece = set?.fourPiece
+        const buff = part === "team"
+            ? fourPiece?.teamBuff
+            : fourPiece?.selfBuff ?? (!fourPiece?.selfBuff && rulesOf(fourPiece).length ? fourPiece : null)
+        if (!buff || !rulesOf(buff).length) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "对应套装没有可配置的 4 件套 Buff。")
+            continue
+        }
+        if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "默认触发参数必须是对象。")
+            continue
+        }
+        const effects = runtime.effects
+        if (effects === undefined) continue
+        if (!effects || typeof effects !== "object" || Array.isArray(effects)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}.effects`, "效果默认参数必须是对象。")
+            continue
+        }
+        for (const [effectId, effectRuntime] of Object.entries(effects)) {
+            const path = `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}.effects.${effectId}`
+            const rule = findRule(buff, effectId)
+            if (!rule) {
+                add(errors, path, "效果规则不存在。")
+                continue
+            }
+            if (!effectRuntime || typeof effectRuntime !== "object" || Array.isArray(effectRuntime)) {
+                add(errors, path, "效果默认参数必须是对象。")
+                continue
+            }
+            if (effectRuntime.stacks !== undefined) {
+                const stacks = requireFinite(errors, effectRuntime.stacks, `${path}.stacks`)
+                const maxStacks = Number(rule.maxStacks)
+                if (Number.isFinite(stacks) && (!Number.isInteger(stacks) || stacks < 0 || (Number.isFinite(maxStacks) && stacks > maxStacks))) {
+                    add(errors, `${path}.stacks`, "默认层数必须是范围内的整数。")
+                }
+            }
+            if (effectRuntime.coverage !== undefined) {
+                const coverage = requireFinite(errors, effectRuntime.coverage, `${path}.coverage`)
+                const metadata = rule.coverage ?? buff.coverage
+                if (!metadata) {
+                    add(errors, `${path}.coverage`, "该效果规则未开放覆盖率配置。")
+                    continue
+                }
+                const min = Number(metadata.min ?? 0)
+                const max = Number(metadata.max ?? 1)
+                if (Number.isFinite(coverage) && (coverage < min || coverage > max)) {
+                    add(errors, `${path}.coverage`, "默认覆盖率超出规则范围。")
+                }
             }
         }
     }

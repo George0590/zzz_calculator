@@ -188,6 +188,7 @@ const validDriveDiscSetWithSplitFourPiece = {
                     value: 10,
                     mode: "pct",
                     basis: "baseAtk",
+                    coverage: { default: 1, min: 0, max: 1, step: 0.1 },
                 },
             ],
         },
@@ -199,6 +200,7 @@ const validDriveDiscSetWithSplitFourPiece = {
                     stat: "atkPct",
                     value: 10,
                     mode: "pct",
+                    coverage: { default: 1, min: 0, max: 1, step: 0.1 },
                 },
             ],
         },
@@ -283,6 +285,45 @@ function assertInvalid(kind, item, text, context = {}) {
         `Expected an error containing ${text}, got:\n${result.errors.join("\n")}`,
     )
 }
+
+const preferredRuntimeAgent = {
+    ...validAgent,
+    preferredDriveDiscs: {
+        defaultSetIds: [validDriveDiscSetWithSplitFourPiece.id],
+        defaultFourPieceBuffRuntimeInputs: {
+            [`driveDisc4pc:${validDriveDiscSetWithSplitFourPiece.id}.self`]: {
+                effects: { atkPct: { coverage: 0.5 } },
+            },
+            [`driveDisc4pc:${validDriveDiscSetWithSplitFourPiece.id}.team`]: {
+                effects: { atkPct: { coverage: 0.25 } },
+            },
+        },
+    },
+}
+assertValid("agents", preferredRuntimeAgent, { driveDiscSets: [validDriveDiscSetWithSplitFourPiece] })
+const cleanedPreferredRuntime = cleanMaintenanceItem("agents", preferredRuntimeAgent)
+assert.deepEqual(
+    cleanedPreferredRuntime.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs,
+    preferredRuntimeAgent.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs,
+)
+assertInvalid("agents", {
+    ...preferredRuntimeAgent,
+    preferredDriveDiscs: {
+        ...preferredRuntimeAgent.preferredDriveDiscs,
+        defaultFourPieceBuffRuntimeInputs: {
+            "driveDisc4pc:missing.self": { effects: { atkPct: { coverage: 0.5 } } },
+        },
+    },
+}, "只能配置推荐的 4 件套", { driveDiscSets: [validDriveDiscSetWithSplitFourPiece] })
+assertInvalid("agents", {
+    ...preferredRuntimeAgent,
+    preferredDriveDiscs: {
+        ...preferredRuntimeAgent.preferredDriveDiscs,
+        defaultFourPieceBuffRuntimeInputs: {
+            [`driveDisc4pc:${validDriveDiscSetWithSplitFourPiece.id}.self`]: { effects: { atkPct: { coverage: 1.5 } } },
+        },
+    },
+}, "默认覆盖率超出规则范围", { driveDiscSets: [validDriveDiscSetWithSplitFourPiece] })
 
 const soldier11 = catalog.agentsMap.get("soldier_11")
 const soldier11MaintenanceContext = {

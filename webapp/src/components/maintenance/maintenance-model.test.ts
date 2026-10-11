@@ -12,6 +12,13 @@ describe("maintenance structured model", () => {
     expect(legacy.preferredDriveDiscs.defaultTwoPieceSetIds).toEqual([])
     const draft = prepareDraft("agents", { preferredDriveDiscs: { defaultSetIds: ["four"], defaultTwoPieceSetIds: ["energy"] } })
     expect(draft.preferredDriveDiscs.defaultTwoPieceSetIds).toEqual(["energy"])
+    const runtimeDraft = prepareDraft("agents", {
+      preferredDriveDiscs: {
+        defaultSetIds: ["four"],
+        defaultFourPieceBuffRuntimeInputs: { "driveDisc4pc:four.self": { effects: { effect: { coverage: 0.5 } } } },
+      },
+    })
+    expect(runtimeDraft.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs["driveDisc4pc:four.self"].effects.effect.coverage).toBe(0.5)
     expect(maskedPreview(draft, sets).preferredDriveDiscs).toMatchObject({ "默认 4 件套": ["四件套甲"], "默认 2 件套": ["充能套装"] })
     expect(JSON.stringify(maskedPreview(draft, sets))).not.toContain("defaultTwoPieceSetIds")
   })
@@ -37,6 +44,19 @@ describe("maintenance structured model", () => {
     const target = candidates.find(item => item.value === "skill:agent_a:special:special_move")
     expect(target?.label).toBe("技能｜角色甲｜特殊技")
     expect(effectSummary(target?.effects[0], {})).toBe("毁伤伤害倍率")
+  })
+
+  it("offers panel crit stats for every skill target mode", () => {
+    for (const targetKind of ["skill", "skillType", "skillTag"]) {
+      const options = statOptions({}, "skill")
+      expect(options).toContainEqual({ value: "critRate", label: "暴击率%" })
+      expect(options).toContainEqual({ value: "critDmg", label: "暴击伤害%" })
+      expect(targetKind).toMatch(/skill/)
+    }
+    expect(statOptions({}, "anomaly").some(option => option.value === "critRate")).toBe(false)
+    expect(statOptions({}, "anomaly").some(option => option.value === "critDmg")).toBe(false)
+    expect(statOptions({}, "default").some(option => option.value === "critRate")).toBe(true)
+    expect(statOptions({}, "default").some(option => option.value === "critDmg")).toBe(true)
   })
 
   it("migrates Luminescence drafts to the minimal team-score event structure", () => {

@@ -112,7 +112,7 @@ describe("build store", () => {
     localStorage.setItem("zzz-calculator.currentAccount.v1", "alice")
     const store = useBuildStore()
     store.applyAgentConfig("agent_a", meta, { wEngineId: "engine_a" })
-    const firstState = { teammateSlots: [null, { teammateId: "teammate_b", cinemaLevel: 4 }] }
+    const firstState = { teammateSlots: [null, { teammateId: "teammate_b", cinemaLevel: 4 }], origin: "legacyUser" as const }
     store.applyBuffState({ selectedBuffIds: store.activeBuffIds(meta), buffPickerState: firstState }, meta)
     await store.persist()
     store.selectAgent("agent_b", meta)
@@ -122,14 +122,14 @@ describe("build store", () => {
     } }, meta)
     await store.persist()
     store.selectAgent("agent_a", meta)
-    expect(store.buffPickerState).toEqual(firstState)
+    expect(store.buffPickerState?.teammateSlots).toEqual(firstState.teammateSlots)
     store.applyBuffState({ selectedBuffIds: store.activeBuffIds(meta) }, meta)
-    expect(store.buffPickerState).toEqual(firstState)
+    expect(store.buffPickerState?.teammateSlots).toEqual(firstState.teammateSlots)
     await store.persist()
 
     for (const key of ["zzz-calculator.webapp.build.v1", "zzz-calculator.homeSelection.v1"]) {
       const config = JSON.parse(localStorage.getItem(key)!).byOwner.alice.byAgent.agent_a
-      expect(config.buffPickerState).toEqual(firstState)
+      expect(config.buffPickerState.teammateSlots).toEqual(firstState.teammateSlots)
       expect(config.combat.buffPickerState).toBeUndefined()
     }
     localStorage.setItem("zzz-calculator.currentAccount.v1", "bob")
@@ -139,7 +139,7 @@ describe("build store", () => {
     setActivePinia(createPinia())
     const restored = useBuildStore()
     restored.initialize({}, meta)
-    expect(restored.buffPickerState).toEqual(firstState)
+    expect(restored.buffPickerState?.teammateSlots).toEqual(firstState.teammateSlots)
   })
 
   it('keeps both saved documents and the visible build intact when the second Buff write fails, then retries', async () => {
@@ -185,7 +185,8 @@ describe("build store", () => {
     reset.buffPickerState.enka.applied['cinema:teammate_a'] = 0
     reset.buffPickerState.enka.overrides = {}
     await store.saveBuffState(reset, meta, options())
-    expect(store.buffPickerState).toEqual(reset.buffPickerState)
+    expect(store.buffPickerState?.teammateSlots).toEqual(reset.buffPickerState.teammateSlots)
+    expect(store.buffPickerState?.enka).toEqual(reset.buffPickerState.enka)
     expect(readBuildSelectionDocument().byOwner.default.byAgent.agent_a.buffPickerState).toEqual(store.buffPickerState)
   })
 

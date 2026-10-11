@@ -15,7 +15,7 @@ import {
 
 const props = defineProps<{
   targets: any[]
-  mode: "specific" | "skillType" | "skillTag"
+  mode: "specific" | "skillType" | "skillTag" | "mixed"
   catalog: any
   disabled?: boolean
   preferredSkillId?: string
@@ -27,11 +27,13 @@ const specificTargets = computed(() => props.targets.filter(target => target?.ki
 const generalSkillTypes = computed(() => props.targets
   .filter(target => target?.kind === "skillType")
   .map(target => String(target.skillType ?? ""))
-  .filter(Boolean))
+  .filter(Boolean)
+  .filter((value, index, values) => values.indexOf(value) === index))
 const generalSkillTags = computed(() => props.targets
   .filter(target => target?.kind === "skillTag")
   .map(target => String(target.skillTag ?? ""))
-  .filter(Boolean))
+  .filter(Boolean)
+  .filter((value, index, values) => values.indexOf(value) === index))
 
 function addTarget() {
   props.targets.push(defaultSkillTarget(props.catalog, props.preferredSkillId))
@@ -50,6 +52,11 @@ function clearLegacyTargets() {
     ? [{ kind: "skillType", skillType: "basic" }]
     : props.mode === "skillTag"
       ? [{ kind: "skillTag", skillTag: "dashAttack" }]
+      : props.mode === "mixed"
+        ? [
+            { kind: "skillType", skillType: "basic" },
+            { kind: "skillTag", skillTag: "dashAttack" },
+          ]
       : [defaultSkillTarget(props.catalog, props.preferredSkillId)]
   props.targets.splice(0, props.targets.length, ...next)
   emit("change")
@@ -84,14 +91,24 @@ function changeRow(target: any, value: string) {
 }
 
 function changeGeneralSkillTypes(values: Array<string | number>) {
-  const next = values.map(value => ({ kind: "skillType", skillType: String(value) }))
-  props.targets.splice(0, props.targets.length, ...next)
+  const next = [...new Set(values.map(value => String(value)).filter(Boolean))]
+    .map(skillType => ({ kind: "skillType", skillType }))
+  if (props.mode === "mixed") {
+    props.targets.splice(0, props.targets.length, ...next, ...props.targets.filter(target => target?.kind !== "skillType"))
+  } else {
+    props.targets.splice(0, props.targets.length, ...next)
+  }
   emit("change")
 }
 
 function changeGeneralSkillTags(values: Array<string | number>) {
-  const next = values.map(value => ({ kind: "skillTag", skillTag: String(value) }))
-  props.targets.splice(0, props.targets.length, ...next)
+  const next = [...new Set(values.map(value => String(value)).filter(Boolean))]
+    .map(skillTag => ({ kind: "skillTag", skillTag }))
+  if (props.mode === "mixed") {
+    props.targets.splice(0, props.targets.length, ...props.targets.filter(target => target?.kind !== "skillTag"), ...next)
+  } else {
+    props.targets.splice(0, props.targets.length, ...next)
+  }
   emit("change")
 }
 </script>
@@ -115,6 +132,16 @@ function changeGeneralSkillTags(values: Array<string | number>) {
       <NButton size="small" :disabled="disabled" @click="addTarget"><template #icon><Plus :size="15" /></template>添加指定目标</NButton>
     </template>
 
+    <div v-else-if="mode === 'mixed'" class="maintenance-grid skill-target-mixed-grid">
+      <label class="maintenance-field" data-field-key="skillType">
+        <span>技能大类</span>
+        <NSelect multiple filterable :consistent-menu-width="false" :value="generalSkillTypes" :options="SKILL_TYPE_OPTIONS" :disabled="disabled" placeholder="请选择技能大类" @update:value="changeGeneralSkillTypes($event)" />
+      </label>
+      <label class="maintenance-field" data-field-key="skillTag">
+        <span>招式标签</span>
+        <NSelect multiple filterable :consistent-menu-width="false" :value="generalSkillTags" :options="SKILL_TAG_OPTIONS" :disabled="disabled" placeholder="请选择招式标签" @update:value="changeGeneralSkillTags($event)" />
+      </label>
+    </div>
     <label v-else-if="mode === 'skillType'" class="maintenance-field maintenance-field-wide" data-field-key="skillType">
       <span>技能大类</span>
       <NSelect multiple filterable :consistent-menu-width="false" :value="generalSkillTypes" :options="SKILL_TYPE_OPTIONS" :disabled="disabled" placeholder="请选择至少一个技能大类" @update:value="changeGeneralSkillTypes($event)" />

@@ -87,6 +87,20 @@ function configFingerprint(value: any) {
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`
 }
 
+function teammateDefaultFingerprint(agent: any, state: BuffPickerState | null, buffIds: string[]) {
+  return configFingerprint({
+    agentId: String(agent?.id ?? ''),
+    teammateSlots: state?.teammateSlots ?? [null, null],
+    buffIds: [...new Set(buffIds)].sort(),
+  })
+}
+
+function normalizePersistedBuffPickerState(value: any) {
+  const state = normalizeBuffPickerState(value)
+  if (state && !state.origin) state.origin = 'legacyUser'
+  return state
+}
+
 function wEngineForTeamBuffId(meta: any, id: string) {
   const wEngineId = wEngineIdFromTeamBuffId(id)
   return wEngineId
@@ -794,7 +808,7 @@ function buildPersistSnapshotFor(state: any) {
     runtimeInputs: clone(state.runtimeInputs) as Record<string, any>,
     manuallyUncheckedDefaultBuffIds: clone(state.manuallyUncheckedDefaultBuffIds),
     janeFrenzySplitVersion: state.janeFrenzySplitVersion,
-    buffPickerState: normalizeBuffPickerState(state.buffPickerState),
+    buffPickerState: normalizePersistedBuffPickerState(state.buffPickerState),
   }
 }
 
@@ -1219,6 +1233,10 @@ export const useBuildStore = defineStore("build", {
         return (group?.buffs ?? []).filter((buff: any) => !isTeammatePotentialBuff(buff)
           && (teammateCinemaLevel(buff) ?? 0) <= slot.cinemaLevel).map((buff: any) => buff.id)
       })
+      if (defaultTeammateState) {
+        defaultTeammateState.origin = 'adminDefault'
+        defaultTeammateState.defaultFingerprint = teammateDefaultFingerprint(agent, defaultTeammateState, defaultTeammateBuffIds)
+      }
 
       this.agentId = agent.id
       this.agentLevel = numeric(config.agentLevel, 60)
@@ -1284,7 +1302,7 @@ export const useBuildStore = defineStore("build", {
       this.runtimeInputs = frenzy.runtimeInputs
       this.manuallyUncheckedDefaultBuffIds = frenzy.uncheckedIds
       this.janeFrenzySplitVersion = frenzy.version
-      this.buffPickerState = normalizeBuffPickerState(config.buffPickerState) ?? defaultTeammateState
+      this.buffPickerState = normalizePersistedBuffPickerState(config.buffPickerState) ?? defaultTeammateState
       this.damageConfig = normalizeDamageConfig({
         ...(rawDamageConfig ?? {}),
         target: rawDamageConfig?.target ?? rawTargetConfig,
@@ -1467,7 +1485,7 @@ export const useBuildStore = defineStore("build", {
         addedBuffs: normalizeAddedBuffs(payload.addedBuffs, meta),
         runtimeInputs: normalizeAgentSkillBuffRuntimeInputs(agent, boss.runtimeInputs),
         manuallyUncheckedDefaultBuffIds: defaults.filter(id => !pyrois.selectedIds.includes(id)),
-        buffPickerState: normalizeBuffPickerState(payload.buffPickerState),
+        buffPickerState: normalizePersistedBuffPickerState(payload.buffPickerState),
       }
       const snapshot = { ...buildPersistSnapshotFor(this), ...patch }
       await persistBuildSnapshot(snapshot, { ...options, rollbackOnFailure: true })
