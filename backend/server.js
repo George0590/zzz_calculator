@@ -1,4 +1,5 @@
 import { createServer } from "node:http"
+import { normalizeAnomalyCritMode } from "../core/anomalyCrit.js"
 import { createHash, randomUUID } from "node:crypto"
 import { AgentMaintenanceError, AgentMaintenanceHistory, agentRevision, agentRevisions, assertAgentRevision } from "./agentMaintenance.js"
 import { readFile, rename, rm, writeFile } from "node:fs/promises"
@@ -1004,7 +1005,9 @@ function cleanAgentSkillBuff(buff) {
     next.sourceSkillRef = {
         agentSkillId: String(sourceSkillRef.agentSkillId ?? "").trim(),
         categoryId: String(sourceSkillRef.categoryId ?? "").trim(),
-        moveId: String(sourceSkillRef.moveId ?? "").trim(),
+        ...(sourceSkillRef.moveId !== undefined
+            ? { moveId: String(sourceSkillRef.moveId ?? "").trim() }
+            : {}),
         ...(String(sourceSkillRef.rowId ?? "").trim()
             ? { rowId: String(sourceSkillRef.rowId).trim() }
             : {}),
@@ -1063,6 +1066,41 @@ function cleanPreferredDriveDiscs(preferredDriveDiscs = null) {
         : rawTwoPieceSetIds
     const hasTwoPieceDefaults = Array.isArray(defaultTwoPieceSetIds)
         ? defaultTwoPieceSetIds.length > 0 : defaultTwoPieceSetIds !== undefined
+    const rawFourPieceRuntimeDefaults = preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs
+    let defaultFourPieceBuffRuntimeInputs = rawFourPieceRuntimeDefaults
+    if (rawFourPieceRuntimeDefaults
+        && typeof rawFourPieceRuntimeDefaults === "object"
+        && !Array.isArray(rawFourPieceRuntimeDefaults)) {
+        defaultFourPieceBuffRuntimeInputs = {}
+        for (const [buffId, runtime] of Object.entries(rawFourPieceRuntimeDefaults)) {
+            if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+                defaultFourPieceBuffRuntimeInputs[buffId] = runtime
+                continue
+            }
+            const nextRuntime = {}
+            if (runtime.effects !== undefined) {
+                nextRuntime.effects = runtime.effects
+                    && typeof runtime.effects === "object"
+                    && !Array.isArray(runtime.effects)
+                    ? Object.fromEntries(Object.entries(runtime.effects).map(([effectId, effectRuntime]) => {
+                        if (!effectRuntime || typeof effectRuntime !== "object" || Array.isArray(effectRuntime)) {
+                            return [effectId, effectRuntime]
+                        }
+                        const nextEffectRuntime = {}
+                        if (Object.prototype.hasOwnProperty.call(effectRuntime, "stacks")) nextEffectRuntime.stacks = effectRuntime.stacks
+                        if (Object.prototype.hasOwnProperty.call(effectRuntime, "coverage")) nextEffectRuntime.coverage = effectRuntime.coverage
+                        return [effectId, nextEffectRuntime]
+                    }))
+                    : runtime.effects
+            }
+            defaultFourPieceBuffRuntimeInputs[buffId] = nextRuntime
+        }
+    }
+    const hasFourPieceRuntimeDefaults = rawFourPieceRuntimeDefaults !== undefined
+        && (typeof defaultFourPieceBuffRuntimeInputs !== "object"
+            || defaultFourPieceBuffRuntimeInputs === null
+            || Array.isArray(defaultFourPieceBuffRuntimeInputs)
+            || Object.keys(defaultFourPieceBuffRuntimeInputs).length > 0)
     const source = preferredDriveDiscs.mainStatLimits
         ?? preferredDriveDiscs.mainStats
         ?? preferredDriveDiscs
@@ -1073,12 +1111,13 @@ function cleanPreferredDriveDiscs(preferredDriveDiscs = null) {
         mainStatLimits[slot] = [...new Set(values.filter(Boolean).map(String))]
     }
     const hasMainStatLimits = Object.values(mainStatLimits).some(values => values.length)
-    if (!defaultSetIds.length && !hasTwoPieceDefaults && !hasMainStatLimits) {
+    if (!defaultSetIds.length && !hasTwoPieceDefaults && !hasMainStatLimits && !hasFourPieceRuntimeDefaults) {
         return null
     }
     return {
         ...(defaultSetIds.length ? { defaultSetIds } : {}),
         ...(hasTwoPieceDefaults ? { defaultTwoPieceSetIds } : {}),
+        ...(hasFourPieceRuntimeDefaults ? { defaultFourPieceBuffRuntimeInputs } : {}),
         ...(hasMainStatLimits ? { mainStatLimits } : {}),
     }
 }
@@ -1245,6 +1284,7 @@ function cleanCalculationEvent(event = {}, index = 0, options = {}) {
                 ),
             }
         }
+        if (event.critMode !== undefined) base.critMode = normalizeAnomalyCritMode(event.critMode)
         if (settlementType === "release") {
             if (String(options.agentId ?? "").trim() === "velina") {
                 const releaseSource = String(

@@ -10,6 +10,13 @@ This document owns shared model semantics. Start character work with the
 
 ## Scope and architecture
 
+Local integration (2026-10-13): Nangongyu retains Cinema-dependent anomaly release
+profiles. `anomalyReleaseProfile` accepts an optional fourth argument with
+`cinemaLevel`; a profile may declare `minCinemaLevel`, and a constant expression
+may declare seven `cinemaValues` (Cinema 0–6). The event path supplies the selected
+Cinema before compiling the profile. See the [character model](nangongyu-modeling.md)
+and [local merge record](local-update-2026-10-12.md).
+
 - Agent base panels use authored level-60 data. A damage-event level parameter does
   not replace those base stats with arbitrary-level progression.
 - The calculator evaluates selected events and condition snapshots. It supports
@@ -41,6 +48,8 @@ This document owns shared model semantics. Start character work with the
 | Enka identities/equipment | [mapping snapshot](../data/enka_zzz_mapping.json), [adapter](../core/enka-import/entity-mapping.js) |
 | Accounts, inventory and loadouts | Browser IndexedDB `zzz-calculator-user-store` and existing localStorage fallback; [adapter](../webapp/src/runtime/local-store.js) |
 | Build/optimizer selections | Browser stores and existing versioned localStorage payloads; [build](../webapp/src/stores/build.ts), [optimizer](../webapp/src/stores/optimizer.ts) |
+
+角色的 `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs` 保存推荐 4 件套的优化器手动触发快照，键使用现有的 `driveDisc4pc:<setId>.self/team`，效果项只保存明确维护的 `stacks` 与 `coverage`。它只作为用户首次初始化优化器时的基础值；用户已有的运行时字段优先，普通工作台 Buff 仍读取驱动盘规则自身默认值。
 
 Local maintenance writes catalog JSON. Saving does not commit a record or update
 production. Packaging uses committed tracked files: reconcile intentional catalog
@@ -80,8 +89,9 @@ regression clauses before reusing a conversion.
 
 Effects retain their ownership: Core Passive, Additional Ability, Cinema,
 move-sourced Buff, W-Engine, set, teammate, field or Boss. Move-sourced Buffs use
-`combatBuffs.skillBuffs[]` with a valid current-agent move reference, name,
-description and explicit default state. They are not a generic container for any
+`combatBuffs.skillBuffs[]` with a valid current-agent skill-category reference,
+optionally narrowed to a move, plus a name, description and explicit default state.
+They are not a generic container for any
 effect mentioning a move.
 
 | Concern | Current rule |
@@ -99,19 +109,9 @@ effect mentioning a move.
 Self effects may specify `requirement.minPotentialLevel` / `maxPotentialLevel`.
 Potential materialization filters inactive rules before panel/event compilation;
 it does not prevent selecting authored moves at P0. Dynamic `valueSource` supports
-fixed, stacked and formula-parameter rules. Formula rules bind their scaling
-field to a named existing parameter via `valueSource.parameter`; the stored
-parameter and compatibility `value` match the first scaling row. For ordinary stacks the resolved value is the per-stack
+fixed and stacked rules. For ordinary stacks the resolved value is the per-stack
 value; with `activationStacks` it is the fixed activated amount. A P0 compatibility
 value of zero is valid when its structured scaling source is present.
-
-In-combat formulas support global `dmgBonus`, AP-sourced global `atkFlat`, and
-attribute-anomaly-targeted `anomalyCritRate`. Static AP is finalized first;
-AP-to-ATK formulas update the panel before damage/crit formulas. No formula outputs
-AP, avoiding dependency cycles. ATK outputs use `storedValue`; scoped crit-rate
-outputs use `storedPercent` and become event modifiers rather than panel CR.
-The dense damage-only compiler declines ATK/crit formulas and falls back to the
-generic compiled scorer. See [Jane's model](jane-modeling.md) for the current use.
 
 `dmgBonus` enters the damage-bonus zone; `skillMultiplierBonus` adds to the selected
 skill multiplier. PEN Ratio, DEF Ignore and DEF reduction remain separate.
@@ -123,6 +123,21 @@ Runtime compatibility remains. Lossless migrations normalize old values;
 unsupported filters must produce actionable maintenance errors rather than silently
 broaden the effect. Maintenance's supported fields are broader than the player
 custom-Buff whitelist.
+
+### Core-sourced formula parameters
+
+Formula rules can bind declared numeric parameters to Core scaling with
+`formula.parameterSources`. The initial row remains the persisted compatibility
+value; maintenance synchronizes it, while runtime materializes the selected Core
+level. Only Core Passive and skill-sourced self Buffs can declare these sources,
+with a complete initial/A-F table and no conflicting refinement binding.
+
+In-combat self formulas can convert finalized Anomaly Proficiency into
+default-target flat ATK or Attribute-Anomaly CRIT Rate. The ATK phase runs before
+damage formulas; target-specific CRIT remains an event modifier and never changes
+ordinary panel CRIT. Unsupported dependencies and outputs fail validation. Fixed
+scoring uses the existing dense fallback when a specialized scalar/bound is not
+available. See [Jane's model](jane-modeling.md) for the character-specific rules.
 
 ## Events, groups and defaults
 
@@ -164,6 +179,11 @@ the body only, without an implicit Assault Directive:
   picker or explicit Buff selection. It selects the two authored teammates and
   their Buffs up to the authored Cinema levels. Saved empty selections are also
   authoritative. Defaults do not grant teammate equipment or infer uptime.
+  Teammate state uses the precedence **manual user edits > complete Enka import >
+  administrator default**. A complete Enka snapshot may update fields that have no
+  manual override; ordinary refresh never replaces a manual field. Legacy saved
+  teammate states without provenance are treated as user-owned and are not adopted
+  automatically by Enka.
 - Characters may intentionally omit administrator defaults and groups. Vivian's
   profile-aware single Release fallback is such a case, not missing content.
 

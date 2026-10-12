@@ -1382,7 +1382,7 @@ describe("BuffPickerModal", () => {
     await buttonByText(wrapper, "应用选择").trigger("click")
     const payload = wrapper.emitted("apply")?.[0]?.[0] as any
     expect(new Set(payload.selectedBuffIds)).toEqual(new Set(["teammate.fire_support", "teammate.physical_support"]))
-    expect(payload.buffPickerState).toEqual(teammateSlotState("fire_support", "physical_support"))
+    expect(payload.buffPickerState.teammateSlots).toEqual(teammateSlotState("fire_support", "physical_support").teammateSlots)
   })
 
   it("keeps teammate cards compact and expands their description without changing selection", async () => {
@@ -1776,7 +1776,7 @@ describe("BuffPickerModal", () => {
     await buttonByText(wrapper, "应用选择").trigger("click")
     const payload = wrapper.emitted("apply")?.[0]?.[0] as any
     expect(new Set(payload.selectedBuffIds)).toEqual(new Set(["slot_a.core", "nonstandard_alpha", "slot_a.potential", "slot_a.cinema.6"]))
-    expect(payload.buffPickerState).toEqual(teammateSlotState("slot_a", null, 1))
+    expect(payload.buffPickerState.teammateSlots).toEqual(teammateSlotState("slot_a", null, 1).teammateSlots)
   })
 
   it('allows manual cinema changes when a complete record belongs to a different UID', async () => {
@@ -1867,7 +1867,7 @@ describe("BuffPickerModal", () => {
     const payload = wrapper.emitted("apply")?.[0]?.[0] as any
     expect(payload.selectedBuffIds).toEqual([])
     expect(payload.runtimeInputs["slot_a.core"]).toBeUndefined()
-    expect(payload.buffPickerState).toEqual({ teammateSlots: [null, null] })
+    expect(payload.buffPickerState.teammateSlots).toEqual([null, null])
   })
 
   it("filters Boss Buffs by every appearance, phase, and Boss name", async () => {

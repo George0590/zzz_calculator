@@ -284,6 +284,42 @@ describe("combat buff display helpers", () => {
     expect(buffLabelForId("wEngine:engine_team.team", context)).toBe("队友音擎（队友携带） · 精 5")
   })
 
+  it("filters skill Buff effects by potential level in the display path", () => {
+    const potentialMeta = {
+      ...meta,
+      agents: [{
+        ...meta.agents[0],
+        potentialVision: { maxLevel: 6, defaultLevel: 6, scaling: { levels: Array.from({ length: 7 }, (_, level) => ({ level })) } },
+        combatBuffs: {
+          ...meta.agents[0].combatBuffs,
+          skillBuffs: [{
+            id: "potential_skill",
+            name: { zhCN: "潜能技能 Buff" },
+            description: { zhCN: "P1至P5生效" },
+            scope: "inCombat",
+            sourceSkillRef: { agentSkillId: "agent_a", categoryId: "chain", moveId: "chain_ice_sweeps_the_earth" },
+            effects: [{
+              id: "potential-effect",
+              type: "fixed",
+              stat: "critDmg",
+              value: 77,
+              requirement: { minPotentialLevel: 1, maxPotentialLevel: 5 },
+            }],
+          }],
+        },
+      }],
+    }
+    const candidatesAt = (potentialLevel: number) => buildCombatBuffGroups({
+      meta: potentialMeta,
+      agentId: "agent_a",
+      potentialLevel,
+    }).self.find(item => item.id === "agent:agent_a.skill.potential_skill")
+    expect(candidatesAt(0)?.effects).toEqual([])
+    expect(candidatesAt(1)?.effects).toHaveLength(1)
+    expect(candidatesAt(5)?.effects).toHaveLength(1)
+    expect(candidatesAt(6)?.effects).toEqual([])
+  })
+
   it("merges rich Boss archive metadata into generic combat Buff candidates", () => {
     const richMeta = {
       ...meta,

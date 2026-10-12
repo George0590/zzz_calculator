@@ -2,8 +2,10 @@
 
 原项目：https://github.com/ZztIsolation/zzz_calculator
 安装位置：D:\绝区零计算器
-下载分支：main
-下载提交：32c03c8
+当前个人分支：local/personal-calculator
+作者版本基准：d9e296a（合并完成：2026-10-13）
+个人更新前快照：9d433e3
+更新前备份：D:\绝区零计算器备份\2026-10-12-更新前-234906
 
 打开方式：双击桌面的“绝区零计算器”快捷方式。
 快捷方式会自动在后台启动服务，并在默认浏览器打开 http://127.0.0.1:8787/ 。
@@ -20,4 +22,7 @@
 上游锁文件缺少部分平台依赖记录，安装时已补齐 webapp/package-lock.json。
 原锁文件备份位于 .local-runtime/package-lock.original.json。
 启动日志位于 .local-runtime/server-output.log 和 server-error.log。
-本次没有改动伤害公式、角色数值或默认配装数据。
+本地已接入作者更新，同时保留南宫羽、艾莲的双大顺序轴、简的单次强击目标及个人默认队友和盘子候选。
+继续使用原浏览器与相同地址；更新未清理浏览器存储，文件备份不包含浏览器库存。
+详细合并决定见 docs/local-update-2026-10-12.md。
+以后更新请先保存个人修改，再在个人分支合并作者 origin/main。

@@ -1306,9 +1306,13 @@
             "type": "fixed",
             "stat": "critRate",
             "value": 8,
-            "mode": "flat"
+            "mode": "flat",
+            "target": {
+              "kind": "default"
+            }
           }
-        ]
+        ],
+        "buffModifiers": []
       },
       "fourPiece": {
         "effectText": {
@@ -1321,13 +1325,26 @@
           "effects": [
             {
               "id": "effect_k4p9x1nd",
-              "type": "fixed",
+              "type": "stacked",
               "stat": "atkPct",
               "value": 9,
               "mode": "pct",
-              "basis": "baseAtk"
+              "basis": "baseAtk",
+              "target": {
+                "kind": "default"
+              },
+              "valuePerStack": 9,
+              "maxStacks": 3,
+              "defaultStacks": 3,
+              "coverage": {
+                "default": 1,
+                "min": 0,
+                "max": 1,
+                "step": 0.1
+              }
             }
-          ]
+          ],
+          "buffModifiers": []
         },
         "teamBuff": null
       },
@@ -1559,7 +1576,63 @@
         "effectText": {
           "zhCN": "[普通攻击]和[冲刺攻击]造成的伤害提升20%，队伍中任意角色对敌人施加[冻结]或触发[碎冰]效果时，该增益效果额外提升20%，持续12秒。"
         },
-        "selfBuff": null,
+        "modelingNotes": {
+          "zhCN": "基础20%作用于普通攻击与显式标记为冲刺攻击的招式；队伍中任意角色触发冻结或碎冰后的额外20%不由时间轴自动推导，覆盖率默认按已进入12秒窗口计算，可在Buff选择器或优化器中手动调整。"
+        },
+        "selfBuff": {
+          "condition": null,
+          "effects": [
+            {
+              "id": "effect_wiki_189_4pc_basic_dash_dmg",
+              "type": "fixed",
+              "stat": "dmgBonus",
+              "value": 20,
+              "mode": "flat",
+              "target": {
+                "kind": "skill",
+                "skillTargets": [
+                  {
+                    "kind": "skillType",
+                    "skillType": "basic"
+                  },
+                  {
+                    "kind": "skillTag",
+                    "skillTag": "dashAttack"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "effect_wiki_189_4pc_frozen_shatter_dmg",
+              "type": "fixed",
+              "stat": "dmgBonus",
+              "value": 20,
+              "mode": "flat",
+              "target": {
+                "kind": "skill",
+                "skillTargets": [
+                  {
+                    "kind": "skillType",
+                    "skillType": "basic"
+                  },
+                  {
+                    "kind": "skillTag",
+                    "skillTag": "dashAttack"
+                  }
+                ]
+              },
+              "condition": "队伍中任意角色对敌人施加冻结或触发碎冰",
+              "durationSeconds": 12,
+              "coverage": {
+                "default": 1,
+                "min": 0,
+                "max": 1,
+                "step": 0.1
+              }
+            }
+          ],
+          "buffModifiers": []
+        },
         "teamBuff": null
       }
     },

@@ -32,6 +32,7 @@ export const TARGET_KIND_OPTIONS = [
   option("specific", "指定角色招式"),
   option("skillType", "通用技能大类"),
   option("skillTag", "通用招式标签"),
+  option("mixed", "混合技能目标"),
 ]
 export const SKILL_TYPE_OPTIONS = SKILL_TYPES.map((value: string) => option(value, SKILL_TYPE_LABELS[value] ?? value))
 export const SKILL_TAG_OPTIONS = SKILL_TAGS.map((value: string) => option(value, SKILL_TAG_LABELS[value] ?? value))
@@ -167,6 +168,7 @@ export const SKILL_TARGET_STATS: Array<[string, string, "flat"]> = [
   ["dmgBonus", "技能目标伤害加成%", "flat"], ["penRatio", "技能目标穿透率%", "flat"], ["physicalDmg", "物理伤害加成%", "flat"],
   ["fireDmg", "火属性伤害加成%", "flat"], ["iceDmg", "冰属性伤害加成%", "flat"],
   ["electricDmg", "电属性伤害加成%", "flat"], ["etherDmg", "以太伤害加成%", "flat"], ["windDmg", "风属性伤害加成%", "flat"],
+  ["critRate", "暴击率%", "flat"], ["critDmg", "暴击伤害%", "flat"],
   ...EVENT_STATS.filter(([value]) => !["anomalyDamageBonus", "alienationCoefficientBonus"].includes(value)), ["skillMultiplierBonus", "技能倍率加算%", "flat"], ["lacerationDmg", "锐暴伤害%", "flat"],
   ["enemyDefReduction", "敌方防御力降低%", "flat"], ["enemyDefIgnore", "无视防御率%", "flat"],
   ["enemyResReduction", "敌方全属性抗性降低%", "flat"],
@@ -290,22 +292,30 @@ export function defaultGeneralSkillTargets() {
   return [{ kind: "skillType", skillType: "basic" }]
 }
 
+export function defaultMixedSkillTargets() {
+  return [
+    { kind: "skillType", skillType: "basic" },
+    { kind: "skillTag", skillTag: "dashAttack" },
+  ]
+}
+
 export function defaultEffectRule() {
   return { id: internalId("effect"), type: "fixed", target: { kind: "default" }, stat: "atkFlat", mode: "flat", value: 0 }
 }
 
 export function defaultCalculationEvent(kind = "direct", agent: any = null) {
   const base: any = { id: internalId("event"), kind, count: 1, stunned: true }
-  if (kind === "anomaly") return { ...base, settlementType: "attribute", anomalyEffect: "assault", procCount: 1 }
+  if (kind === "anomaly") return { ...base, settlementType: "attribute", anomalyEffect: "assault", critMode: "expected", procCount: 1 }
   if (kind === "disorder") return { ...base, kind: "anomaly", settlementType: "disorder", disorderType: "normal", anomalyEffect: "burn", elapsedSeconds: 0 }
   if (kind === "turbulence") return {
     ...base,
     kind: "anomaly",
     settlementType: "turbulence",
     anomalyEffect: defaultTurbulenceEffectId(agent),
+    critMode: "expected",
     elapsedSeconds: 0,
   }
-  if (kind === "release") return { ...base, kind: "anomaly", settlementType: "release", anomalyEffect: "assault" }
+  if (kind === "release") return { ...base, kind: "anomaly", settlementType: "release", anomalyEffect: "assault", critMode: "expected" }
   if (kind === "luminescence") return {
     id: base.id,
     kind: "anomaly",

@@ -62,6 +62,18 @@ try {
     const textEdit = structuredClone(original)
     textEdit.name.zhCN += " 文本维护"
     textEdit.preferredDriveDiscs.defaultTwoPieceSetIds = ["moonlight_lullaby", "swing_jazz"]
+    const preferredFourPieceSetId = textEdit.preferredDriveDiscs.defaultSetIds[0]
+    const preferredFourPieceSet = data.driveDiscSets.sets.find(item => item.id === preferredFourPieceSetId)
+    const preferredFourPieceRule = preferredFourPieceSet?.fourPiece?.selfBuff?.effects?.find(item => item.type === "stacked")
+    if (preferredFourPieceRule) {
+        textEdit.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs = {
+            [`driveDisc4pc:${preferredFourPieceSetId}.self`]: {
+                effects: {
+                    [preferredFourPieceRule.id]: { stacks: 1, coverage: 0.5 },
+                },
+            },
+        }
+    }
     for (const invalid of [["missing_drive_disc"], "swing_jazz"]) {
         const rejectedPreference = await write({ ...textEdit, preferredDriveDiscs: { defaultTwoPieceSetIds: invalid } }, match(original))
         assert.equal(rejectedPreference.status, 400, JSON.stringify(rejectedPreference.body))
@@ -72,6 +84,12 @@ try {
     assert.deepEqual(saved.body.savedItem.defaultCalculationConfig.events, original.defaultCalculationConfig.events)
     assert.deepEqual(saved.body.savedItem.defaultCalculationConfig.name, original.defaultCalculationConfig.name)
     assert.deepEqual(saved.body.savedItem.preferredDriveDiscs.defaultTwoPieceSetIds, ["moonlight_lullaby", "swing_jazz"])
+    if (preferredFourPieceRule) {
+        assert.deepEqual(
+            saved.body.savedItem.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs[`driveDisc4pc:${preferredFourPieceSetId}.self`].effects[preferredFourPieceRule.id],
+            { stacks: 1, coverage: 0.5 },
+        )
+    }
     assert.deepEqual((await read()).agents.agents.find(item => item.id === "velina").preferredDriveDiscs.defaultTwoPieceSetIds, ["moonlight_lullaby", "swing_jazz"])
     assert.equal((await write(original, match(original), "DELETE")).status, 412)
 
@@ -107,6 +125,27 @@ try {
     const preflight = await fetch(`${base}/api/maintenance/agents`, { method: "OPTIONS", headers: { Origin: base, "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "If-Match" } })
     assert.match(preflight.headers.get("access-control-allow-headers"), /If-Match/)
 
+    // Exercise actual catalog writes and reloads in this isolated temporary catalog.
+    let critAgent = (await read()).agents.agents.find(item => item.id === "aria")
+    const release = structuredClone(critAgent.defaultCalculationConfig.events[0])
+    for (const critMode of ["expected", "crit", "nonCrit"]) {
+        const events = [
+            { id: "attribute", kind: "anomaly", settlementType: "attribute", anomalyEffect: "corruption", procCount: 1, count: 1, critMode },
+            { id: "turbulence", kind: "anomaly", settlementType: "turbulence", anomalyEffect: "corruption", elapsedSeconds: 0, count: 1, critMode },
+            { ...release, id: "release", critMode },
+        ]
+        const candidate = { ...critAgent,
+            defaultCalculationConfig: { mode: "custom", selectedEventId: "attribute", events },
+            skillGroups: [{ id: "crit-outcomes", name: { zhCN: "暴击模式回读" }, defaultCount: 1, minCount: 0, step: 1, events }],
+        }
+        const outcome = await write(candidate, match(critAgent))
+        assert.equal(outcome.status, 200, JSON.stringify(outcome.body))
+        critAgent = (await read()).agents.agents.find(item => item.id === "aria")
+        for (const rows of [critAgent.defaultCalculationConfig.events, critAgent.skillGroups[0].events]) {
+            assert.deepEqual(rows.map(row => row.critMode), [critMode, critMode, critMode])
+        }
+    }
+
     // A broken history directory blocks mutation, rather than saving without evidence.
     const historyDirectory = path.join(dataDir, ".agent-history")
     await fs.rename(historyDirectory, `${historyDirectory}-held`)
@@ -118,6 +157,22 @@ try {
     assert.equal(await fs.readFile(agentFile, "utf8"), beforeFailure)
     await fs.rm(historyDirectory)
     await fs.rename(`${historyDirectory}-held`, historyDirectory)
+    const jane = (await read()).agents.agents.find(item => item.id === "jane_doe")
+    const editedJane = structuredClone(jane)
+    editedJane.coreSkill.corePassiveScaling.levels[0].assaultCritRatePerAnomalyProficiencyPct = 0.09
+    const janeSaved = await write(editedJane, match(jane))
+    assert.equal(janeSaved.status, 200, JSON.stringify(janeSaved.body))
+    const janeReread = (await read()).agents.agents.find(item => item.id === "jane_doe")
+    const dynamicRule = janeReread.combatBuffs.corePassive.effects.find(rule => rule.formula?.parameterSources)
+    assert.equal(dynamicRule.stat, "anomalyCritRate")
+    assert.equal(dynamicRule.formula.parameters.rate, 0.09)
+    assert.deepEqual(dynamicRule.target, { kind: "anomaly", settlementType: "attribute", anomalyEffects: ["assault"] })
+    assert.equal(janeReread.potentialVision.defaultLevel, 6)
+    assert.deepEqual(janeReread.defaultCalculationConfig, jane.defaultCalculationConfig)
+    const frenzy = janeReread.combatBuffs.skillBuffs.find(buff => buff.id === "frenzy")
+    assert.deepEqual(frenzy.sourceSkillRef, { agentSkillId: "jane_doe", categoryId: "basic" })
+    assert(frenzy.effects.some(rule => rule.stat === "atkFlat" && rule.source.kind === "inCombatStat"))
+
     console.log("agent maintenance API: conditional writes, disk revisions, concurrent saves, deletion, history failure: ok")
 } finally {
     if (server.exitCode === null) {

@@ -187,17 +187,17 @@ for (const { target, path } of storedTargets) {
         }
     }
 }
-assert.equal(moveCount, 152)
-assert.equal(rowCount, 312)
+assert.equal(moveCount, 188)
+assert.equal(rowCount, 423)
 assert.deepEqual(Object.fromEntries(skillTagCounts), {
-    dashAttack: 9,
-    assistAttack: 19,
-    exSpecial: 17,
+    dashAttack: 17,
+    assistAttack: 23,
+    exSpecial: 22,
     fireSuppression: 3,
-    dodgeCounter: 4,
+    dodgeCounter: 7,
 })
 // Removing Velina C1's incorrect velina-c1-vortex-stun rule removed one skill target.
-const expectedTargetCount = 89
+const expectedTargetCount = 100
 assert.equal(storedTargets.length, expectedTargetCount, skillTargetCountMessage(expectedTargetCount, storedTargets))
 
 // Check diagnostic output using an in-memory omission, without changing catalog data.
@@ -206,7 +206,7 @@ const incompleteTargets = storedTargets.slice(1)
 assert.throws(
     () => assert.equal(incompleteTargets.length, expectedTargetCount, skillTargetCountMessage(expectedTargetCount, incompleteTargets)),
     error => error.code === "ERR_ASSERTION"
-        && error.message.includes("expected 89, actual 88")
+        && error.message.includes("expected 100, actual 99")
         && error.message.includes("data/agents.json:")
         && error.message.includes("data/combat_buffs.json:")
         && error.message.includes(`${omittedTarget.ownerId}:`),

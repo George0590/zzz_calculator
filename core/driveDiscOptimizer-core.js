@@ -265,7 +265,38 @@ function requestedFourPieceSetIds(input = {}, agent = null) {
 }
 
 function normalizeFourPieceBuffMode(value) {
-    return String(value ?? "auto").trim() === "manual" ? "manual" : "auto"
+    return String(value ?? "manual").trim() === "auto" ? "auto" : "manual"
+}
+
+function preferredFourPieceBuffRuntimeInputs(agent = null) {
+    const value = agent?.preferredDriveDiscs?.defaultFourPieceBuffRuntimeInputs
+    return value && typeof value === "object" && !Array.isArray(value)
+        ? JSON.parse(JSON.stringify(value))
+        : {}
+}
+
+function mergeFourPieceBuffRuntimeInputs(defaults = {}, saved = {}) {
+    const merged = defaults && typeof defaults === "object" && !Array.isArray(defaults)
+        ? JSON.parse(JSON.stringify(defaults))
+        : {}
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) return merged
+    for (const [id, runtime] of Object.entries(saved)) {
+        if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+            merged[id] = runtime
+            continue
+        }
+        const current = merged[id] && typeof merged[id] === "object" && !Array.isArray(merged[id]) ? merged[id] : {}
+        const effects = runtime.effects && typeof runtime.effects === "object" && !Array.isArray(runtime.effects)
+            ? Object.fromEntries(Object.entries(runtime.effects).map(([effectId, effectRuntime]) => {
+                const base = current.effects?.[effectId]
+                return [effectId, effectRuntime && typeof effectRuntime === "object" && !Array.isArray(effectRuntime)
+                    ? { ...(base ?? {}), ...effectRuntime }
+                    : effectRuntime]
+            }))
+            : runtime.effects
+        merged[id] = { ...current, ...runtime, ...(effects !== undefined ? { effects: { ...(current.effects ?? {}), ...effects } } : {}) }
+    }
+    return merged
 }
 
 function normalizeFourPieceBuffRuntimeInputs(value = {}) {
@@ -298,6 +329,10 @@ function normalizeSettings(input = {}, agent = null) {
         .filter(Boolean))]
     const twoPieceSetId = twoPieceSetIds.length === 1 ? twoPieceSetIds[0] : ""
     const mainStatLimits = settings.mainStatLimits ?? settings.mainStats ?? {}
+    const fourPieceBuffRuntimeInputs = mergeFourPieceBuffRuntimeInputs(
+        preferredFourPieceBuffRuntimeInputs(agent),
+        normalizeFourPieceBuffRuntimeInputs(settings.fourPieceBuffRuntimeInputs ?? input.fourPieceBuffRuntimeInputs),
+    )
     const minimums = settings.minimums ?? settings.minPanel ?? {}
 
     return {
@@ -310,9 +345,7 @@ function normalizeSettings(input = {}, agent = null) {
         twoPieceSetId,
         twoPieceSetIds,
         fourPieceBuffMode: normalizeFourPieceBuffMode(settings.fourPieceBuffMode ?? input.fourPieceBuffMode),
-        fourPieceBuffRuntimeInputs: normalizeFourPieceBuffRuntimeInputs(
-            settings.fourPieceBuffRuntimeInputs ?? input.fourPieceBuffRuntimeInputs,
-        ),
+        fourPieceBuffRuntimeInputs,
         mainStatLimits,
         minimums,
         enableUpperBoundPruning: settings.enableUpperBoundPruning !== false,

@@ -12,6 +12,8 @@ const OPTIMIZER_WORKER_STALL_TIMEOUT_MS = 45_000
 const MINIMUM_STAT_KEYS = ["atk", "def", "anomalyProficiency", "critRate", "critDmg", "lacerationDmg"] as const
 const MINIMUM_DEFAULTS_VERSION = 2
 const TWO_PIECE_DEFAULTS_VERSION = 1
+const FOUR_PIECE_BUFF_DEFAULTS_VERSION = 1
+const PREFERRED_FOUR_PIECE_BUFF_DEFAULTS_VERSION = 1
 const CALCULATION_INPUT_FINGERPRINT_EXCLUDED_KEYS = new Set([
   "label",
   "settings",
@@ -123,6 +125,10 @@ function normalizeBrowserOptimizerAlgorithm(value: any) {
   return algorithm === "exact-super-bound-parallel" ? "exact-super-bound" : algorithm
 }
 
+function normalizeFourPieceBuffMode(value: any): "auto" | "manual" {
+  return String(value ?? "manual").trim() === "auto" ? "auto" : "manual"
+}
+
 function cleanMinimums(value: any = {}) {
   return Object.fromEntries(
     MINIMUM_STAT_KEYS
@@ -180,7 +186,7 @@ function optimizerSettingsFingerprint(settings: any = {}) {
     algorithm: normalizeBrowserOptimizerAlgorithm(settings.algorithm),
     fourPieceSetIds: normalizedSetIds(settings.fourPieceSetIds, settings.fourPieceSetId),
     twoPieceSetIds: normalizedSetIds(settings.twoPieceSetIds, settings.twoPieceSetId),
-    fourPieceBuffMode: settings.fourPieceBuffMode === "manual" ? "manual" : "auto",
+    fourPieceBuffMode: normalizeFourPieceBuffMode(settings.fourPieceBuffMode),
     fourPieceBuffRuntimeInputs: plainObject(settings.fourPieceBuffRuntimeInputs),
     mainStatLimits: Object.fromEntries(Object.entries(mainStatLimits)
       .map(([slot, values]) => [slot, [...new Set(normalizeArray(values))].sort()])),
@@ -231,6 +237,43 @@ function preferredDriveDiscDefaultSetIds(agent: any = null, catalog: any = null)
   return setIds.filter(setId => validIds.has(setId))
 }
 
+function preferredFourPieceBuffRuntimeInputs(agent: any = null, catalog: any = null) {
+  const preferred = agent?.preferredDriveDiscs?.defaultFourPieceBuffRuntimeInputs
+  if (!preferred || typeof preferred !== "object" || Array.isArray(preferred)) return {}
+  const visibleSetIds = new Set(optimizerDriveDiscSets(catalog)
+    .map((set: any) => String(set?.id ?? "").trim())
+    .filter(Boolean))
+  return Object.fromEntries(Object.entries(preferred).filter(([id, runtime]) => {
+    const match = String(id).match(/^driveDisc4pc:(.+)\.(self|team)$/)
+    return Boolean(match)
+      && (!catalog || visibleSetIds.has(String(match?.[1] ?? "")))
+      && runtime && typeof runtime === "object" && !Array.isArray(runtime)
+  }).map(([id, runtime]) => [id, plainObject(runtime)]))
+}
+
+function mergeFourPieceBuffRuntimeInputs(defaults: any = {}, saved: any = {}) {
+  const merged = plainObject(defaults)
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return merged
+  for (const [id, rawRuntime] of Object.entries(saved)) {
+    const runtime: any = rawRuntime
+    if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+      merged[id] = runtime
+      continue
+    }
+    const current: any = merged[id] && typeof merged[id] === "object" && !Array.isArray(merged[id]) ? merged[id] : {}
+    const effects = runtime.effects && typeof runtime.effects === "object" && !Array.isArray(runtime.effects)
+      ? Object.fromEntries(Object.entries(runtime.effects).map(([effectId, effectRuntime]) => {
+          const base = current.effects?.[effectId]
+          return [effectId, effectRuntime && typeof effectRuntime === "object" && !Array.isArray(effectRuntime)
+            ? { ...(base ?? {}), ...effectRuntime }
+            : effectRuntime]
+        }))
+      : runtime.effects
+    merged[id] = { ...current, ...runtime, ...(effects !== undefined ? { effects: { ...(current.effects ?? {}), ...effects } } : {}) }
+  }
+  return merged
+}
+
 function firstDriveDiscSetId(catalog: any = null) {
   return String(optimizerDriveDiscSets(catalog)[0]?.id ?? "").trim()
 }
@@ -267,6 +310,9 @@ function normalizeOptimizerSettings(value: any = {}, catalog: any = null, agent:
   const followsTwoPieceDefaults = migrateTwoPieceDefaults
     || saved.twoPieceSetSource === "preferred"
     || (!hasSavedTwoPieceSets && saved.twoPieceSetSource !== "manual")
+  const migrateFourPieceBuffDefaults = Number(saved.fourPieceBuffDefaultsVersion ?? 0) < FOUR_PIECE_BUFF_DEFAULTS_VERSION
+  const migratePreferredFourPieceBuffDefaults = Number(saved.preferredFourPieceBuffDefaultsVersion ?? 0) < PREFERRED_FOUR_PIECE_BUFF_DEFAULTS_VERSION
+  const defaultFourPieceBuffRuntimeInputs = preferredFourPieceBuffRuntimeInputs(agent, catalog)
   return {
     algorithm: normalizeBrowserOptimizerAlgorithm(saved.algorithm),
     fourPieceSetIds,
@@ -275,8 +321,12 @@ function normalizeOptimizerSettings(value: any = {}, catalog: any = null, agent:
     twoPieceSetSource: followsTwoPieceDefaults ? "preferred" : "manual",
     twoPieceDefaultsVersion: migrateTwoPieceDefaults
       ? TWO_PIECE_DEFAULTS_VERSION : Number(saved.twoPieceDefaultsVersion ?? 0),
-    fourPieceBuffMode: saved.fourPieceBuffMode === "manual" ? "manual" : "auto",
-    fourPieceBuffRuntimeInputs: plainObject(saved.fourPieceBuffRuntimeInputs),
+    fourPieceBuffDefaultsVersion: FOUR_PIECE_BUFF_DEFAULTS_VERSION,
+    preferredFourPieceBuffDefaultsVersion: PREFERRED_FOUR_PIECE_BUFF_DEFAULTS_VERSION,
+    fourPieceBuffMode: migrateFourPieceBuffDefaults ? "manual" : normalizeFourPieceBuffMode(saved.fourPieceBuffMode),
+    fourPieceBuffRuntimeInputs: migratePreferredFourPieceBuffDefaults
+      ? mergeFourPieceBuffRuntimeInputs(defaultFourPieceBuffRuntimeInputs, saved.fourPieceBuffRuntimeInputs)
+      : plainObject(saved.fourPieceBuffRuntimeInputs),
     mainStatLimits: cleanMainStatLimits(saved.mainStatLimits),
     minimums: normalizeMinimums(
       saved.minimums,
@@ -296,7 +346,9 @@ function optimizerSettingsPayload(state: any = {}, previous: any = {}) {
     twoPieceSetIds: normalizeArray(state.twoPieceSetIds),
     twoPieceSetSource: state.twoPieceSetSource === "manual" ? "manual" : "preferred",
     twoPieceDefaultsVersion: Number(state.twoPieceDefaultsVersion ?? 0),
-    fourPieceBuffMode: state.fourPieceBuffMode === "manual" ? "manual" : "auto",
+    fourPieceBuffDefaultsVersion: FOUR_PIECE_BUFF_DEFAULTS_VERSION,
+    preferredFourPieceBuffDefaultsVersion: PREFERRED_FOUR_PIECE_BUFF_DEFAULTS_VERSION,
+    fourPieceBuffMode: normalizeFourPieceBuffMode(state.fourPieceBuffMode),
     fourPieceBuffRuntimeInputs: plainObject(state.fourPieceBuffRuntimeInputs),
     mainStatLimits: cleanMainStatLimits(state.mainStatLimits),
     minimumDefaultsVersion: MINIMUM_DEFAULTS_VERSION,
@@ -480,7 +532,9 @@ export const useOptimizerStore = defineStore("optimizer", {
     twoPieceSetIds: [] as string[],
     twoPieceSetSource: "preferred" as "preferred" | "manual",
     twoPieceDefaultsVersion: 0,
-    fourPieceBuffMode: "auto" as "auto" | "manual",
+    fourPieceBuffDefaultsVersion: FOUR_PIECE_BUFF_DEFAULTS_VERSION,
+    preferredFourPieceBuffDefaultsVersion: PREFERRED_FOUR_PIECE_BUFF_DEFAULTS_VERSION,
+    fourPieceBuffMode: "manual" as "auto" | "manual",
     fourPieceBuffRuntimeInputs: {} as Record<string, any>,
     mainStatLimits: defaultMainStatLimits(),
     minimums: defaultMinimums(),
@@ -528,7 +582,9 @@ export const useOptimizerStore = defineStore("optimizer", {
       this.twoPieceSetIds = settings.twoPieceSetIds
       this.twoPieceSetSource = settings.twoPieceSetSource
       this.twoPieceDefaultsVersion = settings.twoPieceDefaultsVersion
-      this.fourPieceBuffMode = settings.fourPieceBuffMode
+      this.fourPieceBuffDefaultsVersion = settings.fourPieceBuffDefaultsVersion
+      this.preferredFourPieceBuffDefaultsVersion = settings.preferredFourPieceBuffDefaultsVersion
+      this.fourPieceBuffMode = normalizeFourPieceBuffMode(settings.fourPieceBuffMode)
       this.fourPieceBuffRuntimeInputs = settings.fourPieceBuffRuntimeInputs
       this.mainStatLimits = settings.mainStatLimits
       this.minimums = settings.minimums
@@ -587,7 +643,7 @@ export const useOptimizerStore = defineStore("optimizer", {
     },
     applyAdvancedSettings(settings: any = {}) {
       this.algorithm = normalizeBrowserOptimizerAlgorithm(settings.algorithm || this.algorithm)
-      this.fourPieceBuffMode = settings.fourPieceBuffMode === "manual" ? "manual" : "auto"
+      this.fourPieceBuffMode = normalizeFourPieceBuffMode(settings.fourPieceBuffMode)
       this.fourPieceBuffRuntimeInputs = plainObject(settings.fourPieceBuffRuntimeInputs)
       this.mainStatLimits = cleanMainStatLimits(settings.mainStatLimits)
       this.minimums = normalizeMinimums(settings.minimums)

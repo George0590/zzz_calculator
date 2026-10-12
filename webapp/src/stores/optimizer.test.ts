@@ -75,6 +75,37 @@ function inventoryStore(overrides: any = {}) {
 }
 
 describe("optimizer store", () => {
+  it("seeds preferred four-piece runtime defaults once and preserves user overrides", () => {
+    const agent = {
+      id: "agent_a",
+      preferredDriveDiscs: {
+        defaultSetIds: ["woodpecker_electro", "fanged_metal"],
+        defaultFourPieceBuffRuntimeInputs: {
+          "driveDisc4pc:woodpecker_electro.self": {
+            effects: {
+              stacks: { stacks: 2, coverage: 0.6 },
+              coverageOnly: { coverage: 0.4 },
+            },
+          },
+          "driveDisc4pc:fanged_metal.team": { effects: { team: { coverage: 0.5 } } },
+        },
+      },
+    }
+    const store = useOptimizerStore()
+    store.initialize({ driveDiscSets: [{ id: "woodpecker_electro" }, { id: "fanged_metal" }] }, agent)
+    expect(store.fourPieceBuffRuntimeInputs["driveDisc4pc:woodpecker_electro.self"]).toEqual({
+      effects: { stacks: { stacks: 2, coverage: 0.6 }, coverageOnly: { coverage: 0.4 } },
+    })
+    expect(store.fourPieceBuffRuntimeInputs["driveDisc4pc:fanged_metal.team"]).toEqual({ effects: { team: { coverage: 0.5 } } })
+    expect(JSON.parse(localStorage.getItem("zzz-calculator.webapp.optimizer.v1")!).byAgent.agent_a.preferredFourPieceBuffDefaultsVersion).toBe(1)
+
+    store.setFourPieceBuffRuntimeInput("driveDisc4pc:woodpecker_electro.self", { effects: { stacks: { coverage: 0.2 } } })
+    const changedAgent = structuredClone(agent)
+    changedAgent.preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs["driveDisc4pc:woodpecker_electro.self"].effects.stacks.coverage = 0.9
+    store.loadAgentSettings(changedAgent, { driveDiscSets: [{ id: "woodpecker_electro" }, { id: "fanged_metal" }] })
+    expect(store.fourPieceBuffRuntimeInputs["driveDisc4pc:woodpecker_electro.self"]).toEqual({ effects: { stacks: { coverage: 0.2 } } })
+  })
+
   const energyAgent = {
     ...preferredAgentA,
     preferredDriveDiscs: { defaultSetIds: ["woodpecker_electro"], defaultTwoPieceSetIds: ["swing_jazz", "fanged_metal"] },
@@ -124,6 +155,29 @@ describe("optimizer store", () => {
     store.setTwoPieceSetIds(["woodpecker_electro"])
     store.loadAgentSettings(changedAgent, preferredCatalog)
     expect(store.twoPieceSetIds).toEqual(["woodpecker_electro"])
+  })
+
+  it("migrates the previous automatic four-piece default once", () => {
+    localStorage.setItem("zzz-calculator.webapp.optimizer.v1", JSON.stringify({
+      version: 4,
+      currentAgentId: "agent_a",
+      byAgent: {
+        agent_a: {
+          fourPieceBuffMode: "auto",
+        },
+      },
+    }))
+    const store = useOptimizerStore()
+
+    store.initialize(preferredCatalog, preferredAgentA)
+
+    expect(store.fourPieceBuffMode).toBe("manual")
+    const migrated = JSON.parse(localStorage.getItem("zzz-calculator.webapp.optimizer.v1")!)
+    expect(migrated.byAgent.agent_a.fourPieceBuffDefaultsVersion).toBe(1)
+
+    store.setFourPieceBuffMode("auto")
+    store.loadAgentSettings(preferredAgentA, preferredCatalog)
+    expect(store.fourPieceBuffMode).toBe("auto")
   })
 
   it("waits for valid recommendations before marking an agent migrated", () => {
@@ -400,7 +454,7 @@ describe("optimizer store", () => {
     expect(store.fourPieceSetSource).toBe("preferred")
     expect(store.algorithm).toBe("exact-super-bound")
     expect(store.twoPieceSetIds).toEqual([])
-    expect(store.fourPieceBuffMode).toBe("auto")
+    expect(store.fourPieceBuffMode).toBe("manual")
     expect(store.fourPieceBuffRuntimeInputs).toEqual({})
     expect(store.mainStatLimits).toEqual({ "4": [], "5": [], "6": [] })
     expect(store.minimums).toEqual({})
@@ -625,7 +679,7 @@ describe("optimizer store", () => {
 
     store.applyAdvancedSettings({
       algorithm: "exact-super-bound",
-      fourPieceBuffMode: "auto",
+      fourPieceBuffMode: "manual",
       fourPieceBuffRuntimeInputs: {},
       mainStatLimits: { "4": [], "5": [], "6": [] },
       minimums: {},

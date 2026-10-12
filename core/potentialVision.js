@@ -59,9 +59,6 @@ function materializePotentialVisionRule(rule = {}, agent = {}, potentialLevel) {
         ...rule,
         value,
         displayValue: value,
-        ...(rule.type === "formula" && source.parameter
-            ? { formula: { ...rule.formula, parameters: { ...rule.formula?.parameters, [source.parameter]: value } } }
-            : {}),
         ...(rule.type === "stacked" && rule.activationStacks == null
             ? { valuePerStack: value, displayValuePerStack: value }
             : {}),

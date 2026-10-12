@@ -17,6 +17,7 @@ import {
 import { validateAnomalyReleaseProfile, VELINA_RELEASE_SOURCES } from "./anomalyRelease.js"
 import { damageSkillRowsWithGeneratedTotals } from "./skillMultiplierCandidates.js"
 import {
+    isAllowedInCombatFormulaOutput,
     IN_COMBAT_FORMULA_SOURCE_STATS,
     formulaExpressionVariables,
     isAllowedInCombatFormulaSourceStat,
@@ -106,6 +107,16 @@ export function repairDynamicValueSourceFallbacks(agent, repairs = []) {
     const visit = (effectSet, basePath) => {
         const effects = Array.isArray(effectSet?.effects) ? effectSet.effects : []
         effects.forEach((rule, index) => {
+            for (const [name, parameterSource] of Object.entries(rule?.formula?.parameterSources ?? {})) {
+                if (parameterSource?.kind !== "corePassiveScaling" || !rule.formula?.parameters
+                    || !Object.prototype.hasOwnProperty.call(rule.formula.parameters, name)) continue
+                const field = String(parameterSource.field ?? "")
+                const firstValue = Number(coreLevels?.[0]?.[field])
+                if (!field || !Number.isFinite(firstValue) || Number(rule.formula.parameters[name]) === firstValue) continue
+                repairs.push({ path: `${basePath}.effects[${index}].formula.parameters.${name}`,
+                    sourceKind: "corePassiveScaling", field, from: rule.formula.parameters[name], to: firstValue })
+                rule.formula.parameters[name] = firstValue
+            }
             const source = rule?.valueSource
             if (!source || typeof source !== "object") return
             const levels = source.kind === "corePassiveScaling"
@@ -117,14 +128,6 @@ export function repairDynamicValueSourceFallbacks(agent, repairs = []) {
             const field = String(source.field ?? "").trim()
             const firstValue = Number(levels[0]?.[field])
             if (!field || !Number.isFinite(firstValue)) return
-            if (rule.type === "formula" && source.parameter && Object.prototype.hasOwnProperty.call(rule.formula?.parameters ?? {}, source.parameter)) {
-                const parameterValue = rule.formula.parameters[source.parameter]
-                if (Number(parameterValue) !== firstValue) {
-                    repairs.push({ path: `${basePath}.effects[${index}].formula.parameters.${source.parameter}`,
-                        sourceKind: source.kind, field, from: parameterValue, to: firstValue })
-                    rule.formula.parameters[source.parameter] = firstValue
-                }
-            }
             const currentValue = Number(rule.value)
             if (Number.isFinite(currentValue) && Math.abs(currentValue - firstValue) <= 1e-9) return
             const path = `${basePath}.effects[${index}].value`
@@ -264,6 +267,7 @@ const SKILL_TARGET_STAT_VALUES = new Set([
     "windDmg",
     "sharpDmgBonus",
     "lacerationDmg",
+    "critRate",
     ...ELEMENT_SHARP_DMG_STATS,
     "critDmg",
     "disorderDamageBonus",
@@ -730,16 +734,8 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
     }
     if (rule.valueSource !== undefined) {
         const source = rule.valueSource ?? {}
-        if (!["fixed", "stacked", "formula"].includes(type)) {
-            add(errors, `${path}.valueSource`, "动态数值来源只支持固定值、叠层或公式参数。")
-        }
-        if (type === "formula") {
-            const parameter = String(source.parameter ?? "")
-            if (!parameter || !Object.prototype.hasOwnProperty.call(rule.formula?.parameters ?? {}, parameter)) {
-                add(errors, `${path}.valueSource.parameter`, "动态公式来源必须绑定一个已定义的公式参数。")
-            } else if (Number(rule.formula.parameters[parameter]) !== Number(rule.value)) {
-                add(errors, `${path}.formula.parameters.${parameter}`, "公式参数兼容值必须与动态数值来源的第一档一致。")
-            }
+        if (type !== "fixed" && type !== "stacked") {
+            add(errors, `${path}.valueSource`, "动态数值来源只支持固定值或叠层规则。")
         }
         requireEnum(errors, source.kind, EFFECT_VALUE_SOURCE_KIND_VALUES, `${path}.valueSource.kind`)
         const field = String(source.field ?? "").trim()
@@ -952,15 +948,12 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             }
             requireName(errors, source.label, `${path}.source.label`)
             requireEnum(errors, source.unit, FORMULA_VALUE_UNIT_VALUES, `${path}.source.unit`)
-            const supportedOutput = (rule.stat === "dmgBonus" && targetKind === "default")
-                || (rule.stat === "atkFlat" && targetKind === "default" && source.stat === "anomalyProficiency")
-                || (rule.stat === "anomalyCritRate" && targetKind === "anomaly" && rule.target?.settlementType === "attribute")
-            if (!supportedOutput) {
-                add(errors, `${path}.stat`, "局内面板公式支持全局伤害加成、精通转固定攻击或指定属性异常暴击率。")
+            const extendedPanelFormula = isAllowedInCombatFormulaOutput(rule, sourceType)
+            if (!extendedPanelFormula && targetKind !== "default") {
+                add(errors, `${path}.target.kind`, "局内面板公式首版只能作用于常规属性 / 全局效果。")
             }
-            const expectedUnit = rule.stat === "atkFlat" ? "storedValue" : "storedPercent"
-            if (rule.stat !== "dmgBonus" && rule.formula?.valueUnit !== expectedUnit) {
-                add(errors, `${path}.formula.valueUnit`, `此局内公式的结果单位必须为 ${expectedUnit}。`)
+            if (!extendedPanelFormula && rule.stat !== "dmgBonus") {
+                add(errors, `${path}.stat`, "局内面板公式首版只能输出通用伤害加成。")
             }
             if ((rule.mode ?? "flat") !== "flat") {
                 add(errors, `${path}.mode`, "局内面板公式必须使用直接加成方式。")
@@ -1019,6 +1012,40 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             }
             requireFinite(errors, value, `${path}.formula.parameters.${name}`)
             parameterNames.push(name)
+        }
+        const parameterSources = rule.formula?.parameterSources
+        if (parameterSources !== undefined
+            && (!parameterSources || typeof parameterSources !== "object" || Array.isArray(parameterSources))) {
+            add(errors, `${path}.formula.parameterSources`, "公式参数来源必须是对象。")
+        }
+        for (const [name, source] of Object.entries(parameterSources ?? {})) {
+            if (!parameterNames.includes(name)) {
+                add(errors, `${path}.formula.parameterSources.${name}`, "参数来源必须引用已声明的公式参数。")
+                continue
+            }
+            if (!source || typeof source !== "object" || Array.isArray(source)) {
+                add(errors, `${path}.formula.parameterSources.${name}`, "参数来源必须是对象。")
+                continue
+            }
+            if (source.kind !== "corePassiveScaling") {
+                add(errors, `${path}.formula.parameterSources.${name}.kind`, "当前只支持核心被动成长表参数来源。")
+                continue
+            }
+            if (!context.allowCorePassiveScalingSource) {
+                add(errors, `${path}.formula.parameterSources.${name}`, "核心成长参数仅支持角色核心被动或技能来源 Buff。")
+            }
+            if (rule.formula?.modificationValues?.[name] !== undefined) {
+                add(errors, `${path}.formula.parameterSources.${name}`, "同一参数不能同时引用核心成长与音擎改装。")
+            }
+            const field = String(source.field ?? "").trim()
+            const levels = context.agent?.coreSkill?.corePassiveScaling?.levels
+            if (!/^[A-Za-z][A-Za-z0-9]*$/.test(field) || !Array.isArray(levels)
+                || levels.length !== (context.agent?.coreSkill?.levels?.length ?? 0) + 1
+                || levels.some(level => !Number.isFinite(Number(level?.[field])))) {
+                add(errors, `${path}.formula.parameterSources.${name}.field`, "核心被动参数来源必须引用完整的核心成长字段。")
+            } else if (Number(parameters[name]) !== Number(levels[0][field])) {
+                add(errors, `${path}.formula.parameters.${name}`, "兼容参数值必须与核心被动倍率第一档一致。")
+            }
         }
         const modificationValues = rule.formula?.modificationValues
         if (modificationValues !== undefined
@@ -1415,6 +1442,82 @@ function validatePreferredDriveDiscs(errors, preferredDriveDiscs, context = {}) 
             }
         }
     }
+
+    const runtimeDefaults = preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs
+    if (runtimeDefaults === undefined) return
+    if (!runtimeDefaults || typeof runtimeDefaults !== "object" || Array.isArray(runtimeDefaults)) {
+        add(errors, "preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs", "四件套默认触发参数必须是对象。")
+        return
+    }
+    const recommendedSetIds = new Set(Array.isArray(preferredDriveDiscs.defaultSetIds)
+        ? preferredDriveDiscs.defaultSetIds
+        : preferredDriveDiscs.defaultSetId ? [preferredDriveDiscs.defaultSetId] : [])
+    const driveDiscSets = Array.isArray(context.driveDiscSets) ? context.driveDiscSets : []
+    const findRule = (buff, effectId) => rulesOf(buff).find(rule => String(rule?.id ?? rule?.stat ?? "") === effectId)
+    for (const [buffId, runtime] of Object.entries(runtimeDefaults)) {
+        const match = String(buffId).match(/^driveDisc4pc:(.+)\.(self|team)$/)
+        if (!match) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "必须使用 driveDisc4pc:<套装>.self 或 .team 格式。")
+            continue
+        }
+        const [, setId, part] = match
+        if (!recommendedSetIds.has(setId)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "默认触发参数只能配置推荐的 4 件套。")
+            continue
+        }
+        if (!driveDiscSets.length) continue
+        const set = driveDiscSets.find(item => item?.id === setId)
+        const fourPiece = set?.fourPiece
+        const buff = part === "team"
+            ? fourPiece?.teamBuff
+            : fourPiece?.selfBuff ?? (!fourPiece?.selfBuff && rulesOf(fourPiece).length ? fourPiece : null)
+        if (!buff || !rulesOf(buff).length) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "对应套装没有可配置的 4 件套 Buff。")
+            continue
+        }
+        if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}`, "默认触发参数必须是对象。")
+            continue
+        }
+        const effects = runtime.effects
+        if (effects === undefined) continue
+        if (!effects || typeof effects !== "object" || Array.isArray(effects)) {
+            add(errors, `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}.effects`, "效果默认参数必须是对象。")
+            continue
+        }
+        for (const [effectId, effectRuntime] of Object.entries(effects)) {
+            const path = `preferredDriveDiscs.defaultFourPieceBuffRuntimeInputs.${buffId}.effects.${effectId}`
+            const rule = findRule(buff, effectId)
+            if (!rule) {
+                add(errors, path, "效果规则不存在。")
+                continue
+            }
+            if (!effectRuntime || typeof effectRuntime !== "object" || Array.isArray(effectRuntime)) {
+                add(errors, path, "效果默认参数必须是对象。")
+                continue
+            }
+            if (effectRuntime.stacks !== undefined) {
+                const stacks = requireFinite(errors, effectRuntime.stacks, `${path}.stacks`)
+                const maxStacks = Number(rule.maxStacks)
+                if (Number.isFinite(stacks) && (!Number.isInteger(stacks) || stacks < 0 || (Number.isFinite(maxStacks) && stacks > maxStacks))) {
+                    add(errors, `${path}.stacks`, "默认层数必须是范围内的整数。")
+                }
+            }
+            if (effectRuntime.coverage !== undefined) {
+                const coverage = requireFinite(errors, effectRuntime.coverage, `${path}.coverage`)
+                const metadata = rule.coverage ?? buff.coverage
+                if (!metadata) {
+                    add(errors, `${path}.coverage`, "该效果规则未开放覆盖率配置。")
+                    continue
+                }
+                const min = Number(metadata.min ?? 0)
+                const max = Number(metadata.max ?? 1)
+                if (Number.isFinite(coverage) && (coverage < min || coverage > max)) {
+                    add(errors, `${path}.coverage`, "默认覆盖率超出规则范围。")
+                }
+            }
+        }
+    }
 }
 
 function validateImportantSubStats(errors, importantSubStats) {
@@ -1560,7 +1663,7 @@ function validateSkillBuffSourceRef(errors, skillRef, path, context = {}, agentI
         add(errors, path, "必须选择来源技能。")
         return
     }
-    for (const key of ["agentSkillId", "categoryId", "moveId"]) {
+    for (const key of ["agentSkillId", "categoryId"]) {
         if (!String(skillRef[key] ?? "").trim()) {
             add(errors, `${path}.${key}`, "必填。")
         }
@@ -1582,7 +1685,7 @@ function validateSkillBuffSourceRef(errors, skillRef, path, context = {}, agentI
         add(errors, `${path}.categoryId`, "技能大类不存在。")
         return
     }
-    if (!(category.moves ?? []).some(item => item.id === skillRef.moveId)) {
+    if (skillRef.moveId !== undefined && !(category.moves ?? []).some(item => item.id === skillRef.moveId)) {
         add(errors, `${path}.moveId`, "技能招式不存在。")
     }
 }
@@ -1716,6 +1819,9 @@ function validateCalculationEvent(errors, event, path, context = {}, agentId = "
         : (ANOMALY_SETTLEMENT_TYPE_VALUES.has(event.settlementType) ? event.settlementType : "attribute")
     if (event.settlementType !== undefined) {
         requireEnum(errors, event.settlementType, ANOMALY_SETTLEMENT_TYPE_VALUES, `${path}.settlementType`)
+    }
+    if (["attribute", "turbulence", "release"].includes(settlementType) && event.critMode !== undefined) {
+        requireEnum(errors, event.critMode, new Set(["expected", "crit", "nonCrit"]), `${path}.critMode`)
     }
     if (settlementType === "attribute") {
         if (!calculationAnomalyIds(context, "anomaly").has(event.anomalyEffect)) {

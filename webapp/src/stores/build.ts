@@ -87,6 +87,20 @@ function configFingerprint(value: any) {
   return `fnv1a-${(hash >>> 0).toString(16).padStart(8, "0")}`
 }
 
+function teammateDefaultFingerprint(agent: any, state: BuffPickerState | null, buffIds: string[]) {
+  return configFingerprint({
+    agentId: String(agent?.id ?? ''),
+    teammateSlots: state?.teammateSlots ?? [null, null],
+    buffIds: [...new Set(buffIds)].sort(),
+  })
+}
+
+function normalizePersistedBuffPickerState(value: any) {
+  const state = normalizeBuffPickerState(value)
+  if (state && !state.origin) state.origin = 'legacyUser'
+  return state
+}
+
 function wEngineForTeamBuffId(meta: any, id: string) {
   const wEngineId = wEngineIdFromTeamBuffId(id)
   return wEngineId
@@ -293,6 +307,117 @@ function normalizePyroisBuffSelection(agent: any, selectedIds: string[], runtime
   return { selectedIds: normalizedIds, runtimeInputs: normalizedRuntimeInputs, migrated: true }
 }
 
+function normalizePersonalJaneBuffIds(agent: any, config: any, selectedIds: string[], runtimeInputs: Record<string, any>, uncheckedIds: string[]) {
+  if (agent?.id !== "jane_doe") return { selectedIds, runtimeInputs, uncheckedIds }
+  const legacyFrenzyId = "agent:jane_doe.skill.fervor"
+  const frenzyId = "agent:jane_doe.skill.frenzy"
+  const coreId = "agent:jane_doe.corePassive"
+  const additionalId = "agent:jane_doe.additionalAbility"
+  const effectAliases: Record<string, string> = {
+    "gnawed-assault-base-crit-rate": "jane-assault-crit-rate-base",
+    "gnawed-assault-ap-crit-rate": "jane-assault-crit-rate-from-proficiency",
+    "gnawed-assault-crit-dmg": "jane-assault-crit-dmg",
+    "gnawed-flinch-duration": "jane-flinch-duration",
+    "potential-assault-crit-dmg": "jane-potential-assault-crit-dmg",
+    "fervor-ap-to-atk": "jane-frenzy-atk-from-proficiency",
+    "c1-fervor-damage": "jane-c1-damage-from-proficiency",
+    "c2-assault-def-ignore": "jane-c2-assault-def-ignore",
+    "c2-assault-crit-dmg": "jane-c2-assault-crit-dmg",
+    "c4-anomaly-damage": "jane-c4-anomaly-damage",
+    "c6-fervor-direct-crit-rate": "effect_dc6dd7f820",
+    "c6-fervor-direct-crit-dmg": "effect_9799a77543",
+  }
+  const normalized = clone(runtimeInputs ?? {}) as Record<string, any>
+  const savedDamage = config.damage ?? config.damageConfig
+  const legacy = selectedIds.includes(legacyFrenzyId) || uncheckedIds.includes(legacyFrenzyId)
+    || Object.prototype.hasOwnProperty.call(normalized, legacyFrenzyId)
+    || (Number(config.combat?.janeFrenzySplitVersion ?? 0) < 1
+      && (savedDamage?.events ?? []).some((event: any) => event.id === "jane_assault"))
+    || Object.entries(normalized).some(([id, value]) => id.startsWith("agent:jane_doe.")
+      && Object.keys(value?.effects ?? value ?? {}).some(key => effectAliases[key]))
+  if (!legacy) return { selectedIds, runtimeInputs, uncheckedIds }
+  const rename = (record: any) => {
+    if (!record || typeof record !== "object" || Array.isArray(record)) return
+    for (const [oldId, newId] of Object.entries(effectAliases)) {
+      if (!Object.prototype.hasOwnProperty.call(record, oldId)) continue
+      if (!Object.prototype.hasOwnProperty.call(record, newId)) record[newId] = record[oldId]
+      delete record[oldId]
+    }
+  }
+  for (const [id, runtime] of Object.entries(normalized)) {
+    if (!id.startsWith("agent:jane_doe.")) continue
+    rename(runtime)
+    rename(runtime?.effects)
+  }
+  if (Object.prototype.hasOwnProperty.call(normalized, legacyFrenzyId)) {
+    const old = normalized[legacyFrenzyId]
+    const current = normalized[frenzyId] ?? {}
+    normalized[frenzyId] = { ...old, ...current, effects: { ...(old?.effects ?? {}), ...(current.effects ?? {}) } }
+    delete normalized[legacyFrenzyId]
+  }
+  // The personal build already had an independent Frenzy switch. An explicit
+  // empty runtime prevents the older upstream core-to-Frenzy migration relinking it.
+  normalized[frenzyId] ??= {}
+  const potentialId = "jane-potential-assault-crit-dmg"
+  const hadPotentialRuntime = normalized[additionalId]?.effects?.[potentialId] !== undefined
+    || normalized[additionalId]?.[potentialId] !== undefined
+  const core = normalized[coreId]
+  const oldPotential = core?.effects?.[potentialId] ?? core?.[potentialId]
+  if (oldPotential !== undefined) {
+    normalized[additionalId] ??= {}
+    normalized[additionalId].effects ??= {}
+    normalized[additionalId].effects[potentialId] ??= clone(oldPotential)
+    if (core?.effects) delete core.effects[potentialId]
+    if (core) delete core[potentialId]
+  }
+  if (uncheckedIds.includes(coreId) && !selectedIds.includes(coreId) && !hadPotentialRuntime) {
+    normalized[additionalId] ??= {}
+    normalized[additionalId].effects ??= {}
+    normalized[additionalId].effects[potentialId] ??= {}
+    normalized[additionalId].effects[potentialId].enabled = false
+  }
+  const buffId = (id: string) => id === legacyFrenzyId ? frenzyId : id
+  return { selectedIds: [...new Set(selectedIds.map(buffId))], runtimeInputs: normalized,
+    uncheckedIds: [...new Set(uncheckedIds.map(buffId))] }
+}
+
+function normalizeJaneFrenzySplit(agent: any, config: any, selectedIds: string[], runtimeInputs: Record<string, any>, uncheckedIds: string[]) {
+  const version = Number(config.combat?.janeFrenzySplitVersion ?? 0)
+  if (agent?.id !== "jane_doe" || !(agent.combatBuffs?.skillBuffs ?? []).some((buff: any) => buff.id === "frenzy")) {
+    return { runtimeInputs, uncheckedIds, version: 0 }
+  }
+  if (version >= 1) return { runtimeInputs, uncheckedIds, version }
+
+  const coreId = "agent:jane_doe.corePassive"
+  const frenzyId = "agent:jane_doe.skill.frenzy"
+  const effectId = "jane-frenzy-atk-from-proficiency"
+  const normalized = clone(runtimeInputs ?? {})
+  const hasNewRuntime = Object.prototype.hasOwnProperty.call(normalized, frenzyId)
+  const hasNewSelection = selectedIds.includes(frenzyId) || uncheckedIds.includes(frenzyId) || hasNewRuntime
+  const unchecked = [...uncheckedIds]
+  // Old defaults were implicit: selected IDs alone do not describe the state.
+  const coreActive = selectedIds.includes(coreId) || (agent.combatBuffs.corePassive?.scope === "inCombat"
+    && agent.combatBuffs.corePassive.defaultChecked !== false && !uncheckedIds.includes(coreId))
+  if (Object.keys(config).length && !hasNewSelection && !coreActive) unchecked.push(frenzyId)
+
+  const legacy = normalized[coreId]
+  if (legacy && typeof legacy === "object" && !Array.isArray(legacy)) {
+    const oldEffect = legacy.effects?.[effectId] ?? legacy[effectId]
+    if (!hasNewRuntime) {
+      const moved = oldEffect && typeof oldEffect === "object" && !Array.isArray(oldEffect) ? { ...oldEffect } : {}
+      if (moved.coverage === undefined && legacy.coverage !== undefined) moved.coverage = legacy.coverage
+      if (Object.keys(moved).length) normalized[frenzyId] = { effects: { [effectId]: moved } }
+    }
+    if (legacy.effects && typeof legacy.effects === "object" && !Array.isArray(legacy.effects)) {
+      delete legacy.effects[effectId]
+      if (!Object.keys(legacy.effects).length) delete legacy.effects
+    }
+    delete legacy[effectId]
+    if (!Object.keys(legacy).length) delete normalized[coreId]
+  }
+  return { runtimeInputs: normalized, uncheckedIds: unchecked, version: 1 }
+}
+
 function normalizeAgentSkillBuffRuntimeInputs(agent: any, runtimeInputs: Record<string, any>) {
   const normalized = clone(runtimeInputs ?? {}) as Record<string, any>
   const hasTemperingBuff = agent?.id === "sigrid"
@@ -344,6 +469,7 @@ function defaultEvent(kind = "direct", id = `${kind}-1`) {
       kind: "anomaly",
       settlementType: "attribute",
       anomalyEffect: "assault",
+      critMode: "expected",
       procCount: 1,
       count: 1,
       stunned: true,
@@ -755,7 +881,8 @@ function buildPersistSnapshotFor(state: any) {
     addedBuffs: clone(state.addedBuffs),
     runtimeInputs: clone(state.runtimeInputs) as Record<string, any>,
     manuallyUncheckedDefaultBuffIds: clone(state.manuallyUncheckedDefaultBuffIds),
-    buffPickerState: normalizeBuffPickerState(state.buffPickerState),
+    janeFrenzySplitVersion: state.janeFrenzySplitVersion,
+    buffPickerState: normalizePersistedBuffPickerState(state.buffPickerState),
   }
 }
 
@@ -805,6 +932,8 @@ function writeBuildPersistSnapshot(snapshot: any, options: BuildPersistOptions =
       addedBuffs: snapshot.addedBuffs,
       runtimeInputs: snapshot.runtimeInputs,
       manuallyUncheckedDefaultBuffIds: snapshot.manuallyUncheckedDefaultBuffIds,
+      ...(agentId === "jane_doe" && snapshot.janeFrenzySplitVersion >= 1
+        ? { janeFrenzySplitVersion: snapshot.janeFrenzySplitVersion } : {}),
     },
   }
   buildByAgent[agentId] = persistedConfig
@@ -1125,6 +1254,7 @@ export const useBuildStore = defineStore("build", {
     addedBuffs: [] as any[],
     runtimeInputs: {} as Record<string, any>,
     manuallyUncheckedDefaultBuffIds: [] as string[],
+    janeFrenzySplitVersion: 0,
     buffPickerState: null as BuffPickerState | null,
     targetConfig: defaultTargetConfig() as any,
     damageConfig: defaultDamageConfig() as any,
@@ -1177,6 +1307,10 @@ export const useBuildStore = defineStore("build", {
         return (group?.buffs ?? []).filter((buff: any) => !isTeammatePotentialBuff(buff)
           && (teammateCinemaLevel(buff) ?? 0) <= slot.cinemaLevel).map((buff: any) => buff.id)
       })
+      if (defaultTeammateState) {
+        defaultTeammateState.origin = 'adminDefault'
+        defaultTeammateState.defaultFingerprint = teammateDefaultFingerprint(agent, defaultTeammateState, defaultTeammateBuffIds)
+      }
 
       this.agentId = agent.id
       this.agentLevel = numeric(config.agentLevel, 60)
@@ -1208,9 +1342,11 @@ export const useBuildStore = defineStore("build", {
       const legacyBossEncounterId = String(rawTargetConfig?.bossEncounterId ?? "")
       const rawSelectedBuffIds = stringArray(combat.activeBuffIds ?? config.selectedBuffIds ?? defaultTeammateBuffIds)
         .map(id => normalizeTeammateBuffId(normalizeWEngineBuffId(meta, id)))
+      const personalJane = normalizePersonalJaneBuffIds(agent, config, rawSelectedBuffIds,
+        combat.runtimeInputs ?? config.runtimeInputs ?? {}, stringArray(combat.manuallyUncheckedDefaultBuffIds))
       const normalizedTeammateState = normalizeTeammateBuffState(
-        rawSelectedBuffIds,
-        combat.runtimeInputs ?? config.runtimeInputs ?? {},
+        personalJane.selectedIds,
+        personalJane.runtimeInputs,
       )
       const normalizedFieldSelection = normalizeFieldBuffSelection(
         normalizedTeammateState.ids,
@@ -1234,11 +1370,15 @@ export const useBuildStore = defineStore("build", {
       this.selectedBuffIds = normalizedBossSelection.selectedIds
       this.addedBuffs = normalizeAddedBuffs(combat.addedBuffs ?? config.addedBuffs, meta)
       this.runtimeInputs = normalizeAgentSkillBuffRuntimeInputs(agent, normalizedBossSelection.runtimeInputs)
-      const manuallyUncheckedDefaultBuffIds = stringArray(combat.manuallyUncheckedDefaultBuffIds)
+      const manuallyUncheckedDefaultBuffIds = personalJane.uncheckedIds
       this.manuallyUncheckedDefaultBuffIds = normalizedPyroisSelection.migrated
         ? manuallyUncheckedDefaultBuffIds.filter(id => id !== PYROIS_CORE_PASSIVE_BUFF_ID)
         : manuallyUncheckedDefaultBuffIds
-      this.buffPickerState = normalizeBuffPickerState(config.buffPickerState) ?? defaultTeammateState
+      const frenzy = normalizeJaneFrenzySplit(agent, config, this.selectedBuffIds, this.runtimeInputs, this.manuallyUncheckedDefaultBuffIds)
+      this.runtimeInputs = frenzy.runtimeInputs
+      this.manuallyUncheckedDefaultBuffIds = frenzy.uncheckedIds
+      this.janeFrenzySplitVersion = frenzy.version
+      this.buffPickerState = normalizePersistedBuffPickerState(config.buffPickerState) ?? defaultTeammateState
       this.damageConfig = normalizeDamageConfig({
         ...(rawDamageConfig ?? {}),
         target: rawDamageConfig?.target ?? rawTargetConfig,
@@ -1421,7 +1561,7 @@ export const useBuildStore = defineStore("build", {
         addedBuffs: normalizeAddedBuffs(payload.addedBuffs, meta),
         runtimeInputs: normalizeAgentSkillBuffRuntimeInputs(agent, boss.runtimeInputs),
         manuallyUncheckedDefaultBuffIds: defaults.filter(id => !pyrois.selectedIds.includes(id)),
-        buffPickerState: normalizeBuffPickerState(payload.buffPickerState),
+        buffPickerState: normalizePersistedBuffPickerState(payload.buffPickerState),
       }
       const snapshot = { ...buildPersistSnapshotFor(this), ...patch }
       await persistBuildSnapshot(snapshot, { ...options, rollbackOnFailure: true })
