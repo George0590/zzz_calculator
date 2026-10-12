@@ -208,6 +208,12 @@ export const CUSTOM_BUFF_SKILL_STAT_OPTIONS = [
 ]
 
 export const FALLBACK_LABELS = {
+    assaultCritRateBasePct: "强击基础暴击率%",
+    assaultCritRatePerProficiencyPct: "每点精通的强击暴击率%",
+    assaultCritDmgBonusPct: "潜能强击暴伤加成%",
+    selectedSkillCritDmgPct: "指定招式暴伤加成%",
+    stormCritDmgPerStackPct: "风暴潮每层额外暴伤%",
+    stormIceResIgnorePct: "风暴潮满层冰抗无视%",
     hp: "生命值",
     atk: "攻击力",
     def: "防御力",
@@ -1444,8 +1450,9 @@ export function storedEffectRuleText(rule, runtime, effect, meta, displayContext
                     const evaluated = evaluateInCombatFormulaRule(rule, panel)
                     if (evaluated) {
                         const displaySourceValue = Number(Number(evaluated.sourceValue ?? 0).toFixed(3))
-                        const displayValue = Number(evaluated.value ?? 0) * coverage * 100
-                        text += `；当前${sourceLabel}${displaySourceValue}${source.unit === "storedPercent" ? "%" : ""}，通用伤害提升${Number(displayValue.toFixed(3))}%`
+                        const percent = rule.formula?.valueUnit === "storedPercent"
+                        const displayValue = Number(evaluated.value ?? 0) * coverage * (percent ? 100 : 1)
+                        text += `；当前${sourceLabel}${displaySourceValue}${source.unit === "storedPercent" ? "%" : ""}，${storedRuleStatLabel(rule, meta)}增加${Number(displayValue.toFixed(3))}${percent ? "%" : ""}`
                     }
                 } catch {
                     // Keep the authored formula text if a live preview cannot evaluate it.

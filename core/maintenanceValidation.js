@@ -117,6 +117,14 @@ export function repairDynamicValueSourceFallbacks(agent, repairs = []) {
             const field = String(source.field ?? "").trim()
             const firstValue = Number(levels[0]?.[field])
             if (!field || !Number.isFinite(firstValue)) return
+            if (rule.type === "formula" && source.parameter && Object.prototype.hasOwnProperty.call(rule.formula?.parameters ?? {}, source.parameter)) {
+                const parameterValue = rule.formula.parameters[source.parameter]
+                if (Number(parameterValue) !== firstValue) {
+                    repairs.push({ path: `${basePath}.effects[${index}].formula.parameters.${source.parameter}`,
+                        sourceKind: source.kind, field, from: parameterValue, to: firstValue })
+                    rule.formula.parameters[source.parameter] = firstValue
+                }
+            }
             const currentValue = Number(rule.value)
             if (Number.isFinite(currentValue) && Math.abs(currentValue - firstValue) <= 1e-9) return
             const path = `${basePath}.effects[${index}].value`
@@ -615,6 +623,18 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
     if (rule.requirement?.eventStunned !== undefined && typeof rule.requirement.eventStunned !== "boolean") {
         add(errors, `${path}.requirement.eventStunned`, "失衡状态要求必须是布尔值。")
     }
+    for (const key of ["minPotentialLevel", "maxPotentialLevel"]) {
+        if (rule.requirement?.[key] == null) continue
+        const level = Number(rule.requirement[key])
+        if (sourceType !== "self" || !context.agent?.potentialVision) {
+            add(errors, `${path}.requirement.${key}`, "潜能条件只能用于具有潜能影像的角色自身效果。")
+        } else if (!Number.isInteger(level) || level < 0 || level > Number(context.agent.potentialVision.maxLevel)) {
+            add(errors, `${path}.requirement.${key}`, "潜能条件必须位于 P0 到角色最高潜能等级之间。")
+        }
+    }
+    if (Number(rule.requirement?.minPotentialLevel) > Number(rule.requirement?.maxPotentialLevel)) {
+        add(errors, `${path}.requirement`, "最低潜能等级不能高于最高潜能等级。")
+    }
     if (rule.requirement?.agentIds !== undefined) {
         const ids = rule.requirement.agentIds
         if (!Array.isArray(ids)) {
@@ -710,8 +730,16 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
     }
     if (rule.valueSource !== undefined) {
         const source = rule.valueSource ?? {}
-        if (type !== "fixed") {
-            add(errors, `${path}.valueSource`, "动态数值来源只支持固定值规则。")
+        if (!["fixed", "stacked", "formula"].includes(type)) {
+            add(errors, `${path}.valueSource`, "动态数值来源只支持固定值、叠层或公式参数。")
+        }
+        if (type === "formula") {
+            const parameter = String(source.parameter ?? "")
+            if (!parameter || !Object.prototype.hasOwnProperty.call(rule.formula?.parameters ?? {}, parameter)) {
+                add(errors, `${path}.valueSource.parameter`, "动态公式来源必须绑定一个已定义的公式参数。")
+            } else if (Number(rule.formula.parameters[parameter]) !== Number(rule.value)) {
+                add(errors, `${path}.formula.parameters.${parameter}`, "公式参数兼容值必须与动态数值来源的第一档一致。")
+            }
         }
         requireEnum(errors, source.kind, EFFECT_VALUE_SOURCE_KIND_VALUES, `${path}.valueSource.kind`)
         const field = String(source.field ?? "").trim()
@@ -924,11 +952,15 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             }
             requireName(errors, source.label, `${path}.source.label`)
             requireEnum(errors, source.unit, FORMULA_VALUE_UNIT_VALUES, `${path}.source.unit`)
-            if (targetKind !== "default") {
-                add(errors, `${path}.target.kind`, "局内面板公式首版只能作用于常规属性 / 全局效果。")
+            const supportedOutput = (rule.stat === "dmgBonus" && targetKind === "default")
+                || (rule.stat === "atkFlat" && targetKind === "default" && source.stat === "anomalyProficiency")
+                || (rule.stat === "anomalyCritRate" && targetKind === "anomaly" && rule.target?.settlementType === "attribute")
+            if (!supportedOutput) {
+                add(errors, `${path}.stat`, "局内面板公式支持全局伤害加成、精通转固定攻击或指定属性异常暴击率。")
             }
-            if (rule.stat !== "dmgBonus") {
-                add(errors, `${path}.stat`, "局内面板公式首版只能输出通用伤害加成。")
+            const expectedUnit = rule.stat === "atkFlat" ? "storedValue" : "storedPercent"
+            if (rule.stat !== "dmgBonus" && rule.formula?.valueUnit !== expectedUnit) {
+                add(errors, `${path}.formula.valueUnit`, `此局内公式的结果单位必须为 ${expectedUnit}。`)
             }
             if ((rule.mode ?? "flat") !== "flat") {
                 add(errors, `${path}.mode`, "局内面板公式必须使用直接加成方式。")
@@ -1071,7 +1103,7 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             && rule.value !== ""
         const valueKey = hasFixedActivationValue ? "value" : "valuePerStack"
         const value = requireFinite(errors, hasFixedActivationValue ? rule.value : rule.valuePerStack ?? rule.value, `${path}.${valueKey}`)
-        if (Number.isFinite(value) && value === 0) {
+        if (Number.isFinite(value) && value === 0 && !rule.valueSource) {
             add(errors, `${path}.${valueKey}`, hasFixedActivationValue ? "激活数值不能为 0。" : "每层数值不能为 0。")
         }
         const maxStacks = requireFinite(errors, rule.maxStacks, `${path}.maxStacks`)
@@ -2455,6 +2487,27 @@ function validateAgent(item, context) {
         add(errors, "damageElement", "特殊显示属性必须填写真实伤害结算属性。")
     }
     validateOptionalSources(errors, item, item?.images?.portrait ?? item?.images?.icon)
+    if (item?.defaultTeammates !== undefined) {
+        if (!Array.isArray(item.defaultTeammates) || item.defaultTeammates.length > 2) {
+            add(errors, "defaultTeammates", "默认队友必须是最多两项的数组。")
+        } else {
+            const seen = new Set([item.id])
+            const teammates = context.combatBuffs?.teammates ?? context.teammateCombatBuffGroups ?? []
+            item.defaultTeammates.forEach((slot, index) => {
+                const path = `defaultTeammates[${index}]`
+                const id = slot?.teammateId
+                requireId(errors, { id }, `${path}.teammateId`)
+                if (seen.has(id)) add(errors, `${path}.teammateId`, "默认队友不能重复或选择自身。")
+                seen.add(id)
+                if (teammates.length && !teammates.some(teammate => teammate.id === id)) {
+                    add(errors, `${path}.teammateId`, "队友 Buff 目录中不存在此角色。")
+                }
+                if (!isDefaultCalculationCinemaLevel(slot?.cinemaLevel)) {
+                    add(errors, `${path}.cinemaLevel`, "队友影画必须是 0 到 6 的整数。")
+                }
+            })
+        }
+    }
 
     for (const stat of AGENT_LEVEL_STATS) {
         const value = requireFinite(errors, item?.level60?.[stat], `level60.${stat}`)
@@ -2490,7 +2543,7 @@ function validateAgent(item, context) {
 
     validateEffectSet(errors, item?.combatBuffs?.corePassive, "combatBuffs.corePassive", {
         sourceType: "self",
-        context: { ...context, agent: item, allowCorePassiveScalingSource: true },
+        context: { ...context, agent: item, allowCorePassiveScalingSource: true, allowPotentialVisionScalingSource: true },
     })
     validatePotentialVision(errors, item?.potentialVision)
     validateEffectSet(errors, item?.combatBuffs?.additionalAbility, "combatBuffs.additionalAbility", {

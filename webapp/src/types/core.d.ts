@@ -81,7 +81,7 @@ declare module "@core/anomalyRelease.js" {
   export function isReleaseSettlement(event?: any): boolean
   export function anomalyReleaseProfiles(agent?: any): any[]
   export function defaultAnomalyReleaseProfile(agent?: any, damageElement?: string): any
-  export function anomalyReleaseProfile(agent?: any, profileId?: string, damageElement?: string): any
+  export function anomalyReleaseProfile(agent?: any, profileId?: string, damageElement?: string, options?: { cinemaLevel?: number }): any
   export function isAriaReleaseSourceLocked(agent?: any): boolean
   export function isVelinaReleaseAgent(agent?: any): boolean
   export function velinaReleaseSourceId(event?: any): string

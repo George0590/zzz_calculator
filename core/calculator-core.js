@@ -1571,6 +1571,11 @@ function compileDenseCombatEffectEntry({
     if (missingRequiredCombatBasis(normalized.stats, sourceType)) {
         return null
     }
+    // The dense kernel only compiles dynamic damage bonuses. Panel conversions
+    // and scoped crit formulas retain the generic optimizer's full evaluation.
+    if (normalized.dynamicFormulas.some(rule => rule.stat !== "dmgBonus")) {
+        return { unsupported: true }
+    }
     const outOfCombatFormulas = []
     for (const rule of effectRules(effect)) {
         if (!isOutOfCombatFormulaRule(rule)
@@ -2663,11 +2668,15 @@ function calculateCombatPanelFromTotals(agent, outOfCombat, bonusTotals) {
 
 function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
     const rule = entry?.rule
+    const targetKind = rule?.target?.kind ?? "default"
+    const supportedOutput = (rule?.stat === "dmgBonus" && targetKind === "default")
+        || (rule?.stat === "atkFlat" && targetKind === "default" && rule?.source?.stat === "anomalyProficiency")
+        || (rule?.stat === "anomalyCritRate" && targetKind === "anomaly"
+            && rule?.target?.settlementType === "attribute")
     if (!isInCombatFormulaRule(rule)
         || !isAllowedInCombatFormulaSourceType(entry?.sourceType)
         || !isAllowedInCombatFormulaSourceStat(rule?.source?.stat)
-        || rule?.stat !== "dmgBonus"
-        || (rule?.target?.kind ?? "default") !== "default") {
+        || !supportedOutput) {
         return null
     }
     if (!effectRuleRequirementMatches(rule, {
@@ -2691,7 +2700,7 @@ function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
         id: rule.id ?? rule.stat ?? "formula",
         label: rule.label ?? null,
         type: "formula",
-        stat: "dmgBonus",
+        stat: rule.stat,
         mode: "flat",
         basis: null,
         target: normalizedRuleTarget(rule),
@@ -2716,14 +2725,34 @@ function applyDynamicCombatFormulas(agent, outOfCombat, bonusTotals) {
     const entries = Array.isArray(bonusTotals?.dynamicFormulas)
         ? bonusTotals.dynamicFormulas
         : []
-    const resolvedEntries = entries
+    // AP is finalized by the static panel pass. AP -> flat ATK conversions run
+    // first; subsequent damage formulas read the resulting final attack panel.
+    // No formula can output AP, so this ordering cannot introduce a cycle.
+    const attackEntries = entries.filter(entry => entry.rule?.stat === "atkFlat")
         .map(entry => ({ entry, resolved: resolveDynamicCombatFormula(entry, base.panel, outOfCombat.panel) }))
         .filter(item => item.resolved)
+    const dynamicAtkFlat = attackEntries.reduce((sum, item) => sum + Number(item.resolved.value ?? 0), 0)
+    const attackTotals = dynamicAtkFlat === 0 ? bonusTotals : {
+        ...bonusTotals, atkFlat: Number(bonusTotals.atkFlat ?? 0) + dynamicAtkFlat,
+    }
+    const converted = dynamicAtkFlat === 0 ? base : calculateCombatPanelFromTotals(agent, outOfCombat, attackTotals)
+    const resolvedEntries = [...attackEntries, ...entries.filter(entry => entry.rule?.stat !== "atkFlat")
+        .map(entry => ({ entry, resolved: resolveDynamicCombatFormula(entry, converted.panel, outOfCombat.panel) }))
+        .filter(item => item.resolved)]
     const dynamicFormulaResults = resolvedEntries.map(item => item.resolved)
-    const dynamicDmgBonus = dynamicFormulaResults.reduce(
+    const dynamicDmgBonus = dynamicFormulaResults.filter(result => result.stat === "dmgBonus").reduce(
         (total, result) => total + Number(result.value ?? 0),
         0,
     )
+    const dynamicDamageModifiers = dynamicFormulaResults.filter(result => result.stat === "anomalyCritRate")
+        .map(result => ({
+            ...result, type: "eventModifier", kind: result.stat,
+            appliesTo: {
+                damageKinds: ["anomaly"], settlementTypes: ["attribute"],
+                ...(result.target.anomalyEffects.length ? { anomalyEffects: result.target.anomalyEffects } : {}),
+                ...(result.target.anomalyVariants.length ? { anomalyVariants: result.target.anomalyVariants } : {}),
+            },
+        }))
     for (const { entry, resolved: result } of resolvedEntries) {
         const activeEffect = entry?.activeEffect
         if (!activeEffect) continue
@@ -2735,26 +2764,28 @@ function applyDynamicCombatFormulas(agent, outOfCombat, bonusTotals) {
         activeEffect.stats.push({
             ...result,
             value: Number(result.value ?? 0),
-            stat: "dmgBonus",
+            stat: result.stat,
             mode: "flat",
         })
     }
     const panel = dynamicDmgBonus === 0
-        ? base.panel
+        ? converted.panel
         : {
-            ...base.panel,
-            dmgBonus: Number(base.panel.dmgBonus ?? 0) + dynamicDmgBonus,
+            ...converted.panel,
+            dmgBonus: Number(converted.panel.dmgBonus ?? 0) + dynamicDmgBonus,
         }
     const effectiveBonusTotals = entries.length
         ? {
-            ...bonusTotals,
+            ...attackTotals,
             dmgBonus: Number(bonusTotals.dmgBonus ?? 0) + dynamicDmgBonus,
+            damageModifiers: [...(bonusTotals.damageModifiers ?? []), ...dynamicDamageModifiers],
+            dynamicAtkFlat,
             dynamicDmgBonus,
         }
         : bonusTotals
     return {
         panel,
-        selectedDmgBonus: Number(base.selectedDmgBonus ?? 0) + dynamicDmgBonus,
+        selectedDmgBonus: Number(converted.selectedDmgBonus ?? 0) + dynamicDmgBonus,
         dynamicDmgBonus,
         dynamicFormulaResults,
         bonusTotals: effectiveBonusTotals,
@@ -3423,7 +3454,7 @@ function anomalyReleaseEventData(event = {}, agent = {}, damageElement = "physic
     if (velina && !VELINA_RELEASE_SOURCES.some(source => source.value === requestedProfileId)) {
         throw new Error("维琳娜异放来源不存在。")
     }
-    const profile = anomalyReleaseProfile(agent, requestedProfileId, damageElement)
+    const profile = anomalyReleaseProfile(agent, requestedProfileId, damageElement, { cinemaLevel: options.cinemaLevel ?? 0 })
     if (!profile) {
         throw new Error(`角色 ${agent.id ?? "unknown"} 暂不支持 ${damageElement} 属性异放。`)
     }
@@ -8167,6 +8198,7 @@ export function buildMeta(catalog) {
         combatBuffs: agent.combatBuffs ?? {},
         cinemaDescriptions: agent.cinemaDescriptions ?? [],
         preferredDriveDiscs: agent.preferredDriveDiscs ?? null,
+        defaultTeammates: agent.defaultTeammates ?? [],
         importantSubStats: agent.importantSubStats ?? [],
         importantPanelStats: agent.importantPanelStats ?? [],
         skillGroups: agent.skillGroups ?? [],

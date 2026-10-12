@@ -17,6 +17,12 @@ const coreStatOptions = [
 ]
 
 const PARAM_LABELS: Record<string, string> = {
+  assaultCritRateBasePct: "强击基础暴击率%",
+  assaultCritRatePerProficiencyPct: "每点精通的强击暴击率%",
+  assaultCritDmgBonusPct: "潜能强击暴伤加成%",
+  selectedSkillCritDmgPct: "指定招式暴伤加成%",
+  anomalyProficiencyFlat: "核心精通加成", teamDmgBonusPct: "全队伤害加成%",
+  anomalyBuildupEfficiencyPct: "自身异常积蓄效率%", dazeBonusPct: "自身失衡值加成%",
   frostburnBreakAtkMultiplier: "霜灼·破伤害倍率%", teamAnomalyBuildupPct: "全队异常积蓄效率%",
   selectedSkillDmgBonusPct: "指定技能伤害加成%", physicalAnomalyBuildupEfficiencyPct: "物理异常积蓄效率%",
   physicalAnomalyExtraDamageRatioPct: "物理异常额外伤害比例%", disorderMultiplierBonusPerRemainingSecondPct: "每剩余秒紊乱倍率加算%",

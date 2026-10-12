@@ -17,6 +17,18 @@
       "id": "hoshimi_miyabi",
       "name": "星见雅"
     },
+    "1191": {
+      "id": "ellen_joe",
+      "name": "艾莲"
+    },
+    "1261": {
+      "id": "jane_doe",
+      "name": "简"
+    },
+    "1331": {
+      "id": "vivian",
+      "name": "薇薇安·班希"
+    },
     "1371": {
       "id": "yixuan",
       "name": "仪玄"
@@ -33,9 +45,17 @@
       "id": "aria",
       "name": "爱芮"
     },
-    "1331": {
-      "id": "vivian",
-      "name": "薇薇安·班希"
+    "1511": {
+      "id": "nangongyu",
+      "name": "南宫羽"
+    },
+    "1551": {
+      "id": "pyrois",
+      "name": "佩洛伊斯"
+    },
+    "1561": {
+      "id": "velina",
+      "name": "维琳娜·艾嘉德"
     },
     "1581": {
       "id": "remielle_dan",
@@ -48,14 +68,6 @@
     "1611": {
       "id": "claret",
       "name": "克拉蕾·弗林特"
-    },
-    "1551": {
-      "id": "pyrois",
-      "name": "佩洛伊斯"
-    },
-    "1561": {
-      "id": "velina",
-      "name": "维琳娜·艾嘉德"
     }
   },
   "wEngines": {
