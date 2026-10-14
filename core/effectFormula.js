@@ -97,6 +97,11 @@ export function isAllowedInCombatFormulaSourceType(sourceType) {
 export function isAllowedInCombatFormulaOutput(rule = {}, sourceType = "self") {
     if ((rule.mode ?? "flat") !== "flat") return false
     const target = rule.target?.kind ?? "default"
+    if (rule.stat === "skillMultiplierScaleBonus") {
+        return sourceType === "self" && target === "skill"
+            && rule.source?.stat === "critRate" && rule.source?.unit === "storedPercent"
+            && rule.formula?.valueUnit === "storedPercent"
+    }
     if (rule.stat === "dmgBonus") return target === "default"
     if (sourceType !== "self" || rule.source?.stat !== "anomalyProficiency"
         || rule.source?.unit !== "storedValue") return false

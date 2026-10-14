@@ -107,6 +107,12 @@ effect mentioning a move.
 | Duration/cooldown | Descriptive or explicit formula parameters, not automatically derived uptime |
 
 Self effects may specify `requirement.minPotentialLevel` / `maxPotentialLevel`.
+The explicit `followUp` tag identifies formal Follow-Up Attacks; it is not
+inferred from extra damage wording or move names. Shadow Harmony's targeted
+two-piece bonus matches `followUp` or `dashAttack` and adds 15 percentage points
+to the damage-bonus zone. Nekomata's Claw Mark classification is still unconfirmed;
+see the [character model](nekomata-modeling.md).
+
 Potential materialization filters inactive rules before panel/event compilation;
 it does not prevent selecting authored moves at P0. Dynamic `valueSource` supports
 fixed and stacked rules. For ordinary stacks the resolved value is the per-stack
@@ -115,6 +121,12 @@ value of zero is valid when its structured scaling source is present.
 
 `dmgBonus` enters the damage-bonus zone; `skillMultiplierBonus` adds to the selected
 skill multiplier. PEN Ratio, DEF Ignore and DEF reduction remain separate.
+`skillMultiplierScaleBonus` is a skill-targeted direct-damage percentage bonus:
+the effective multiplier is `M * (1 + s) + b`, where `b` is the existing flat
+skill-multiplier addition. It does not enter the ordinary damage-bonus zone.
+A self formula may read finalized in-combat CRIT Rate and output this modifier;
+it stays in event modifiers and must be reevaluated for each candidate. See the
+[Evelyn threshold model](evelyn-modeling.md) for the 80% example.
 Evaluate per-hit modifiers before aggregating nonlinear target factors. Descriptions
 preserve triggers, scope and level values; calculation reads structured data.
 
