@@ -8527,6 +8527,288 @@
         }
       ],
       "buffModifiers": []
+    },
+    {
+      "id": "field.defense_v5.v3_2.p3.mingfeng_cidian",
+      "sourceType": "field",
+      "scope": "inCombat",
+      "period": {
+        "modeId": "defense_v5",
+        "gameVersion": "3.2",
+        "phaseNo": 3,
+        "phaseName": {
+          "zhCN": "第三期"
+        }
+      },
+      "name": {
+        "zhCN": "鸣风刺电"
+      },
+      "source": {
+        "zhCN": "防卫战 v5"
+      },
+      "sourcePeriod": {
+        "zhCN": "3.2版本第三期"
+      },
+      "description": {
+        "zhCN": "代理人的锐化伤害提升20%，击杀普通敌人后，[击破]特性的代理人恢复15点能量。\n代理人的[普通攻击]、[特殊技]和[终结技]命中敌人时，穿透率提升10%，若敌人处于失衡状态，无视其15%的电属性伤害抗性。"
+      },
+      "effects": [
+        {
+          "id": "field_defense_v5_v3_2_p3_mingfeng_sharp_dmg",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "sharpDmgBonus",
+          "mode": "flat",
+          "value": 20,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_defense_v5_v3_2_p3_mingfeng_skill_pen_ratio",
+          "type": "fixed",
+          "target": {
+            "kind": "skill",
+            "skillTargets": [
+              {
+                "kind": "skillType",
+                "skillType": "basic"
+              },
+              {
+                "kind": "skillType",
+                "skillType": "special"
+              },
+              {
+                "kind": "skillType",
+                "skillType": "ultimate"
+              }
+            ]
+          },
+          "stat": "penRatio",
+          "mode": "flat",
+          "value": 10,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_defense_v5_v3_2_p3_mingfeng_skill_electric_res_ignore",
+          "type": "fixed",
+          "target": {
+            "kind": "skill",
+            "skillTargets": [
+              {
+                "kind": "skillType",
+                "skillType": "basic"
+              },
+              {
+                "kind": "skillType",
+                "skillType": "special"
+              },
+              {
+                "kind": "skillType",
+                "skillType": "ultimate"
+              }
+            ]
+          },
+          "stat": "electricResIgnore",
+          "mode": "flat",
+          "value": 15,
+          "condition": "敌人处于失衡状态",
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        }
+      ],
+      "buffModifiers": []
+    },
+    {
+      "id": "field.defense_v5.v3_2.p3.qinyin_gongzhen",
+      "sourceType": "field",
+      "scope": "inCombat",
+      "period": {
+        "modeId": "defense_v5",
+        "gameVersion": "3.2",
+        "phaseNo": 3,
+        "phaseName": {
+          "zhCN": "第三期"
+        }
+      },
+      "name": {
+        "zhCN": "秦音共振"
+      },
+      "source": {
+        "zhCN": "防卫战 v5"
+      },
+      "sourcePeriod": {
+        "zhCN": "3.2版本第三期"
+      },
+      "description": {
+        "zhCN": "若队伍内有2名/3名[异常]特性的代理人，代理人造成的属性异常伤害提升10%/60%，全队入场时初始获得500/1500点喧响值。"
+      },
+      "effects": [
+        {
+          "id": "field_defense_v5_v3_2_p3_qinyin_attribute_anomaly_damage",
+          "type": "formula",
+          "target": {
+            "kind": "anomaly",
+            "settlementType": "attribute"
+          },
+          "stat": "anomalyDamageBonus",
+          "mode": "flat",
+          "source": {
+            "variable": "x",
+            "label": {
+              "zhCN": "队伍内异常特性代理人数量"
+            },
+            "defaultValue": 3,
+            "min": 0,
+            "max": 3
+          },
+          "formula": {
+            "expression": "10 * max(x - 1, 0) + 40 * max(x - 2, 0)",
+            "valueUnit": "storedPercent"
+          },
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        }
+      ],
+      "buffModifiers": []
+    },
+    {
+      "id": "field.defense_v5.v3_2.p3.shana_rongguang",
+      "sourceType": "field",
+      "scope": "inCombat",
+      "period": {
+        "modeId": "defense_v5",
+        "gameVersion": "3.2",
+        "phaseNo": 3,
+        "phaseName": {
+          "zhCN": "第三期"
+        }
+      },
+      "name": {
+        "zhCN": "刹那熔光"
+      },
+      "source": {
+        "zhCN": "防卫战 v5"
+      },
+      "sourcePeriod": {
+        "zhCN": "3.2版本第三期"
+      },
+      "description": {
+        "zhCN": "代理人的火属性伤害与以太伤害提升15%，锐化伤害提升15%。\n代理人的[终结技]造成的伤害提升30%，[终结技]攻击命中敌人时无视其10%的全属性伤害抗性。"
+      },
+      "effects": [
+        {
+          "id": "field_defense_v5_v3_2_p3_shana_fire_dmg",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "fireDmg",
+          "mode": "flat",
+          "value": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_defense_v5_v3_2_p3_shana_ether_dmg",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "etherDmg",
+          "mode": "flat",
+          "value": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_defense_v5_v3_2_p3_shana_sharp_dmg",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "sheerDmgBonus",
+          "mode": "flat",
+          "value": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_defense_v5_v3_2_p3_shana_ultimate_dmg",
+          "type": "fixed",
+          "target": {
+            "kind": "skill",
+            "skillTargets": [
+              {
+                "kind": "skillType",
+                "skillType": "ultimate"
+              }
+            ]
+          },
+          "stat": "dmgBonus",
+          "mode": "flat",
+          "value": 30,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_defense_v5_v3_2_p3_shana_ultimate_all_res_ignore",
+          "type": "fixed",
+          "target": {
+            "kind": "skill",
+            "skillTargets": [
+              {
+                "kind": "skillType",
+                "skillType": "ultimate"
+              }
+            ]
+          },
+          "stat": "allResIgnore",
+          "mode": "flat",
+          "value": 10,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        }
+      ],
+      "buffModifiers": []
     }
   ],
   "bossBuffs": [],
