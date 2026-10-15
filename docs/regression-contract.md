@@ -16,6 +16,9 @@
 
 ## 架构边界
 
+本地扩展（2026-10-13）：南宫羽异放条目的`minCinemaLevel`与常数节点的七档`cinemaValues`
+必须按当前影画解析；低于门槛的条目不可选择。
+
 验证入口：[浏览器本地计算](../tests/browser-local-compute.test.js)、[生产服务](../tests/server-production.test.js)。
 
 - `core/` 只承载可跨平台复用的计算、规范化、校验和优化搜索逻辑，不直接依赖 DOM、浏览器存储或 Node 文件系统。
