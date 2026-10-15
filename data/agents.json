@@ -9934,6 +9934,1230 @@
         "unsupported": "Resource/Decibel regeneration, animation timing, duration feasibility and automatic buff application are not simulated. Two Ultimates are explicit user events; no automatic second Ultimate is granted. P0 reference omits enhanced waves/Frost Edge and requires manual Additional Ability disable in this all-physical teammate team.",
         "cinemaBoundary": "C2 EX Crit DMG assumes >=3 Flash Freeze charges at cast; edit its coverage otherwise. No alternate C1-C6 rotations authored."
       }
+    },
+    {
+      "id": "nangongyu",
+      "name": {
+        "zhCN": "南宫羽"
+      },
+      "rarity": "S",
+      "attribute": "ether",
+      "damageElement": "ether",
+      "specialty": "stun",
+      "attackTypes": [
+        "strike"
+      ],
+      "faction": "妄想天使",
+      "images": {
+        "portrait": "/assets/agents/nangongyu.png",
+        "source": "https://zzz.nanoka.cc/character/1511"
+      },
+      "level60": {
+        "hpBase": 8373,
+        "atkBase": 671,
+        "defBase": 622,
+        "critRate": 5,
+        "critDmg": 50,
+        "impact": 120,
+        "anomalyProficiency": 93,
+        "anomalyMastery": 90,
+        "energyRegen": 120,
+        "penRatio": 0
+      },
+      "coreSkill": {
+        "name": {
+          "zhCN": "天才偶像"
+        },
+        "defaultLevel": "F",
+        "maxLevel": "F",
+        "levels": [
+          {
+            "level": "A",
+            "label": "强化A",
+            "stats": [
+              {
+                "stat": "anomalyMasteryFlat",
+                "value": 12,
+                "mode": "flat",
+                "target": "panel"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "B",
+            "label": "强化B",
+            "stats": [
+              {
+                "stat": "atkBase",
+                "value": 25,
+                "mode": "flat",
+                "target": "base"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "C",
+            "label": "强化C",
+            "stats": [
+              {
+                "stat": "anomalyMasteryFlat",
+                "value": 12,
+                "mode": "flat",
+                "target": "panel"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "D",
+            "label": "强化D",
+            "stats": [
+              {
+                "stat": "atkBase",
+                "value": 25,
+                "mode": "flat",
+                "target": "base"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "E",
+            "label": "强化E",
+            "stats": [
+              {
+                "stat": "anomalyMasteryFlat",
+                "value": 12,
+                "mode": "flat",
+                "target": "panel"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "F",
+            "label": "强化F",
+            "stats": [
+              {
+                "stat": "atkBase",
+                "value": 25,
+                "mode": "flat",
+                "target": "base"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "corePassiveScaling": {
+          "name": {
+            "zhCN": "天才偶像"
+          },
+          "defaultLevelAtCoreSkill": "F",
+          "levels": [
+            {
+              "level": 1,
+              "anomalyProficiencyFlat": 60,
+              "teamDmgBonusPct": 13,
+              "anomalyBuildupEfficiencyPct": 17,
+              "dazeBonusPct": 11,
+              "releaseCoefficientPctByElement": {
+                "ether": 720,
+                "electric": 360,
+                "fire": 900,
+                "physical": 63,
+                "ice": 90,
+                "wind": 36
+              },
+              "cinema6ReleaseCoefficientPctByElement": {
+                "ether": 800,
+                "electric": 400,
+                "fire": 1000,
+                "physical": 70,
+                "ice": 100,
+                "wind": 40
+              }
+            },
+            {
+              "level": 2,
+              "anomalyProficiencyFlat": 70,
+              "teamDmgBonusPct": 15,
+              "anomalyBuildupEfficiencyPct": 20,
+              "dazeBonusPct": 12.5,
+              "releaseCoefficientPctByElement": {
+                "ether": 720,
+                "electric": 360,
+                "fire": 900,
+                "physical": 63,
+                "ice": 90,
+                "wind": 36
+              },
+              "cinema6ReleaseCoefficientPctByElement": {
+                "ether": 800,
+                "electric": 400,
+                "fire": 1000,
+                "physical": 70,
+                "ice": 100,
+                "wind": 40
+              }
+            },
+            {
+              "level": 3,
+              "anomalyProficiencyFlat": 80,
+              "teamDmgBonusPct": 17,
+              "anomalyBuildupEfficiencyPct": 23,
+              "dazeBonusPct": 14,
+              "releaseCoefficientPctByElement": {
+                "ether": 720,
+                "electric": 360,
+                "fire": 900,
+                "physical": 63,
+                "ice": 90,
+                "wind": 36
+              },
+              "cinema6ReleaseCoefficientPctByElement": {
+                "ether": 800,
+                "electric": 400,
+                "fire": 1000,
+                "physical": 70,
+                "ice": 100,
+                "wind": 40
+              }
+            },
+            {
+              "level": 4,
+              "anomalyProficiencyFlat": 90,
+              "teamDmgBonusPct": 19,
+              "anomalyBuildupEfficiencyPct": 26,
+              "dazeBonusPct": 15.5,
+              "releaseCoefficientPctByElement": {
+                "ether": 720,
+                "electric": 360,
+                "fire": 900,
+                "physical": 63,
+                "ice": 90,
+                "wind": 36
+              },
+              "cinema6ReleaseCoefficientPctByElement": {
+                "ether": 800,
+                "electric": 400,
+                "fire": 1000,
+                "physical": 70,
+                "ice": 100,
+                "wind": 40
+              }
+            },
+            {
+              "level": 5,
+              "anomalyProficiencyFlat": 100,
+              "teamDmgBonusPct": 21,
+              "anomalyBuildupEfficiencyPct": 29,
+              "dazeBonusPct": 17,
+              "releaseCoefficientPctByElement": {
+                "ether": 720,
+                "electric": 360,
+                "fire": 900,
+                "physical": 63,
+                "ice": 90,
+                "wind": 36
+              },
+              "cinema6ReleaseCoefficientPctByElement": {
+                "ether": 800,
+                "electric": 400,
+                "fire": 1000,
+                "physical": 70,
+                "ice": 100,
+                "wind": 40
+              }
+            },
+            {
+              "level": 6,
+              "anomalyProficiencyFlat": 110,
+              "teamDmgBonusPct": 23,
+              "anomalyBuildupEfficiencyPct": 32,
+              "dazeBonusPct": 18.5,
+              "releaseCoefficientPctByElement": {
+                "ether": 720,
+                "electric": 360,
+                "fire": 900,
+                "physical": 63,
+                "ice": 90,
+                "wind": 36
+              },
+              "cinema6ReleaseCoefficientPctByElement": {
+                "ether": 800,
+                "electric": 400,
+                "fire": 1000,
+                "physical": 70,
+                "ice": 100,
+                "wind": 40
+              }
+            },
+            {
+              "level": 7,
+              "anomalyProficiencyFlat": 120,
+              "teamDmgBonusPct": 25,
+              "anomalyBuildupEfficiencyPct": 35,
+              "dazeBonusPct": 20,
+              "releaseCoefficientPctByElement": {
+                "ether": 720,
+                "electric": 360,
+                "fire": 900,
+                "physical": 63,
+                "ice": 90,
+                "wind": 36
+              },
+              "cinema6ReleaseCoefficientPctByElement": {
+                "ether": 800,
+                "electric": 400,
+                "fire": 1000,
+                "physical": 70,
+                "ice": 100,
+                "wind": 40
+              }
+            }
+          ]
+        },
+        "sources": [
+          "https://zzz.nanoka.cc/character/1511",
+          "https://static.nanoka.cc/zzz/3.3.4+19304006/zh/character/1511.json"
+        ]
+      },
+      "combatBuffs": {
+        "corePassive": {
+          "scope": "inCombat",
+          "name": {
+            "zhCN": "核心被动：天才偶像"
+          },
+          "description": {
+            "zhCN": "南宫羽的异常精通提升120点；\n南宫羽的初始异常掌控大于110点时，每超过1点初始异常掌控会使自身的冲击力提升1点；\n敌人处于失衡状态时，任意角色对其造成一次[异放]伤害、[紊乱]伤害、使其进入一次属性异常状态时会为其累计1层[颤音]。\n[颤音]被清除时，若敌人处于属性异常状态下，南宫羽会对目标造成一次[异放]伤害：额外结算一次属性异常伤害，相对于原属性异常伤害的比例为720%/360%/900%/63%/90%/36%，敌人身上每有1层[颤音]，该次[异放]的伤害比例额外提升25%；\n南宫羽的[普通攻击：可爱地雷飞天撞]或[强化特殊技：相当沉重的爱意]命中敌人时，会使自身的属性异常积蓄效率提升35%，造成的失衡值提升20%，使全队造成的伤害提升25%，持续30秒，重复触发时刷新持续时间；"
+          },
+          "defaultChecked": true,
+          "effects": [
+            {
+              "id": "core-anomaly-proficiency",
+              "type": "fixed",
+              "stat": "anomalyProficiency",
+              "value": 60,
+              "mode": "flat",
+              "target": {
+                "kind": "default"
+              },
+              "valueSource": {
+                "kind": "corePassiveScaling",
+                "field": "anomalyProficiencyFlat"
+              }
+            },
+            {
+              "id": "initial-mastery-to-impact",
+              "type": "formula",
+              "stat": "impactFlat",
+              "mode": "flat",
+              "target": {
+                "kind": "default"
+              },
+              "source": {
+                "kind": "outOfCombatStat",
+                "stat": "anomalyMastery",
+                "unit": "storedValue",
+                "label": {
+                  "zhCN": "南宫羽初始异常掌控"
+                },
+                "variable": "x"
+              },
+              "formula": {
+                "expression": "max(x - 110, 0)",
+                "valueUnit": "storedValue"
+              },
+              "scope": "inCombat"
+            },
+            {
+              "id": "core-team-damage",
+              "type": "fixed",
+              "stat": "dmgBonus",
+              "value": 13,
+              "mode": "flat",
+              "target": {
+                "kind": "default"
+              },
+              "valueSource": {
+                "kind": "corePassiveScaling",
+                "field": "teamDmgBonusPct"
+              },
+              "condition": "蓄力普通攻击或强化特殊技命中后30秒",
+              "coverage": {
+                "default": 1,
+                "min": 0,
+                "max": 1,
+                "step": 0.1
+              }
+            }
+          ],
+          "buffModifiers": []
+        },
+        "additionalAbility": {
+          "scope": "inCombat",
+          "name": {
+            "zhCN": "额外能力：天使队长"
+          },
+          "description": {
+            "zhCN": "队伍中存在[异常]角色或与自身阵营相同的角色时触发：\n队伍中任意角色攻击命中处于失衡状态的敌人造成的属性异常积蓄值提升30%，[连携技]攻击命中处于失衡状态的敌人造成的属性异常积蓄值额外提升30%；\n队伍中任意角色使敌人进入失衡状态时，南宫羽获得2层[舞力全开]效果，最多拥有2层，持续15秒，重复触发时刷新持续时间，拥有[舞力全开]时，南宫羽发动[强化特殊技]、[普通攻击：可爱地雷飞天撞]或[快速支援]且重击命中同时处于属性异常和失衡状态下的敌人时，会消耗1层[舞力全开]对满足条件的所有敌人触发特殊的[紊乱]效果[极性紊乱]，对目标造成原本[紊乱]效果25%的伤害，并触发队伍中上一位角色的[快速支援]；\n当南宫羽与爱芮共同处于队伍中时，爱芮的[普通攻击：绝对音准]重击命中处于属性异常和失衡状态下的敌人时，若南宫羽完整参与此次攻击，也会消耗1层[舞力全开]对满足条件的所有敌人触发[极性紊乱]；\n南宫羽的[普通攻击：可爱地雷飞天撞]第三段攻击或[终结技]命中敌人时，敌人获得[踉跄]效果，失衡易伤倍率提升30%，该效果下的敌人进入失衡状态后的失衡持续时间提升3秒。"
+          },
+          "defaultChecked": true,
+          "effects": [
+            {
+              "id": "stagger-stun-multiplier",
+              "type": "fixed",
+              "stat": "stunDmgMultiplierBonus",
+              "value": 30,
+              "mode": "flat",
+              "target": {
+                "kind": "default"
+              },
+              "condition": "踉跄生效时",
+              "coverage": {
+                "default": 1,
+                "min": 0,
+                "max": 1,
+                "step": 0.1
+              }
+            }
+          ],
+          "buffModifiers": []
+        },
+        "cinemaBuffs": [
+          {
+            "cinemaLevel": 1,
+            "cinemaName": {
+              "zhCN": "慵懒的聚光灯"
+            },
+            "scope": "inCombat",
+            "description": {
+              "zhCN": "[强化特殊技：相当沉重的爱意]或[普通攻击：可爱地雷飞天撞]命中敌人时，使敌人的全属性伤害抗性降低18%，持续40秒。"
+            },
+            "defaultChecked": true,
+            "effects": [
+              {
+                "id": "cinema1-all-res-reduction",
+                "type": "fixed",
+                "stat": "enemyResReduction",
+                "value": 18,
+                "mode": "flat",
+                "target": {
+                  "kind": "default"
+                },
+                "coverage": {
+                  "default": 1,
+                  "min": 0,
+                  "max": 1,
+                  "step": 0.1
+                },
+                "condition": "蓄力普通攻击或强化特殊技命中后40秒"
+              }
+            ],
+            "buffModifiers": []
+          },
+          {
+            "cinemaLevel": 2,
+            "cinemaName": {
+              "zhCN": "无痛的泪水"
+            },
+            "scope": "inCombat",
+            "description": {
+              "zhCN": "每层[颤音]使[核心被动：天才偶像]中[异放]的伤害比例额外提升10%；[额外能力：天使队长]提供的失衡易伤倍率额外提升30%；操作中的角色[连携技]重击命中同时处于属性异常和失衡状态下的敌人时，会对敌人触发[极性紊乱]，对目标造成原本[紊乱]效果25%的伤害，敌人在同一失衡期间仅能触发一次该效果。"
+            },
+            "defaultChecked": true,
+            "effects": [
+              {
+                "id": "cinema2-stagger-stun-multiplier",
+                "type": "fixed",
+                "stat": "stunDmgMultiplierBonus",
+                "value": 30,
+                "mode": "flat",
+                "target": {
+                  "kind": "default"
+                },
+                "coverage": {
+                  "default": 1,
+                  "min": 0,
+                  "max": 1,
+                  "step": 0.1
+                },
+                "condition": "踉跄生效时"
+              }
+            ],
+            "buffModifiers": []
+          },
+          {
+            "cinemaLevel": 4,
+            "cinemaName": {
+              "zhCN": "共犯的舞步"
+            },
+            "scope": "inCombat",
+            "description": {
+              "zhCN": "异常精通提升40点；[普通攻击：可爱地雷飞天撞]命中敌人造成的属性异常积蓄值提升35%。"
+            },
+            "defaultChecked": true,
+            "effects": [
+              {
+                "id": "cinema4-anomaly-proficiency",
+                "type": "fixed",
+                "stat": "anomalyProficiency",
+                "value": 40,
+                "mode": "flat",
+                "target": {
+                  "kind": "default"
+                }
+              }
+            ],
+            "buffModifiers": []
+          },
+          {
+            "cinemaLevel": 6,
+            "cinemaName": {
+              "zhCN": "天使的妄想"
+            },
+            "scope": "inCombat",
+            "description": {
+              "zhCN": "南宫羽攻击造成的失衡值提升50%；敌人不处于失衡状态时，任意角色对其造成一次[异放]伤害或[紊乱]伤害、使其进入一次属性异常状态时会为其累计1层[颤音：改]，被[强化特殊技]或[普通攻击：可爱地雷飞天撞]重击命中时会累计1层[颤音：改]，被[终结技]重击命中时会累计2层[颤音：改]；[颤音：改]最多累计4层，当敌人进入失衡状态时，[颤音：改]会被全部清除，[颤音：改]被清除时，若敌人处于以太异常状态、电属性异常状态、火属性异常状态、物理属性异常状态、冰属性异常状态、风属性异常状态下，南宫羽会对目标造成一次[异放]伤害：额外结算一次属性异常伤害，相对于原属性异常伤害的比例为800%/400%/1000%/70%/100%/40%，敌人身上每有1层[颤音：改]，该次[异放]的伤害比例额外提升25%；[颤音：改]与[颤音]无法相互叠加。"
+            },
+            "defaultChecked": true,
+            "effects": [],
+            "buffModifiers": []
+          }
+        ],
+        "skillBuffs": [
+          {
+            "id": "ether-veil",
+            "scope": "inCombat",
+            "name": {
+              "zhCN": "以太帷幕·妄想重奏"
+            },
+            "description": {
+              "zhCN": "终结技开启以太帷幕后，全队攻击力增加50点，持续30秒。"
+            },
+            "defaultChecked": false,
+            "sourceSkillRef": {
+              "agentSkillId": "nangongyu",
+              "categoryId": "chain",
+              "moveId": "ultimate_falling_stars"
+            },
+            "effects": [
+              {
+                "id": "ether-veil-atk",
+                "type": "fixed",
+                "stat": "atkFlat",
+                "value": 50,
+                "mode": "flat",
+                "target": {
+                  "kind": "default"
+                },
+                "coverage": {
+                  "default": 1,
+                  "min": 0,
+                  "max": 1,
+                  "step": 0.1
+                }
+              }
+            ],
+            "buffModifiers": []
+          }
+        ]
+      },
+      "anomalyReleaseProfiles": [
+        {
+          "id": "core_tremolo_1",
+          "name": {
+            "zhCN": "颤音：1层"
+          },
+          "default": false,
+          "minCinemaLevel": 0,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "originalAnomalyRatio",
+          "expression": {
+            "op": "multiply",
+            "label": {
+              "zhCN": "颤音异放比例"
+            },
+            "args": [
+              {
+                "kind": "coreSkillScaling",
+                "field": "releaseCoefficientPctByElement",
+                "key": "eventElement",
+                "unit": "percent",
+                "label": {
+                  "zhCN": "原异常属性系数"
+                }
+              },
+              {
+                "op": "add",
+                "label": {
+                  "zhCN": "颤音层数修正"
+                },
+                "args": [
+                  {
+                    "kind": "constant",
+                    "value": 1,
+                    "unit": "decimal"
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      {
+                        "kind": "constant",
+                        "value": 1,
+                        "unit": "raw",
+                        "whiteBoxRole": "conversionSource",
+                        "label": {
+                          "zhCN": "颤音层数"
+                        }
+                      },
+                      {
+                        "kind": "constant",
+                        "value": 25,
+                        "unit": "percent",
+                        "label": {
+                          "zhCN": "每层比例提升"
+                        },
+                        "cinemaValues": [
+                          25,
+                          25,
+                          35,
+                          35,
+                          35,
+                          35,
+                          35
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "core_tremolo_2",
+          "name": {
+            "zhCN": "颤音：2层"
+          },
+          "default": false,
+          "minCinemaLevel": 0,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "originalAnomalyRatio",
+          "expression": {
+            "op": "multiply",
+            "label": {
+              "zhCN": "颤音异放比例"
+            },
+            "args": [
+              {
+                "kind": "coreSkillScaling",
+                "field": "releaseCoefficientPctByElement",
+                "key": "eventElement",
+                "unit": "percent",
+                "label": {
+                  "zhCN": "原异常属性系数"
+                }
+              },
+              {
+                "op": "add",
+                "label": {
+                  "zhCN": "颤音层数修正"
+                },
+                "args": [
+                  {
+                    "kind": "constant",
+                    "value": 1,
+                    "unit": "decimal"
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      {
+                        "kind": "constant",
+                        "value": 2,
+                        "unit": "raw",
+                        "whiteBoxRole": "conversionSource",
+                        "label": {
+                          "zhCN": "颤音层数"
+                        }
+                      },
+                      {
+                        "kind": "constant",
+                        "value": 25,
+                        "unit": "percent",
+                        "label": {
+                          "zhCN": "每层比例提升"
+                        },
+                        "cinemaValues": [
+                          25,
+                          25,
+                          35,
+                          35,
+                          35,
+                          35,
+                          35
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "core_tremolo_3",
+          "name": {
+            "zhCN": "颤音：3层"
+          },
+          "default": false,
+          "minCinemaLevel": 0,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "originalAnomalyRatio",
+          "expression": {
+            "op": "multiply",
+            "label": {
+              "zhCN": "颤音异放比例"
+            },
+            "args": [
+              {
+                "kind": "coreSkillScaling",
+                "field": "releaseCoefficientPctByElement",
+                "key": "eventElement",
+                "unit": "percent",
+                "label": {
+                  "zhCN": "原异常属性系数"
+                }
+              },
+              {
+                "op": "add",
+                "label": {
+                  "zhCN": "颤音层数修正"
+                },
+                "args": [
+                  {
+                    "kind": "constant",
+                    "value": 1,
+                    "unit": "decimal"
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      {
+                        "kind": "constant",
+                        "value": 3,
+                        "unit": "raw",
+                        "whiteBoxRole": "conversionSource",
+                        "label": {
+                          "zhCN": "颤音层数"
+                        }
+                      },
+                      {
+                        "kind": "constant",
+                        "value": 25,
+                        "unit": "percent",
+                        "label": {
+                          "zhCN": "每层比例提升"
+                        },
+                        "cinemaValues": [
+                          25,
+                          25,
+                          35,
+                          35,
+                          35,
+                          35,
+                          35
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "core_tremolo_4",
+          "name": {
+            "zhCN": "颤音：4层"
+          },
+          "default": true,
+          "minCinemaLevel": 0,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "originalAnomalyRatio",
+          "expression": {
+            "op": "multiply",
+            "label": {
+              "zhCN": "颤音异放比例"
+            },
+            "args": [
+              {
+                "kind": "coreSkillScaling",
+                "field": "releaseCoefficientPctByElement",
+                "key": "eventElement",
+                "unit": "percent",
+                "label": {
+                  "zhCN": "原异常属性系数"
+                }
+              },
+              {
+                "op": "add",
+                "label": {
+                  "zhCN": "颤音层数修正"
+                },
+                "args": [
+                  {
+                    "kind": "constant",
+                    "value": 1,
+                    "unit": "decimal"
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      {
+                        "kind": "constant",
+                        "value": 4,
+                        "unit": "raw",
+                        "whiteBoxRole": "conversionSource",
+                        "label": {
+                          "zhCN": "颤音层数"
+                        }
+                      },
+                      {
+                        "kind": "constant",
+                        "value": 25,
+                        "unit": "percent",
+                        "label": {
+                          "zhCN": "每层比例提升"
+                        },
+                        "cinemaValues": [
+                          25,
+                          25,
+                          35,
+                          35,
+                          35,
+                          35,
+                          35
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cinema6_tremolo_1",
+          "name": {
+            "zhCN": "颤音改（六影）：1层"
+          },
+          "default": false,
+          "minCinemaLevel": 6,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "originalAnomalyRatio",
+          "expression": {
+            "op": "multiply",
+            "label": {
+              "zhCN": "颤音异放比例"
+            },
+            "args": [
+              {
+                "kind": "coreSkillScaling",
+                "field": "cinema6ReleaseCoefficientPctByElement",
+                "key": "eventElement",
+                "unit": "percent",
+                "label": {
+                  "zhCN": "原异常属性系数"
+                }
+              },
+              {
+                "op": "add",
+                "label": {
+                  "zhCN": "颤音层数修正"
+                },
+                "args": [
+                  {
+                    "kind": "constant",
+                    "value": 1,
+                    "unit": "decimal"
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      {
+                        "kind": "constant",
+                        "value": 1,
+                        "unit": "raw",
+                        "whiteBoxRole": "conversionSource",
+                        "label": {
+                          "zhCN": "颤音改层数"
+                        }
+                      },
+                      {
+                        "kind": "constant",
+                        "value": 25,
+                        "unit": "percent",
+                        "label": {
+                          "zhCN": "每层比例提升"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cinema6_tremolo_2",
+          "name": {
+            "zhCN": "颤音改（六影）：2层"
+          },
+          "default": false,
+          "minCinemaLevel": 6,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "originalAnomalyRatio",
+          "expression": {
+            "op": "multiply",
+            "label": {
+              "zhCN": "颤音异放比例"
+            },
+            "args": [
+              {
+                "kind": "coreSkillScaling",
+                "field": "cinema6ReleaseCoefficientPctByElement",
+                "key": "eventElement",
+                "unit": "percent",
+                "label": {
+                  "zhCN": "原异常属性系数"
+                }
+              },
+              {
+                "op": "add",
+                "label": {
+                  "zhCN": "颤音层数修正"
+                },
+                "args": [
+                  {
+                    "kind": "constant",
+                    "value": 1,
+                    "unit": "decimal"
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      {
+                        "kind": "constant",
+                        "value": 2,
+                        "unit": "raw",
+                        "whiteBoxRole": "conversionSource",
+                        "label": {
+                          "zhCN": "颤音改层数"
+                        }
+                      },
+                      {
+                        "kind": "constant",
+                        "value": 25,
+                        "unit": "percent",
+                        "label": {
+                          "zhCN": "每层比例提升"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cinema6_tremolo_3",
+          "name": {
+            "zhCN": "颤音改（六影）：3层"
+          },
+          "default": false,
+          "minCinemaLevel": 6,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "originalAnomalyRatio",
+          "expression": {
+            "op": "multiply",
+            "label": {
+              "zhCN": "颤音异放比例"
+            },
+            "args": [
+              {
+                "kind": "coreSkillScaling",
+                "field": "cinema6ReleaseCoefficientPctByElement",
+                "key": "eventElement",
+                "unit": "percent",
+                "label": {
+                  "zhCN": "原异常属性系数"
+                }
+              },
+              {
+                "op": "add",
+                "label": {
+                  "zhCN": "颤音层数修正"
+                },
+                "args": [
+                  {
+                    "kind": "constant",
+                    "value": 1,
+                    "unit": "decimal"
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      {
+                        "kind": "constant",
+                        "value": 3,
+                        "unit": "raw",
+                        "whiteBoxRole": "conversionSource",
+                        "label": {
+                          "zhCN": "颤音改层数"
+                        }
+                      },
+                      {
+                        "kind": "constant",
+                        "value": 25,
+                        "unit": "percent",
+                        "label": {
+                          "zhCN": "每层比例提升"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "cinema6_tremolo_4",
+          "name": {
+            "zhCN": "颤音改（六影）：4层"
+          },
+          "default": false,
+          "minCinemaLevel": 6,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "originalAnomalyRatio",
+          "expression": {
+            "op": "multiply",
+            "label": {
+              "zhCN": "颤音异放比例"
+            },
+            "args": [
+              {
+                "kind": "coreSkillScaling",
+                "field": "cinema6ReleaseCoefficientPctByElement",
+                "key": "eventElement",
+                "unit": "percent",
+                "label": {
+                  "zhCN": "原异常属性系数"
+                }
+              },
+              {
+                "op": "add",
+                "label": {
+                  "zhCN": "颤音层数修正"
+                },
+                "args": [
+                  {
+                    "kind": "constant",
+                    "value": 1,
+                    "unit": "decimal"
+                  },
+                  {
+                    "op": "multiply",
+                    "args": [
+                      {
+                        "kind": "constant",
+                        "value": 4,
+                        "unit": "raw",
+                        "whiteBoxRole": "conversionSource",
+                        "label": {
+                          "zhCN": "颤音改层数"
+                        }
+                      },
+                      {
+                        "kind": "constant",
+                        "value": 25,
+                        "unit": "percent",
+                        "label": {
+                          "zhCN": "每层比例提升"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "preferredDriveDiscs": {
+        "defaultSetIds": [
+          "phaethons_melody"
+        ],
+        "mainStatLimits": {
+          "4": [
+            "anomalyProficiency",
+            "atkPct"
+          ],
+          "5": [
+            "etherDmg",
+            "penRatio",
+            "atkPct"
+          ],
+          "6": [
+            "anomalyMastery",
+            "atkPct"
+          ]
+        }
+      },
+      "defaultCalculationConfig": {
+        "mode": "anomaly",
+        "cinemaLevel": 0,
+        "name": {
+          "zhCN": "自身侵蚀异放：4层颤音"
+        },
+        "events": [
+          {
+            "id": "nangongyu_corruption_release",
+            "kind": "anomaly",
+            "count": 1,
+            "stunned": true,
+            "settlementType": "release",
+            "anomalyEffect": "corruption",
+            "triggerActorRef": {
+              "agentId": "nangongyu",
+              "profileId": "core_tremolo_4"
+            },
+            "anomalySource": {
+              "actorRef": {
+                "agentId": "nangongyu"
+              }
+            }
+          }
+        ],
+        "selectedEventId": "nangongyu_corruption_release"
+      },
+      "importantSubStats": [
+        "anomalyProficiency",
+        "atkPct",
+        "penFlat"
+      ],
+      "importantPanelStats": [
+        "atk",
+        "anomalyProficiency",
+        "anomalyMastery",
+        "penRatio"
+      ],
+      "hidden": false,
+      "sources": [
+        "https://zzz.nanoka.cc/character/1511",
+        "https://static.nanoka.cc/zzz/3.3.4+19304006/zh/character/1511.json"
+      ],
+      "verification": {
+        "dataVersion": "3.3.4+19304006",
+        "acquiredAt": "2026-10-10",
+        "sourceSha256": "f730215830f8a54eecb4c34bdc5c7d8246e087a8554c817cd0acaf5dd9c84c3c",
+        "basePanel": "L60 excludes core A-F stats; A/C/E each add 12 base mastery, B/D/F each add 25 base ATK.",
+        "releaseAssumption": "Per-stack extra proportion interpreted multiplicatively: base ratio * (1 + n * .25), core tremolo n * .35 at C2+. This convention is explicit; not independently game-tested.",
+        "masteryConversion": "Reads unrounded initial/out-of-combat mastery; source states no cap and no flooring. Combat-only mastery does not increase impact conversion.",
+        "defaultObjective": "One self-sourced corruption Abloom at four tremolo stacks. Not a whole team rotation or automatic stun simulation.",
+        "unsupportedMechanics": "Automatic buildup, stun generation/duration, resource/tremolo transitions and multi-actor disorder source snapshots remain descriptive."
+      }
     }
   ]
 }
