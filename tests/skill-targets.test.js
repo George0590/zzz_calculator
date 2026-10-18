@@ -187,17 +187,18 @@ for (const { target, path } of storedTargets) {
         }
     }
 }
-assert.equal(moveCount, 188)
-assert.equal(rowCount, 423)
+// Local Nekomata, Harumasa and Evelyn catalogs add 20 moves and 54 rows.
+assert.equal(moveCount, 220)
+assert.equal(rowCount, 511)
 assert.deepEqual(Object.fromEntries(skillTagCounts), {
-    dashAttack: 17,
-    assistAttack: 23,
-    exSpecial: 22,
+    dashAttack: 19,
+    assistAttack: 25,
+    exSpecial: 27,
     fireSuppression: 3,
-    dodgeCounter: 7,
+    dodgeCounter: 10,
 })
-// Removing Velina C1's incorrect velina-c1-vortex-stun rule removed one skill target.
-const expectedTargetCount = 100
+// Upstream field Buffs plus nine targets from the preserved local characters.
+const expectedTargetCount = 117
 assert.equal(storedTargets.length, expectedTargetCount, skillTargetCountMessage(expectedTargetCount, storedTargets))
 
 // Check diagnostic output using an in-memory omission, without changing catalog data.
@@ -206,7 +207,7 @@ const incompleteTargets = storedTargets.slice(1)
 assert.throws(
     () => assert.equal(incompleteTargets.length, expectedTargetCount, skillTargetCountMessage(expectedTargetCount, incompleteTargets)),
     error => error.code === "ERR_ASSERTION"
-        && error.message.includes("expected 100, actual 99")
+        && error.message.includes("expected 117, actual 116")
         && error.message.includes("data/agents.json:")
         && error.message.includes("data/combat_buffs.json:")
         && error.message.includes(`${omittedTarget.ownerId}:`),

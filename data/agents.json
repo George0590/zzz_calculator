@@ -10362,7 +10362,8 @@
               "formula": {
                 "expression": "max(x - 110, 0)",
                 "valueUnit": "storedValue"
-              }
+              },
+              "scope": "inCombat"
             },
             {
               "id": "core-team-damage",

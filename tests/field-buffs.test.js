@@ -24,6 +24,9 @@ const FIELD_BUFF_IDS = {
     jifeng: "field.critical_assault.v3_2.p2.jifeng",
     shijinPhase2: "field.critical_assault.v3_2.p2.shijin",
     tanlie: "field.critical_assault.v3_2.p2.tanlie",
+    mingfeng: "field.defense_v5.v3_2.p3.mingfeng_cidian",
+    qinyin: "field.defense_v5.v3_2.p3.qinyin_gongzhen",
+    shana: "field.defense_v5.v3_2.p3.shana_rongguang",
     wenyin: "field.defense_v5.v3_1.p1.wenyin_gongzhen",
     zhongmuDefense31: "field.defense_v5.v3_1.p1.zhongmu_xiezou",
     shuanglei: "field.defense_v5.v3_1.p1.shuanglei_pofeng",
@@ -78,6 +81,9 @@ const EXPECTED_NAMES = {
     [FIELD_BUFF_IDS.jifeng]: "极锋",
     [FIELD_BUFF_IDS.shijinPhase2]: "蚀烬",
     [FIELD_BUFF_IDS.tanlie]: "坍裂",
+    [FIELD_BUFF_IDS.mingfeng]: "鸣风刺电",
+    [FIELD_BUFF_IDS.qinyin]: "秦音共振",
+    [FIELD_BUFF_IDS.shana]: "刹那熔光",
     [FIELD_BUFF_IDS.wenyin]: "紊音共振",
     [FIELD_BUFF_IDS.zhongmuDefense31]: "终幕协奏",
     [FIELD_BUFF_IDS.shuanglei]: "霜雷破锋",
@@ -100,6 +106,7 @@ const DEFENSE_3_1_PHASE_1_IDS = [FIELD_BUFF_IDS.wenyin, FIELD_BUFF_IDS.zhongmuDe
 const DEFENSE_3_1_PHASE_2_IDS = [FIELD_BUFF_IDS.zhuoluan, FIELD_BUFF_IDS.guiyu, FIELD_BUFF_IDS.guanche]
 const DEFENSE_3_1_PHASE_3_IDS = [FIELD_BUFF_IDS.huanyan, FIELD_BUFF_IDS.wenyinPhase3, FIELD_BUFF_IDS.yulei]
 const DEFENSE_3_1_IDS = [...DEFENSE_3_1_PHASE_1_IDS, ...DEFENSE_3_1_PHASE_2_IDS, ...DEFENSE_3_1_PHASE_3_IDS]
+const DEFENSE_3_2_PHASE_3_IDS = [FIELD_BUFF_IDS.mingfeng, FIELD_BUFF_IDS.qinyin, FIELD_BUFF_IDS.shana]
 const CRITICAL_ASSAULT_3_1_IDS = [
     FIELD_BUFF_IDS.cuixin,
     FIELD_BUFF_IDS.luli,
@@ -163,7 +170,7 @@ for (const id of Object.values(FIELD_BUFF_IDS)) {
     assert.equal(buff.name?.zhCN, EXPECTED_NAMES[id], `${id} should keep its maintained name`)
     assert.equal(buff.sourceType, "field", `${id} should be a field Buff`)
     assert.equal(buff.scope, "inCombat", `${id} should be an in-combat Buff`)
-    const isDefense = DEFENSE_3_0_IDS.includes(id) || DEFENSE_3_1_IDS.includes(id)
+    const isDefense = DEFENSE_3_0_IDS.includes(id) || DEFENSE_3_1_IDS.includes(id) || DEFENSE_3_2_PHASE_3_IDS.includes(id)
     const isVersion31 = VERSION_3_1_IDS.includes(id)
     const isVersion32 = id.includes(".v3_2.")
     const isPhase2 = PHASE_2_IDS.includes(id)
@@ -171,11 +178,11 @@ for (const id of Object.values(FIELD_BUFF_IDS)) {
     assert.deepEqual(buff.period, {
         modeId: isDefense ? "defense_v5" : "critical_assault",
         gameVersion: isVersion32 ? "3.2" : isVersion31 ? "3.1" : "3.0",
-        phaseNo: isVersion32 && CRITICAL_ASSAULT_3_2_PHASE_2_IDS.includes(id) ? 2 : isPhase3 ? 3 : isPhase2 ? 2 : isVersion31 ? 1 : 3,
-        phaseName: { zhCN: isVersion32 && CRITICAL_ASSAULT_3_2_PHASE_2_IDS.includes(id) ? "第二期" : isPhase3 ? "第三期" : isPhase2 ? "第二期" : isVersion31 ? "第一期" : "第三期" },
+        phaseNo: isVersion32 && CRITICAL_ASSAULT_3_2_PHASE_2_IDS.includes(id) ? 2 : isVersion32 && DEFENSE_3_2_PHASE_3_IDS.includes(id) ? 3 : isPhase3 ? 3 : isPhase2 ? 2 : isVersion31 ? 1 : 3,
+        phaseName: { zhCN: isVersion32 ? (CRITICAL_ASSAULT_3_2_PHASE_2_IDS.includes(id) ? "第二期" : DEFENSE_3_2_PHASE_3_IDS.includes(id) ? "第三期" : "第一期") : isPhase3 ? "第三期" : isPhase2 ? "第二期" : isVersion31 ? "第一期" : "第三期" },
     })
     assert.equal(buff.source?.zhCN, isDefense ? "防卫战 v5" : "危局强袭战")
-    assert.equal(buff.sourcePeriod?.zhCN, isVersion32 ? `3.2版本${CRITICAL_ASSAULT_3_2_PHASE_2_IDS.includes(id) ? "第二期" : "第一期"}` : isPhase3 ? "3.1版本第三期" : isPhase2 ? "3.1版本第二期" : isVersion31 ? "3.1版本第一期" : "3.0版本第三期")
+    assert.equal(buff.sourcePeriod?.zhCN, isVersion32 ? `3.2版本${CRITICAL_ASSAULT_3_2_PHASE_2_IDS.includes(id) ? "第二期" : DEFENSE_3_2_PHASE_3_IDS.includes(id) ? "第三期" : "第一期"}` : isPhase3 ? "3.1版本第三期" : isPhase2 ? "3.1版本第二期" : isVersion31 ? "3.1版本第一期" : "3.0版本第三期")
 
     const validation = validateMaintenanceItem("field-buffs", buff, {
         items: catalog.combatBuffs,
@@ -186,7 +193,7 @@ for (const id of Object.values(FIELD_BUFF_IDS)) {
 }
 
 const allFieldBuffs = catalog.combatBuffs.filter(buff => buff.sourceType === "field")
-assert.equal(allFieldBuffs.length, 42, "Field Buff catalog should keep all maintained entries")
+assert.equal(allFieldBuffs.length, 45, "Field Buff catalog should keep all maintained entries")
 assert.deepEqual(
     allFieldBuffs
         .filter(buff => buff.period?.modeId === "defense_v5" && buff.period?.gameVersion === "3.1" && buff.period?.phaseNo === 3)
@@ -1383,6 +1390,29 @@ assert.ok(yufeng.description.zhCN.includes("失衡恢复速度降低15%，持续
 assert.ok(bingfeng.description.zhCN.includes("冰属性与以太属性异常积蓄效率提升15%"))
 assert.ok(fenjin.description.zhCN.includes("[击破]特性的代理人造成的失衡值提升15%"))
 assert.ok(fenjin.description.zhCN.includes("失衡恢复速度降低15%，持续20秒"))
+
+const defense32Phase3 = allFieldBuffs.filter(buff =>
+    buff.period?.modeId === "defense_v5" && buff.period?.gameVersion === "3.2" && buff.period?.phaseNo === 3,
+)
+assert.deepEqual(defense32Phase3.map(buff => buff.name.zhCN), ["鸣风刺电", "秦音共振", "刹那熔光"])
+for (const buff of defense32Phase3) {
+    assert.equal(buff.source.zhCN, "防卫战 v5")
+    assert.equal(buff.sourcePeriod.zhCN, "3.2版本第三期")
+    assert.equal(buff.period.phaseName.zhCN, "第三期")
+    const validation = validateMaintenanceItem("field-buffs", buff, {
+        items: catalog.combatBuffs, currentId: buff.id, agentSkills: catalog.agentSkills,
+    })
+    assert.equal(validation.ok, true, JSON.stringify(validation.errors))
+}
+const mingfeng = defense32Phase3[0]
+assert.deepEqual(mingfeng.effects.map(effect => effect.stat), ["sharpDmgBonus", "penRatio", "electricResIgnore"])
+assert.deepEqual(mingfeng.effects[1].target.skillTargets.map(target => target.skillType), ["basic", "special", "ultimate"])
+assert.equal(mingfeng.effects[2].condition, "敌人处于失衡状态")
+const qinyin = defense32Phase3[1]
+assert.equal(qinyin.effects[0].formula.expression, "10 * max(x - 1, 0) + 40 * max(x - 2, 0)")
+const shana = defense32Phase3[2]
+assert.deepEqual(shana.effects.map(effect => effect.stat), ["fireDmg", "etherDmg", "sheerDmgBonus", "dmgBonus", "allResIgnore"])
+assert.ok(shana.effects.slice(3).every(effect => effect.target.skillTargets[0].skillType === "ultimate"))
 
 function calculateDefensePhase2(buff, { kind = "direct", stunned = false, coverage = 1 } = {}) {
     return calculateInCombatPanel(catalog, {

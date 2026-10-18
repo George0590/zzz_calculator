@@ -502,8 +502,11 @@ const fieldPeriodOptions = computed(() => {
     .sort((left, right) => {
       const leftPeriod = fieldBuffPeriod(left)
       const rightPeriod = fieldBuffPeriod(right)
-      // Modes in the same phase keep catalog order, which defines the authored default.
-      return rightPeriod.phaseNo - leftPeriod.phaseNo
+      const phaseOrder = rightPeriod.phaseNo - leftPeriod.phaseNo
+      if (phaseOrder !== 0) return phaseOrder
+      // When both modes publish the same current phase, Defense Battle is the active default.
+      const modeOrder = (modeId: string) => modeId === "defense_v5" ? 1 : 0
+      return modeOrder(rightPeriod.modeId) - modeOrder(leftPeriod.modeId)
     })
     .map(buff => {
       const key = fieldBuffPeriodKey(buff)

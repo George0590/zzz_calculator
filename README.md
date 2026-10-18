@@ -6,6 +6,10 @@ Language: [简体中文](README.zh-CN.md)
 
 ## Upload Update Summaries
 
+- **2026-10-16 — Defense Battle 3.2 phase-three Buffs and default selection**: added Mingfeng Cidian, Qinyin Gongzhen and Shana Rongguang, and made Defense Battle the default when both modes have the same current version and phase.
+- **2026-10-13 — Optimizer scheme locking and teammate source protection**: added one-click full-scheme locking with stable Drive Disc ordering and separated administrator defaults, Enka imports and user overrides.
+- **2026-10-11 — Ellen modeling and default rotations**: added Ellen’s skills, Potential growth, default team and reference rotations, together with the Polar Metal four-piece freeze-trigger coverage.
+- **2026-10-10 — Nangong Yu and recent catalog updates**: added Nangong Yu modeling and source data, with skill, anomaly-settlement and maintenance-catalog integration.
 - **2026-10-09 — Adaptive teammate menu**: position and size the teammate menu within available space, with a fixed category column and independently scrolling characters on narrow and short viewports.
 - **2026-10-08 — Documentation and character-authoring guide**: separated current specifications from archived evidence, corrected stale role/default/deployment statements, and documented the workflow learned from Aria, Sigrid, Soldier 11, Vivian, Claret, Pyrois and Velina.
 - **2026-10-07 — Catalog assets**: added and verified current W-Engine records and content-versioned thumbnails.
@@ -17,10 +21,6 @@ Language: [简体中文](README.zh-CN.md)
 - **2026-09-30 — Anomaly W-Engines**: added four official Anomaly W-Engines with level-60 data, exact refinement values, adjustable stacks and precise anomaly targets.
 - **2026-09-27 — Drive Disc scoring and analysis**: added effective-substat counts, current-versus-optimized score comparison and a clearer analysis entry point while preserving calculation precision.
 - **2026-09-26 — Pyrois showcase mapping and release**: mapped Enka avatar ID `1551` to Pyrois and verified mapped/skipped showcase handling through the production release.
-- **2026-09-19 — Pyrois four-branch Ultimate modeling**: added Pyrois, four Ultimate branches and separate Assault Directive skill groups under the documented direct-damage snapshot assumptions.
-- **2026-09-18 — Defense Battle 3.2 phase-one Field Buffs**: added the phase-one Field Buff catalog and picker coverage for the existing Field Buff calculation paths.
-- **2026-09-18 — Important substat highlighting**: added the optional agent-level `importantSubStats` field and maintenance editor for highlighting relevant Drive Disc substats.
-- **2026-09-17 — Workbench and catalog cleanup**: refined Workbench actions, event summaries, optimizer controls and responsive behavior while removing obsolete Cinema entries and clarifying W-Engine coverage metadata.
 
 Older release and implementation history is in the [archived summaries](docs/archive/) and the [current changelog](docs/changelog.md).
 
