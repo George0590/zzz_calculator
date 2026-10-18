@@ -842,7 +842,12 @@ function probeCompiledDenseScoreKernel(panelCalculator, indexedData, denseTarget
 
         const denseMs = Math.max(0.0001, result.scoreKernelDenseProbeMs)
         const mapMs = Math.max(0.0001, result.scoreKernelMapProbeMs)
-        if (denseMs > mapMs * 0.85) {
+        // Generic dense timings do not measure the fixed-set/scalar kernels used
+        // by the search. Do not disable that entire path based on this microprobe;
+        // each specialized plan still has its own correctness check and fallback.
+        const canSpecialize = options.enableSpecializedScoreKernel
+            && typeof denseTarget.compileForSetCounts === "function"
+        if (!canSpecialize && denseMs > mapMs * 0.85) {
             result.scoreKernelFallbackReason = "notFaster"
             result.scoreKernelProbeMs = elapsedMsSince(startedAt)
             result.avgScoreKernelMs = denseMs / Math.max(1, probes.length)
@@ -1230,6 +1235,9 @@ function combatBuffsForCandidate(catalog, input, settings) {
 }
 
 function normalizedMinimumValue(stat, value) {
+    if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
+        return null
+    }
     const numeric = Number(value)
     if (!Number.isFinite(numeric)) {
         return null
@@ -2765,7 +2773,7 @@ function suffixFrontierForPlan(state, superPlan, nextOrderIndex, maxLeaves) {
     return frontier
 }
 
-function suffixTopKReachableBoundScore(state, superPlan, nextOrderIndex, maxLeaves = SUFFIX_TOPK_BOUND_MAX_LEAVES) {
+function suffixTopKReachableBoundScore(state, superPlan, nextOrderIndex, maxLeaves = SUFFIX_TOPK_BOUND_MAX_LEAVES, cutoff = Number.POSITIVE_INFINITY) {
     const leafBudget = Math.max(1, Number(maxLeaves ?? SUFFIX_TOPK_BOUND_MAX_LEAVES))
     let leaves = 0
     let best = Number.NEGATIVE_INFINITY
@@ -2799,6 +2807,11 @@ function suffixTopKReachableBoundScore(state, superPlan, nextOrderIndex, maxLeav
             if (score > best) {
                 best = score
             }
+            // The caller only needs a pruning proof. One reachable score at the
+            // cutoff disproves it; Infinity conservatively keeps this branch.
+            if (best + SUFFIX_TOPK_PRUNE_EPSILON >= cutoff) {
+                return Number.POSITIVE_INFINITY
+            }
         }
         return best
     }
@@ -2825,7 +2838,7 @@ function suffixTopKReachableBoundScore(state, superPlan, nextOrderIndex, maxLeav
             if (score > best) {
                 best = score
             }
-            return leaves <= leafBudget
+            return best + SUFFIX_TOPK_PRUNE_EPSILON < cutoff && leaves <= leafBudget
         }
 
         const slotEntry = superPlan.orderedSlots[orderIndex]
@@ -2844,6 +2857,9 @@ function suffixTopKReachableBoundScore(state, superPlan, nextOrderIndex, maxLeav
 
     try {
         if (!walk(nextOrderIndex)) {
+            if (best + SUFFIX_TOPK_PRUNE_EPSILON >= cutoff) {
+                return Number.POSITIVE_INFINITY
+            }
             state.metrics.safeBoundFallbacks += 1
             return null
         }
@@ -2930,7 +2946,7 @@ function checkSuperBoundPrune(state, superPlan, nextOrderIndex, branchSuperVecto
         !(usableBoundScore(upperBound) && upperBound + SCORE_TIE_EPSILON < cutoff)
         && shouldRunSuffixTopKBound(state, kind, prunedLeafCount, upperBound, cutoff)
     ) {
-        const suffixBound = suffixTopKReachableBoundScore(state, superPlan, nextOrderIndex, prunedLeafCount)
+        const suffixBound = suffixTopKReachableBoundScore(state, superPlan, nextOrderIndex, prunedLeafCount, cutoff)
         if (
             suffixBound !== null
             && usableBoundScore(suffixBound)
@@ -3160,7 +3176,9 @@ function createOptimizerState(catalog, store, input = {}, options = {}) {
         })
         : null
     const denseProbe = canCompileDenseScore
-        ? probeCompiledDenseScoreKernel(panelCalculator, indexedCandidateData, densePanelScoreTarget, candidatesBySlot)
+        ? probeCompiledDenseScoreKernel(panelCalculator, indexedCandidateData, densePanelScoreTarget, candidatesBySlot, {
+            enableSpecializedScoreKernel: settings.enableSpecializedScoreKernel,
+        })
         : {
             enabled: false,
             scoreKernel: "map",
@@ -3426,8 +3444,17 @@ function createTaskOptimizerStateFromBase(baseState, task = {}, input = {}) {
         denseScoreMs: 0,
         specializedScoreCalls: 0,
         specializedScorePlanCount: Number(baseState.metrics?.specializedScorePlanCount ?? 0),
+        specializedScoreKernelCount: 0,
+        specializedScoreKernelCacheHits: 0,
         specializedScoreFallbacks: 0,
         specializedScoreFallbackReason: baseState.metrics?.specializedScoreFallbackReason ?? null,
+        objectiveScalarCalls: 0,
+        objectiveScalarPlanCount: 0,
+        objectiveScalarFallbacks: 0,
+        objectiveScalarFallbackReason: baseState.metrics?.objectiveScalarFallbackReason ?? null,
+        denseScoreMsSamples: 0,
+        boundCheckMsSamples: 0,
+        freeSpecializedScorePlanCount: 0,
         suffixFrontierBuildMs: 0,
         suffixFrontierRawCount: 0,
         suffixFrontierCompressedCount: 0,
@@ -3643,13 +3670,26 @@ function pushSelectedDisc(state, disc) {
     state.selected.push(disc)
     state.selectedCalcDiscs.push(state.calcDiscById.get(disc.id) ?? toCalculatorDriveDisc(disc))
     if (state.useDenseSearchState) {
+        // Restore the exact parent totals on backtracking. Repeated subtraction
+        // accumulates roundoff across siblings and can prune a tied Top 10 result.
+        state.selectedStatSnapshots ??= []
+        const depth = state.selected.length - 1
+        state.selectedStatSnapshots[depth] ??= new Float64Array(state.selectedStatValues.length)
+        state.selectedStatSnapshots[depth].set(state.selectedStatValues)
         addIndexedVectorToTotals(state.selectedStatValues, state.indexedVectorById?.get(disc.id), 1)
         const setIndex = state.setIndexById?.get(disc.setId)
         if (setIndex !== undefined) {
             state.selectedSetCountValues[setIndex] += 1
         }
     } else {
-        addDiscVectorToTotals(state.selectedStatTotals, state.vectorById.get(disc.id) ?? statVector(disc), 1)
+        const vector = state.vectorById.get(disc.id) ?? statVector(disc)
+        state.selectedStatUndo ??= []
+        const depth = state.selected.length - 1
+        state.selectedStatUndo[depth] ??= new Map()
+        const previous = state.selectedStatUndo[depth]
+        previous.clear()
+        for (const stat of vector.keys()) previous.set(stat, state.selectedStatTotals.get(stat))
+        addDiscVectorToTotals(state.selectedStatTotals, vector, 1)
         state.selectedSetCounts.set(disc.setId, (state.selectedSetCounts.get(disc.setId) ?? 0) + 1)
     }
 }
@@ -3659,13 +3699,16 @@ function popSelectedDisc(state) {
     state.selectedCalcDiscs.pop()
     if (disc) {
         if (state.useDenseSearchState) {
-            addIndexedVectorToTotals(state.selectedStatValues, state.indexedVectorById?.get(disc.id), -1)
+            state.selectedStatValues.set(state.selectedStatSnapshots[state.selected.length])
             const setIndex = state.setIndexById?.get(disc.setId)
             if (setIndex !== undefined) {
                 state.selectedSetCountValues[setIndex] -= 1
             }
         } else {
-            addDiscVectorToTotals(state.selectedStatTotals, state.vectorById.get(disc.id) ?? statVector(disc), -1)
+            for (const [stat, value] of state.selectedStatUndo[state.selected.length]) {
+                if (value === undefined) state.selectedStatTotals.delete(stat)
+                else state.selectedStatTotals.set(stat, value)
+            }
             const nextCount = (state.selectedSetCounts.get(disc.setId) ?? 0) - 1
             if (nextCount > 0) {
                 state.selectedSetCounts.set(disc.setId, nextCount)
@@ -4418,6 +4461,9 @@ function combineParallelMetrics(baseMetrics = {}, workerMetricsList = [], starte
         vectorScoreFallbacks: 0,
         vectorScoreMs: 0,
     }
+    // Task counters start from zero; preparation/prewarm counters in baseMetrics
+    // must not leak into totals or turn missing task counters into NaN.
+    for (const key of PARALLEL_SUM_METRIC_KEYS) metrics[key] = 0
     for (const workerMetrics of workerMetricsList) {
         addParallelMetricSnapshot(metrics, workerMetrics)
     }

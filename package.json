@@ -53,7 +53,7 @@
     "test:sigrid-damage": "node tests/sigrid-damage.test.js",
     "test:compiled-score": "node tests/compiled-score.test.js",
     "test:compiled-panel-score": "node tests/compiled-panel-score.test.js",
-    "test:optimizer": "node tests/optimizer.test.js",
+    "test:optimizer": "node tests/optimizer.test.js && node tests/miyabi-optimizer.test.js",
     "test:optimizer-progress": "node tests/optimizer-progress.test.js",
     "test:optimizer-api": "node tests/optimizer-job-api.test.js",
     "test:browser-local-compute": "node tests/browser-local-compute.test.js",
