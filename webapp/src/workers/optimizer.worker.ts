@@ -1,7 +1,11 @@
 import { createDriveDiscOptimizerRuntime } from "@core/driveDiscOptimizer-core.js"
+import { BrowserParallelError, runBrowserParallel } from "./optimizer-parallel"
 
 const browserOptimizerRuntime = createDriveDiscOptimizerRuntime({
   yieldControl: () => new Promise(resolve => setTimeout(resolve, 0)),
+  availableParallelism: () => navigator.hardwareConcurrency || 2,
+  maxWorkerCount: 4,
+  runParallel: runBrowserParallel,
 })
 
 let activeRunId = ""
@@ -25,8 +29,23 @@ function normalizeWorkerInput(input: any = {}) {
     settings: {
       ...(input.settings ?? {}),
       algorithm: algorithm ?? "exact-super-bound",
-      disableParallel: true,
+      disableParallel: input.settings?.disableParallel === true,
+      workerCount: input.settings?.workerCount
+        ? Math.max(1, Math.min(4, Number(input.settings.workerCount))) : undefined,
     },
+  }
+}
+
+async function runJobWithFallback(job: any, catalog: any, store: any, input: any, options: any) {
+  try {
+    return await job.run(options)
+  } catch (error) {
+    if (cancelRequested || !(error instanceof BrowserParallelError)) throw error
+    // Retry the same search space only after the failed pool has been cleaned up.
+    const serialInput = { ...input, settings: { ...input.settings, disableParallel: true } }
+    const result = await browserOptimizerRuntime.createJob(catalog, store, serialInput, options).run(options)
+    result.metrics.parallelFallbackReason = error.message
+    return result
   }
 }
 
@@ -108,7 +127,7 @@ self.onmessage = async event => {
       },
     })
 
-    const result = await job.run({
+    const result = await runJobWithFallback(job, catalog, message.store, input, {
       chunkSize: 5000,
       progressIntervalMs: message.settings?.progressIntervalMs ?? 200,
       yieldIntervalMs: message.settings?.yieldIntervalMs ?? 50,

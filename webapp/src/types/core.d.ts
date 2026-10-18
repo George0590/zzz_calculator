@@ -380,6 +380,7 @@ declare module "@core/potentialVision.js" {
 }
 
 declare module "@core/driveDiscOptimizer-core.js" {
+  export function createDriveDiscOptimizerWorkerSession(catalog: any, store: any, input: any): any
   export function previewDriveDiscOptimization(catalog: any, store: any, input?: any, options?: any): any
   export function optimizeDriveDiscsAsync(catalog: any, store: any, input?: any, options?: any): Promise<any>
   export function createDriveDiscOptimizerRuntime(runtime?: any): {
