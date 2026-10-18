@@ -483,7 +483,7 @@ const canSaveCurrentScheme = computed(() => {
     return selectedDriveDiscs.value.length > 0
   }
   if (buildStore.discMode === "optimized") {
-    return Boolean(selectedOptimizedScheme.value?.driveDiscs?.length)
+    return !optimizerStore.resultsAreProvisional && Boolean(selectedOptimizedScheme.value?.driveDiscs?.length)
   }
   return false
 })
@@ -653,7 +653,9 @@ const optimizerStatusSummary = computed(() => {
     return optimizerPrepareStageLabel.value || "正在准备候选数据"
   }
   if (["preview", "running"].includes(optimizerUiStatus.value)) {
-    return "正在优化"
+    return optimizerStore.resultsAreProvisional
+      ? `正在优化 · 已找到 ${optimizerStore.resultSchemes.length} 套临时方案`
+      : "正在优化"
   }
   if (optimizerUiStatus.value === "cancelling") {
     return "正在取消优化"
@@ -662,7 +664,7 @@ const optimizerStatusSummary = computed(() => {
     return "优化已取消"
   }
   if (["complete", "done"].includes(optimizerUiStatus.value)) {
-    return `优化完成 · 找到 ${optimizerStore.resultSchemes.length} 套 · ${optimizerResultKindText.value}`
+    return `${optimizerMetrics.value.cacheHit ? '已复用上次结果' : '优化完成'} · 找到 ${optimizerStore.resultSchemes.length} 套 · ${optimizerResultKindText.value}`
   }
   return ""
 })
@@ -1709,6 +1711,13 @@ function formatPercentValue(value: any) {
             </NButton>
           </div>
 
+          <NAlert v-if="optimizerStore.resultsAreProvisional" type="info" :show-icon="false" data-testid="optimizer-provisional-notice">
+            {{ optimizerStore.isBusy ? '搜索仍在进行' : '搜索未完成' }}，以下为当前已找到的方案，尚未确认最终最优。完整结果出来后可保存或锁定。
+            <NButton v-if="buildStore.discMode !== 'optimized'" text type="primary" @click="buildStore.selectOptimizedRank(1)">
+              查看当前方案
+            </NButton>
+          </NAlert>
+
           <div class="drive-disc-analysis-strip">
             <div>
               <span>{{ selectedDriveDiscs.length ? `${selectedDriveDiscs.length} 件驱动盘参与当前${isLuminescenceScore ? "评分" : "伤害"}计算` : "选择驱动盘后可查看词条分析" }}</span>
@@ -1750,7 +1759,7 @@ function formatPercentValue(value: any) {
                 secondary
                 data-testid="lock-optimized-scheme"
                 :loading="schemeReservationBusy"
-                :disabled="!selectedSchemeCanBeLocked || schemeReservationBusy"
+                :disabled="optimizerStore.resultsAreProvisional || !selectedSchemeCanBeLocked || schemeReservationBusy"
                 :title="selectedSchemeIsLocked ? '解除当前方案六张盘对当前角色的专属锁定' : '将当前方案六张盘锁定给当前角色'"
                 @click="toggleSelectedSchemeReservation"
               >

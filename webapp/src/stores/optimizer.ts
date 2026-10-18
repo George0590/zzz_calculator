@@ -33,6 +33,7 @@ let activeRunResolve: (() => void) | null = null
 let activeWatchdogTimer: ReturnType<typeof setInterval> | null = null
 let lastWorkerMessageAt = 0
 let activeWorkerCatalog: any = null
+let activeWorkerCatalogFingerprint = ""
 
 function clearActiveRun() {
   if (activeWatchdogTimer) {
@@ -49,6 +50,7 @@ function disposeWorker() {
   activeWorker?.terminate()
   activeWorker = null
   activeWorkerCatalog = null
+  activeWorkerCatalogFingerprint = ""
 }
 
 function reusableWorker() {
@@ -61,10 +63,13 @@ function reusableWorker() {
 
 function catalogForWorker(catalog: any) {
   const rawCatalog = toRaw(catalog)
-  if (rawCatalog === activeWorkerCatalog) {
+  const fingerprint = JSON.stringify(rawCatalog, (_key, value) => value instanceof Map
+    ? { mapEntries: [...value] } : value instanceof Set ? { setValues: [...value] } : value)
+  if (rawCatalog === activeWorkerCatalog && fingerprint === activeWorkerCatalogFingerprint) {
     return undefined
   }
   activeWorkerCatalog = rawCatalog
+  activeWorkerCatalogFingerprint = fingerprint
   return cloneWorkerPayload(catalog)
 }
 
@@ -543,6 +548,7 @@ export const useOptimizerStore = defineStore("optimizer", {
     progress: null as any,
     results: [] as any[],
     resultSchemes: [] as any[],
+    resultsAreProvisional: false,
     completedSettings: null as any,
     completedSettingsFingerprint: "",
     completedInventoryFingerprint: "",
@@ -704,6 +710,7 @@ export const useOptimizerStore = defineStore("optimizer", {
       this.persistSettings()
     },
     reset() {
+      this.resultsAreProvisional = false
       this.status = "idle"
       this.metrics = null
       this.progressMetrics = null
@@ -721,6 +728,7 @@ export const useOptimizerStore = defineStore("optimizer", {
       disposeWorker()
     },
     failBeforeRun(message: string, settings: any = null) {
+      this.resultsAreProvisional = false
       disposeWorker()
       this.status = "error"
       this.error = message
@@ -825,6 +833,7 @@ export const useOptimizerStore = defineStore("optimizer", {
         disposeWorker()
       }
       this.status = "preparing"
+      this.resultsAreProvisional = false
       this.error = ""
       this.results = []
       this.resultSchemes = []
@@ -924,9 +933,18 @@ export const useOptimizerStore = defineStore("optimizer", {
               this.status = message.job?.status === "preparing" ? "preparing" : "running"
             }
             this.applyProgress(message.job ?? {})
+            if (message.job?.currentResults?.length && !this.cancelRequested) {
+              this.resultsAreProvisional = true
+              this.resultSchemes = message.job.currentResults.map((row: any) => ({ ...row, driveDiscs: row.driveDiscs ?? [] }))
+              this.completedSettings = cloneWorkerPayload(workerInput.settings)
+              this.completedSettingsFingerprint = submittedSettingsFingerprint
+              this.completedInventoryFingerprint = inventoryFingerprint
+              this.completedCalculationInputFingerprint = submittedCalculationInputFingerprint
+            }
             return
           }
           if (message.type === "complete") {
+            this.resultsAreProvisional = false
             const result = message.result ?? message.job?.result ?? {}
             const metrics = result.metrics ?? {}
             const results = result.results ?? []

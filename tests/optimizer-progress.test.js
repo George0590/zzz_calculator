@@ -139,6 +139,19 @@ assert.equal(asyncResult.metrics.strictExact, true)
 assert.ok(progressEvents.some(progress => progress.evaluated > 0 && progress.percent > 0))
 assert.ok(progressEvents.some(progress => progress.evaluated === progress.metrics?.processedCombinationCount))
 assert.ok(progressEvents.some(progress => Number(progress.metrics?.evaluationsPerSecond ?? 0) > 0))
+const provisional = progressEvents.find(progress => progress.status === "running" && progress.currentResults?.length)
+assert.ok(provisional, "Search must expose a ranking before completion")
+assert.ok(provisional.currentResults.every((row, index) => row.rank === index + 1 && row.driveDiscs.length === 6))
+assert.notStrictEqual(provisional.currentResults, asyncResult.results, "Progress snapshots must not alias the mutable ranking")
+assert.deepEqual(progressEvents.at(-1).currentResults.map(row => row.driveDiscs.map(disc => disc.id).join("|")), resultIds(sync))
+
+const multiProgress = []
+const multi = await optimizeDriveDiscsAsync(catalog, store, optimizerInput({ settings: { fourPieceSetIds: [fourSet, twoSet] } }), {
+    chunkSize: 1, progressIntervalMs: 0, onProgress: progress => multiProgress.push(progress),
+})
+assert.deepEqual(multiProgress.at(-1).currentResults.map(row => row.driveDiscs.map(disc => disc.id).join("|")), resultIds(multi))
+assert.ok(multiProgress.some(progress => progress.status === "running" && progress.currentResults?.some(row => row.fourPieceSetId === fourSet)))
+assert.ok(multiProgress.every(progress => (progress.currentResults ?? []).every(row => !("data" in row))), "Progress must not repeatedly serialize full calculation details")
 
 const noResultEvents = []
 const noResult = await optimizeDriveDiscsAsync(catalog, store, optimizerInput({

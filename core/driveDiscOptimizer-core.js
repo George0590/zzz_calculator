@@ -3529,6 +3529,17 @@ function updateCutoffMetrics(state) {
     }
 }
 
+function currentResultSnapshot(results = [], fourPieceSetId = null) {
+    // Keep progress payloads small even after a multi-set branch has hydrated
+    // its full calculation details, and never expose the mutable ranking array.
+    return results.map((result, index) => ({
+        rank: index + 1,
+        score: result.score,
+        fourPieceSetId: result.fourPieceSetId ?? fourPieceSetId,
+        driveDiscs: result.driveDiscs,
+    }))
+}
+
 function progressFromState(state, status = "running") {
     updateEvaluationRate(state)
     updateCutoffMetrics(state)
@@ -3540,6 +3551,7 @@ function progressFromState(state, status = "running") {
         evaluated: processedCombinationCount(metrics),
         estimatedCombinationCount: Number(metrics?.estimatedCombinationCount ?? 0),
         percent: percentForMetrics(metrics, status),
+        currentResults: currentResultSnapshot(state.results, state.settings.fourPieceSetId),
     }
 }
 
@@ -4719,7 +4731,7 @@ function createDriveDiscOptimizationJobWithRuntime(runtime, catalog, store, inpu
                         const progressBranch = {
                             fourPieceSetId,
                             result: {
-                                results: [],
+                                results: progress.currentResults ?? [],
                                 settings: progress.settings,
                                 metrics: progress.metrics,
                                 error: { isError: false, reason: null },
@@ -4746,6 +4758,7 @@ function createDriveDiscOptimizationJobWithRuntime(runtime, catalog, store, inpu
                             percent: snapshot.metrics.percent,
                             elapsedMs: snapshot.metrics.elapsedMs,
                             fourPieceSetId,
+                            currentResults: currentResultSnapshot(snapshot.results),
                         })
                     },
                 })
@@ -4764,6 +4777,7 @@ function createDriveDiscOptimizationJobWithRuntime(runtime, catalog, store, inpu
                 estimatedCombinationCount: combined.metrics.estimatedCombinationCount,
                 percent: 100,
                 elapsedMs: combined.metrics.elapsedMs,
+                currentResults: currentResultSnapshot(combined.results),
             })
             return combined
         },
