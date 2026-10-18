@@ -115,7 +115,7 @@ const preset = computed(() => {
         Icon: Gamepad2,
         tone: "warning" as const,
         title: "未找到绝区零窗口",
-        subtext: props.message || "请确认游戏已启动。云绝区零请在客户端选择器中切换。",
+        subtext: props.message || "请确认游戏已启动，并在客户端选择器中选择本地、云绝区零或绝区零Beta（私服）。",
         primary: "重试连接",
         secondary: "",
       }

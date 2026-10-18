@@ -84,6 +84,8 @@ npm run build:pages
 
 当前正式线为 ZZZ Scanner Next `1.0.49`、Helper `1.3.1`、协议 v4，使用 schema-v3 manifest。网页数据保持本地；Helper负责 `zzz-scanner://` 桥接和包生命周期。当前支持、哈希和兼容范围以 `config/scanner-manifest.json`、`config/helper-manifest.json` 以及 [ZZZ-Scanner.Next 仓库](https://github.com/ZztIsolation/ZZZ-Scanner.Next)为准。[1.0.43验收证据](docs/archive/scanner-integration-1.0.43.md)只用于历史追溯。
 
+本地版扫描页面另提供“绝区零Beta（私服）”，查找 `ZenlessZoneZeroBeta.exe` 并沿用本地画面模板；选择可跨刷新保存。实际识别取决于游戏背包布局与支持的显示模式是否匹配。
+
 ## 第三方服务与致谢
 
 “展柜数据导入”使用 [Enka.Network](https://enka.network/) 提供的绝区零公开角色展柜 API。感谢其[绝区零 API 文档](https://github.com/EnkaNetwork/API-docs/blob/master/docs/zzz/api.md)及[上游仓库](https://github.com/EnkaNetwork/API-docs)；生成后的本地映射在 `data/enka_zzz_mapping.json` 记录来源修订。

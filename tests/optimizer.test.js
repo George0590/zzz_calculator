@@ -701,6 +701,18 @@ const impossibleMinimum = optimizeDriveDiscs(catalog, store, optimizerInput({
 assert.equal(impossibleMinimum.results.length, 0)
 assert.equal(impossibleMinimum.error.reason, "没有符合限定条件和最小面板要求的驱动盘套装。")
 
+for (const blank of [null, undefined, "", "   "]) {
+    const noMinimums = optimizeDriveDiscs(catalog, store, optimizerInput({ settings: { minimums: {} } }))
+    const blankMinimums = optimizeDriveDiscs(catalog, store, optimizerInput({
+        settings: { minimums: Object.fromEntries(["atk", "def", "anomalyProficiency", "critRate", "critDmg", "lacerationDmg"].map(key => [key, blank])) },
+    }))
+    assert.deepEqual(blankMinimums.results.map(row => row.driveDiscIdsBySlot), noMinimums.results.map(row => row.driveDiscIdsBySlot))
+    assert.deepEqual(resultScores(blankMinimums), resultScores(noMinimums))
+    assert.notEqual(blankMinimums.metrics.objectiveScalarFallbackReason, "minimum-panel", "Unfilled limits must not disable scalar scoring")
+}
+const explicitZeroMinimum = optimizeDriveDiscs(catalog, store, optimizerInput({ settings: { minimums: { critRate: 0 } } }))
+assert.equal(explicitZeroMinimum.metrics.objectiveScalarFallbackReason, "minimum-panel", "Explicit zero remains a real constraint")
+
 const customDamageInput = optimizerInput({
     damage: {
         ...exampleInput.damage,
@@ -964,6 +976,7 @@ const parallel = await optimizeDriveDiscsAsync(catalog, store, optimizerInput({
 assert.equal(parallel.metrics.algorithmId, "exact-super-bound-parallel")
 assert.equal(parallel.metrics.strictExact, true)
 assert.equal(parallel.metrics.workerCount, 2)
+assert.ok(Number.isFinite(parallel.metrics.objectiveScalarCalls), "Parallel task counters must be initialized before incrementing")
 assert.ok(parallel.metrics.parallelTaskCount > 0)
 assert.equal(parallel.metrics.completedTaskCount, parallel.metrics.parallelTaskCount)
 assert.equal(parallel.metrics.freeTwoPieceAutoSetCount, exact.metrics.freeTwoPieceAutoSetCount)

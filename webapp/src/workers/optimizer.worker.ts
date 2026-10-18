@@ -1,13 +1,19 @@
 import { createDriveDiscOptimizerRuntime } from "@core/driveDiscOptimizer-core.js"
+import { BrowserParallelError, runBrowserParallel } from "./optimizer-parallel"
 
 const browserOptimizerRuntime = createDriveDiscOptimizerRuntime({
   yieldControl: () => new Promise(resolve => setTimeout(resolve, 0)),
+  availableParallelism: () => navigator.hardwareConcurrency || 2,
+  maxWorkerCount: 4,
+  runParallel: runBrowserParallel,
 })
 
 let activeRunId = ""
 let cancelRequested = false
 let cachedCatalog: any = null
 let cachedCatalogKey = ""
+// One completed request only; never persist inventory or partial search results.
+let completedRequest: { key: string; result: any } | null = null
 
 function post(type: string, payload: Record<string, any> = {}) {
   self.postMessage({
@@ -25,7 +31,9 @@ function normalizeWorkerInput(input: any = {}) {
     settings: {
       ...(input.settings ?? {}),
       algorithm: algorithm ?? "exact-super-bound",
-      disableParallel: true,
+      disableParallel: input.settings?.disableParallel === true,
+      workerCount: input.settings?.workerCount
+        ? Math.max(1, Math.min(4, Number(input.settings.workerCount))) : undefined,
     },
   }
 }
@@ -33,12 +41,14 @@ function normalizeWorkerInput(input: any = {}) {
 self.onmessage = async event => {
   const message = event.data ?? {}
   if (message.type === "init-catalog") {
+    completedRequest = null
     cachedCatalog = message.catalog
     cachedCatalogKey = String(message.catalogKey ?? "")
     post("catalog-ready", { catalogKey: cachedCatalogKey })
     return
   }
   if (message.catalog) {
+    completedRequest = null
     cachedCatalog = message.catalog
     cachedCatalogKey = String(message.catalogKey ?? cachedCatalogKey)
   }
@@ -75,6 +85,17 @@ self.onmessage = async event => {
     if (!catalog) {
       throw new Error("Optimizer catalog is not initialized.")
     }
+    const requestKey = JSON.stringify({ input, store: message.store })
+    if (message.settings?.reuseResult !== false && completedRequest?.key === requestKey) {
+      const result = { ...completedRequest.result, metrics: { ...completedRequest.result.metrics, cacheHit: true } }
+      post("progress", { runId: message.runId, job: {
+        status: "complete", metrics: result.metrics, settings: result.settings,
+        evaluated: result.metrics.processedCombinationCount,
+        estimatedCombinationCount: result.metrics.estimatedCombinationCount, percent: 100, elapsedMs: 0,
+      } })
+      post("complete", { runId: message.runId, result, job: { status: "complete", elapsedMs: 0 } })
+      return
+    }
     post("started", {
       runId: message.runId,
       job: {
@@ -108,7 +129,7 @@ self.onmessage = async event => {
       },
     })
 
-    const result = await job.run({
+    const runOptions = {
       chunkSize: 5000,
       progressIntervalMs: message.settings?.progressIntervalMs ?? 200,
       yieldIntervalMs: message.settings?.yieldIntervalMs ?? 50,
@@ -123,7 +144,19 @@ self.onmessage = async event => {
           },
         })
       },
-    })
+    }
+    let result
+    try {
+      result = await job.run(runOptions)
+    } catch (error) {
+      if (cancelRequested || !(error instanceof BrowserParallelError)) throw error
+      // A browser may reject nested module workers or run out of resources.
+      // Retry the same search space serially after the pool has been terminated.
+      const serialInput = { ...input, settings: { ...input.settings, disableParallel: true } }
+      result = await browserOptimizerRuntime.createJob(catalog, message.store, serialInput, runOptions).run(runOptions)
+      result.metrics.parallelFallbackReason = error instanceof Error ? error.message : String(error)
+    }
+    if (!cancelRequested && !result.error?.isError) completedRequest = { key: requestKey, result }
     post(cancelRequested ? "cancelled" : "complete", {
       runId: message.runId,
       result,

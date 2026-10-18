@@ -176,7 +176,7 @@ function runScenario(scenario: any) {
       ...(!catalogSent ? { catalog } : {}),
       store: scenario.store,
       input: scenario.input,
-      settings: { progressIntervalMs: 200, yieldIntervalMs: 50 },
+      settings: { progressIntervalMs: 200, yieldIntervalMs: 50, reuseResult: false },
     })
     catalogSent = true
   })

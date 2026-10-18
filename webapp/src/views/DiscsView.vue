@@ -1734,7 +1734,7 @@ function confirmDangerImport() {
         <div v-if="inventoryStore.scanShowConfig" class="section-band ui-layout-scope" data-layout-surface="scanner-config">
           <div class="metric" data-layout-field>
             <span class="metric-title">客户端</span>
-            <div class="metric-value"><NSelect :value="inventoryStore.scanClient" :disabled="scanControlsDisabled" :options="[{ label: '本地绝区零', value: 'local' }, { label: '云绝区零', value: 'cloud' }]" aria-label="扫描客户端" @update:value="value => inventoryStore.updateScanPreferences({ client: value })" /></div>
+            <div class="metric-value"><NSelect :value="inventoryStore.scanClient" :disabled="scanControlsDisabled" :options="[{ label: '本地绝区零', value: 'local' }, { label: '云绝区零', value: 'cloud' }, { label: '绝区零Beta（私服）', value: 'beta' }]" aria-label="扫描客户端" @update:value="value => inventoryStore.updateScanPreferences({ client: value })" /></div>
           </div>
           <div class="metric-grid ui-field-grid">
             <div class="metric" role="group" aria-label="扫描品质" data-layout-field>

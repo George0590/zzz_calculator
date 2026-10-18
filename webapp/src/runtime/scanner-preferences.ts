@@ -1,5 +1,5 @@
 export type ScannerPreferences = {
-  client: "local" | "cloud"
+  client: "local" | "cloud" | "beta"
   maxItems: number
   stopAtNonLevel15: boolean
   runAsAdmin: boolean
@@ -12,7 +12,7 @@ function normalizedPreferences(input: unknown): ScannerPreferences {
     ? input as Record<string, unknown>
     : {}
   return {
-    client: value.client === "cloud" ? "cloud" : "local",
+    client: value.client === "cloud" || value.client === "beta" ? value.client : "local",
     maxItems: typeof value.maxItems === "number"
       && Number.isInteger(value.maxItems)
       && value.maxItems >= 0

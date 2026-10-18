@@ -50,6 +50,10 @@ const SCAN_CLIENTS = {
     processName: "Zenless Zone Zero Cloud",
     visualProfileClient: "cloud",
   },
+  beta: {
+    processName: "ZenlessZoneZeroBeta",
+    visualProfileClient: "local",
+  },
 } as const
 
 type ScanStatus = "idle" | "connecting" | "waiting-helper" | "preparing" | "downloading" | "ready" | "scanning" | "stopping" | "review" | "complete" | "warning" | "error"
@@ -925,7 +929,7 @@ export const useInventoryStore = defineStore("inventory", {
         return
       }
       const session = createScanTelemetrySession({
-        client: this.scanClient,
+        client: SCAN_CLIENTS[this.scanClient].visualProfileClient,
         settings: {
           rarities: this.selectedScanRarities(),
           maxItems: Number(this.scanMaxItems) || 0,
@@ -1754,7 +1758,7 @@ export const useInventoryStore = defineStore("inventory", {
         this.scanTerminalHandledNonce = -1
         lastFailureTelemetryKey = ""
         activeScanTelemetry = createScanTelemetrySession({
-          client: request.client,
+          client: client.visualProfileClient,
           settings: {
             rarities,
             maxItems: request.maxItems,

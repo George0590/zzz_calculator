@@ -910,6 +910,45 @@ describe("optimizer store", () => {
     await runPromise
   })
 
+  it("shows provisional rankings without marking the run complete, and preserves their label on cancel", async () => {
+    const store = useOptimizerStore()
+    store.initialize(catalog)
+    const promise = store.run(catalog, inventoryStore(), optimizerInput())
+    const worker = MockWorker.instances[0]!
+    const id = worker.messages[0].runId
+    const currentResults = [{ rank: 1, score: 99, driveDiscs: [{ id: "candidate" }] }]
+    worker.emit({ type: "progress", runId: id, job: { status: "running", currentResults, percent: 10 } })
+    expect(store.status).toBe("running")
+    expect(store.resultsAreProvisional).toBe(true)
+    expect(store.resultSchemes[0].driveDiscs[0].id).toBe("candidate")
+    expect(store.results).toEqual([])
+    store.cancel()
+    await promise
+    expect(store.resultsAreProvisional).toBe(true)
+    store.reset()
+    expect(store.resultsAreProvisional).toBe(false)
+    expect(store.resultSchemes).toEqual([])
+  })
+
+  it("replaces provisional results with final results and resends in-place catalog changes", async () => {
+    const store = useOptimizerStore()
+    const mutableCatalog = { driveDiscSets: [{ id: "woodpecker_electro", value: 1 }], agentsMap: new Map([["a", { value: 1 }]]) }
+    store.initialize(mutableCatalog)
+    const first = store.run(mutableCatalog, inventoryStore(), optimizerInput())
+    const worker = MockWorker.instances[0]!
+    const id = worker.messages[0].runId
+    worker.emit({ type: "progress", runId: id, job: { currentResults: [{ rank: 1, score: 10 }] } })
+    worker.emit({ type: "complete", runId: id, result: { results: [{ rank: 1, score: 20 }], metrics: {} } })
+    await first
+    expect(store.resultsAreProvisional).toBe(false)
+    expect(store.resultSchemes[0].score).toBe(20)
+    mutableCatalog.agentsMap.get("a")!.value = 2
+    const second = store.run(mutableCatalog, inventoryStore(), optimizerInput())
+    expect(worker.messages.at(-1).catalog.agentsMap.get("a").value).toBe(2)
+    store.cancel()
+    await second
+  })
+
   it("terminates the active worker and resolves run immediately on cancel", async () => {
     const store = useOptimizerStore()
     store.initialize(catalog)

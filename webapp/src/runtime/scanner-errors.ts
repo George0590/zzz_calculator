@@ -135,7 +135,7 @@ export const SCANNER_ERROR_CATALOG: Record<string, FailureCatalogEntry> = {
   scan_request_invalid: failure("scan", "扫描请求无效", "网页发送的扫描参数无法被 Scanner 解析。", "请刷新网页并重试；仍然失败时请更新 Helper。", retryScan),
   scan_cancelled: failure("scan", "扫描已停止", "扫描任务已按请求停止。", "可以调整选项后重新开始扫描。", [{ kind: "retry_scan", label: "重新扫描" }], { severity: "warning" }),
   scan_stop_timeout: failure("scan", "停止扫描超时", "发出停止请求后 15 秒内没有收到 Scanner 回执。", "请重新连接 Helper；若 Scanner 仍在操作游戏，请关闭 Helper 后重试。", retryConnect),
-  game_not_found: failure("scan", "未找到绝区零窗口", "Scanner 没有找到所选客户端的游戏窗口。", "请启动游戏并打开驱动盘仓库；云游戏用户请切换客户端选项。", retryScan),
+  game_not_found: failure("scan", "未找到绝区零窗口", "Scanner 没有找到所选客户端的游戏窗口。", "请启动游戏并打开驱动盘仓库，然后选择对应客户端；Beta客户端请选择“绝区零Beta（私服）”。", retryScan),
   elevation_required: failure("scan", "需要处理扫描权限", "扫描器报告权限不足，可能是游戏权限较高，也可能是权限检测失败。", "扫描设置已保留。可请求以管理员权限重启；重启完成后请确认设置，再点击开始扫描。", [
     { kind: "restart_elevated", label: "以管理员权限重启" },
     { kind: "open_logs", label: "打开日志" },
