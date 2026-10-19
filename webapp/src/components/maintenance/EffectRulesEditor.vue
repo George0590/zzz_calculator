@@ -89,8 +89,18 @@ function editableValueKey(rule: any) {
   return rule.type === "stacked" && !stackedUsesActivationValue(rule) ? "valuePerStack" : "value"
 }
 
+function allowsOutOfCombatAnomalyCritTarget(rule: any) {
+  return rule?.type === "formula"
+    && formulaSourceKind(rule) === "outOfCombatStat"
+    && rule.stat === "anomalyCritRate"
+    && rule.source?.stat === "anomalyMastery"
+    && rule.formula?.valueUnit === "storedPercent"
+}
+
 function changeTarget(rule: any, kind: string) {
-  if (rule.type === "formula" && formulaSourceKind(rule) !== "runtime") {
+  if (allowsOutOfCombatAnomalyCritTarget(rule)) {
+    if (!['default', 'anomaly'].includes(kind)) return
+  } else if (rule.type === "formula" && formulaSourceKind(rule) !== "runtime") {
     rule.target = { kind: "default" }
     emit("change")
     return
@@ -205,7 +215,7 @@ function corePassiveScalingFieldOptions() {
   return [
     option("", "固定值"),
     ...fields.map(field => {
-      return option(field, `核心被动倍率 · ${({ assaultCritRatePct: "强击基础暴击率%", assaultCritRatePerAnomalyProficiencyPct: "每点精通增加强击暴击率%" } as Record<string, string>)[field] ?? statLabel(field, props.catalog?.meta)}`)
+      return option(field, `核心被动倍率 · ${({ searAnomalyCritDmgPct: "灼蚀异常暴伤%", anomalyProficiencyFlat: "核心异常精通", assaultCritRatePct: "强击基础暴击率%", assaultCritRatePerAnomalyProficiencyPct: "每点精通增加强击暴击率%" } as Record<string, string>)[field] ?? statLabel(field, props.catalog?.meta)}`)
     }),
   ]
 }
@@ -323,7 +333,7 @@ function setFormulaSourceKind(rule: any, value: string) {
       ? String(rule.source.stat)
       : "energyRegen"
     rule.scope = "inCombat"
-    rule.target = { kind: "default" }
+    if (!allowsOutOfCombatAnomalyCritTarget(rule)) rule.target = { kind: "default" }
     rule.source = {
       kind: "outOfCombatStat",
       stat,
@@ -671,7 +681,7 @@ function setRuleLabel(rule: any, value: string) {
       </header>
       <div class="effect-rule-grid">
         <label v-if="!simple" class="maintenance-field"><span>计算类型</span><NSelect :value="rule.type ?? 'fixed'" :options="EFFECT_TYPE_OPTIONS" :disabled="disabled" @update:value="changeType(rule, String($event))" /></label>
-      <label v-if="!simple" class="maintenance-field maintenance-field-wide"><span>增幅对象</span><NRadioGroup class="maintenance-target-mode" :value="targetMode(rule)" :disabled="disabled || (rule.type === 'formula' && formulaSourceKind(rule) !== 'runtime')" size="small"><NRadioButton v-for="item in TARGET_KIND_OPTIONS" :key="item.value" :value="item.value" :label="item.label" @click="changeTarget(rule, String(item.value))" /></NRadioGroup></label>
+      <label v-if="!simple" class="maintenance-field maintenance-field-wide"><span>增幅对象</span><NRadioGroup class="maintenance-target-mode" :value="targetMode(rule)" :disabled="disabled || (rule.type === 'formula' && formulaSourceKind(rule) !== 'runtime' && !allowsOutOfCombatAnomalyCritTarget(rule))" size="small"><NRadioButton v-for="item in TARGET_KIND_OPTIONS" :key="item.value" :value="item.value" :disabled="allowsOutOfCombatAnomalyCritTarget(rule) && !['default', 'anomaly'].includes(String(item.value))" :label="item.label" @click="changeTarget(rule, String(item.value))" /></NRadioGroup></label>
       <label v-if="!simple" class="maintenance-field"><span>规则生效范围</span><NSelect :value="ruleScope(rule)" :options="SCOPE_OPTIONS" :disabled="disabled || (rule.type === 'formula' && formulaSourceKind(rule) !== 'runtime')" @update:value="setRuleScope(rule, String($event))" /></label>
         <label class="maintenance-field" data-field-key="stat"><span>增幅类型</span><NSelect filterable :consistent-menu-width="false" :value="rule.stat" :options="statOptions(catalog, rule.target?.kind, rule.target?.settlementType)" :disabled="disabled || isInCombatFormulaRule(rule)" @update:value="changeStat(rule, String($event))" /></label>
         <label v-if="!simple" class="maintenance-field maintenance-field-wide"><span>效果名称</span><NInput :value="textOf(rule.label)" :disabled="disabled" placeholder="留空使用系统名称" @update:value="setRuleLabel(rule, String($event))" /></label>

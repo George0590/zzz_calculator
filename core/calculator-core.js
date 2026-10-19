@@ -58,6 +58,7 @@ import {
 } from "./potentialVision.js"
 import {
     anomalyReleaseProfile,
+    resolveReleaseSkillRef,
     evaluateAnomalyReleaseProfile,
     evaluateAnomalyReleaseProfileInterval,
     evaluateReleaseExpression,
@@ -89,6 +90,7 @@ import {
     isAllowedInCombatFormulaSourceType,
     isInCombatFormulaRule,
     isOutOfCombatFormulaRule,
+    isInitialMasteryAnomalyCritRule,
     materializeFormulaRuleForModificationLevel,
     migrateLegacyBloodMarrowWEngine,
 } from "./effectFormula.js"
@@ -1157,7 +1159,7 @@ function isRuleEventModifier(rule = {}) {
 }
 
 function isDeferredInCombatFormula(rule = {}, effect = {}, scope = "outOfCombat") {
-    return scope === "inCombat" && isInCombatFormulaRule(rule)
+    return scope === "inCombat" && (isInCombatFormulaRule(rule) || isInitialMasteryAnomalyCritRule(rule))
         && effectRuleScope(rule, effect) === "inCombat"
 }
 
@@ -1577,6 +1579,7 @@ function compileDenseCombatEffectEntry({
     const outOfCombatFormulas = []
     for (const rule of effectRules(effect)) {
         if (!isOutOfCombatFormulaRule(rule)
+            || isInitialMasteryAnomalyCritRule(rule)
             || !effectRuleEnabled(rule, normalized.runtime)
             || !effectRuleMatchesScope(rule, effect, "inCombat")
             || !effectRuleRequirementMatches(rule, { agent, deferOutOfCombatStatRequirements: true })) continue
@@ -2667,10 +2670,11 @@ function calculateCombatPanelFromTotals(agent, outOfCombat, bonusTotals) {
 
 function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
     const rule = entry?.rule
-    if (!isInCombatFormulaRule(rule)
+    const initialCrit = isInitialMasteryAnomalyCritRule(rule)
+    if ((!isInCombatFormulaRule(rule) && !initialCrit)
         || !isAllowedInCombatFormulaSourceType(entry?.sourceType)
         || !isAllowedInCombatFormulaSourceStat(rule?.source?.stat)
-        || !isAllowedInCombatFormulaOutput(rule, entry?.sourceType)) {
+        || (!initialCrit && !isAllowedInCombatFormulaOutput(rule, entry?.sourceType))) {
         return null
     }
     if (!effectRuleRequirementMatches(rule, {
@@ -2682,7 +2686,12 @@ function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
     const coverage = coverageFromRuntime(rule, entry.effect, entry.runtimeInput)
     let evaluated
     try {
-        evaluated = evaluateInCombatFormulaRule(rule, panel)
+        evaluated = initialCrit
+            ? resolveEffectRule(rule, entry.effect, entry.runtimeInput, {
+                agent: entry.agent, scope: "inCombat", outOfCombat: { panel: outOfCombatPanel },
+            })
+            : evaluateInCombatFormulaRule(rule, panel)
+        if (initialCrit) evaluated.value = Number(evaluated.formulaValue ?? 0) / 100
     } catch {
         return null
     }
@@ -3436,7 +3445,8 @@ function generatedSharpDamageComponentEvents(event = {}) {
     })
 }
 
-function anomalyReleaseEventData(event = {}, agent = {}, damageElement = "physical", options = {}) {
+
+function anomalyReleaseEventData(event = {}, agent = {}, damageElement = "physical", options = {}, catalog = {}) {
     const velina = isVelinaReleaseAgent(agent)
     const requestedTriggerAgentId = velina
         ? String(agent.id ?? "")
@@ -3450,20 +3460,23 @@ function anomalyReleaseEventData(event = {}, agent = {}, damageElement = "physic
     if (velina && !VELINA_RELEASE_SOURCES.some(source => source.value === requestedProfileId)) {
         throw new Error("维琳娜异放来源不存在。")
     }
-    const profile = anomalyReleaseProfile(agent, requestedProfileId, damageElement)
+    const profile = anomalyReleaseProfile(agent, requestedProfileId, damageElement, options.cinemaLevel ?? 0)
     if (!profile) {
         throw new Error(`角色 ${agent.id ?? "unknown"} 暂不支持 ${damageElement} 属性异放。`)
     }
-    const sourceAgentId = velina
+    const sourceAgentId = (velina || agent.id === "fioni")
         ? String(agent.id ?? "")
         : String(event.anomalySource?.actorRef?.agentId ?? agent.id ?? "")
-    const sourceSnapshot = velina ? null : normalizeAnomalySourceSnapshot(event.anomalySource?.snapshot)
+    const sourceSnapshot = (velina || agent.id === "fioni") ? null : normalizeAnomalySourceSnapshot(event.anomalySource?.snapshot)
     if (sourceAgentId !== String(agent.id ?? "") && (!sourceSnapshot || sourceSnapshot.agentId !== sourceAgentId)) {
         throw new Error("外部原异常施加者必须提供与角色一致的冻结快照。")
     }
+    const releaseSkill = resolveReleaseSkillRef(catalog, agent, profile.releaseSkillRef ?? event.releaseSkillRef, options)
     return {
         profile,
         coreScalingRow: corePassiveScalingRow(agent, options.coreSkillLevel),
+        ...(releaseSkill ?? {}),
+        releaseAnomalyCritDmgBonus: Number(profile.critDmgBonus ?? 0),
         triggerActorRef: {
             agentId: requestedTriggerAgentId,
             profileId: profile.id,
@@ -3538,7 +3551,7 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
     }
     if (event.normalized === true) {
         const damageElement = DAMAGE_ELEMENTS.includes(event.damageElement) ? event.damageElement : "physical"
-        const release = releaseSettlement ? anomalyReleaseEventData(event, agent, damageElement, options) : null
+        const release = releaseSettlement ? anomalyReleaseEventData(event, agent, damageElement, options, catalog) : null
         return {
             ...event,
             id: String(event.id ?? `anomaly-${index + 1}`),
@@ -3562,6 +3575,10 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
             ...(release ? {
                 releaseProfile: release.profile,
                 releaseCoreScalingRow: release.coreScalingRow,
+                ...(release.releaseSkillRef ? { releaseSkillRef: release.releaseSkillRef } : {}),
+                ...(release.releaseSkillSource ? { releaseSkillSource: release.releaseSkillSource } : {}),
+                ...(release.releaseSkillMultiplier !== undefined ? { releaseSkillMultiplier: release.releaseSkillMultiplier } : {}),
+                releaseAnomalyCritDmgBonus: release.releaseAnomalyCritDmgBonus,
                 triggerActorRef: release.triggerActorRef,
                 anomalySource: release.anomalySource,
             } : {}),
@@ -3576,7 +3593,7 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
         : event.anomalyVariant === "polarizedAssault" && effect.id === "assault"
             ? "polarizedAssault"
             : "normal"
-    const release = releaseSettlement ? anomalyReleaseEventData(event, agent, effect.element, options) : null
+    const release = releaseSettlement ? anomalyReleaseEventData(event, agent, effect.element, options, catalog) : null
     const usesDefaultProcCount = event.procCount === undefined || event.procCount === null || event.procCount === ""
     const procCount = releaseSettlement
         ? 1
@@ -3602,6 +3619,10 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
         ...(release ? {
             releaseProfile: release.profile,
             releaseCoreScalingRow: release.coreScalingRow,
+            ...(release.releaseSkillRef ? { releaseSkillRef: release.releaseSkillRef } : {}),
+            ...(release.releaseSkillSource ? { releaseSkillSource: release.releaseSkillSource } : {}),
+            ...(release.releaseSkillMultiplier !== undefined ? { releaseSkillMultiplier: release.releaseSkillMultiplier } : {}),
+            releaseAnomalyCritDmgBonus: release.releaseAnomalyCritDmgBonus,
             triggerActorRef: release.triggerActorRef,
             anomalySource: release.anomalySource,
         } : {}),
@@ -4297,6 +4318,7 @@ function releaseBreakdownForEvent(event, panel = {}, outOfCombatPanel = panel, r
         trigger: { inCombatPanel: panel, outOfCombatPanel },
         releaseModifiers,
         coreScalingRow: event.releaseCoreScalingRow,
+        releaseSkillMultiplier: event.releaseSkillMultiplier,
         event,
         eventElement: event.damageElement,
     })
@@ -4348,7 +4370,11 @@ export function resolveAnomalyCritForEvent(event, bonusTotals = {}, panel = {}, 
             ? releaseCritRateBonusForEvent(event, panel, outOfCombatPanel)
             : 0
     const critRate = clampNumber(baseCritRate + convertedCritRate, 0, 1)
-    const critDmg = Math.max(0, sumDamageModifiers(bonusTotals, event, "anomalyCritDmg"))
+    const critDmg = Math.max(
+        0,
+        sumDamageModifiers(bonusTotals, event, "anomalyCritDmg")
+            + Number(event.releaseAnomalyCritDmgBonus ?? 0),
+    )
     return {
         baseCritRate,
         convertedCritRate,
@@ -4661,7 +4687,7 @@ function anomalyDamageWhiteBoxRows({ event, atk, selectedDmgBonus, skillDamageBo
     const fixedReleaseSource = isRelease
         && releaseBreakdown?.resultMode === "fixedAnomalyMultiplier"
         && releaseBreakdown.trace?.whiteBoxRole === "conversionSource"
-        && ["constant", "coreSkillScaling", "triggerStat"].includes(releaseBreakdown.trace.kind)
+        && ["constant", "coreSkillScaling", "triggerStat", "skillMultiplier"].includes(releaseBreakdown.trace.kind)
         && !releaseBreakdown.trace.children?.length
         ? releaseBreakdown.trace
         : null
@@ -6503,6 +6529,8 @@ function compileDamageScoreEvent(event = {}) {
         anomalyVariant: event.anomalyVariant ?? "normal",
         releaseProfile: event.releaseProfile ?? null,
         releaseCoreScalingRow: event.releaseCoreScalingRow ?? null,
+        releaseSkillMultiplier: Number(event.releaseSkillMultiplier ?? 0),
+        releaseAnomalyCritDmgBonus: Number(event.releaseAnomalyCritDmgBonus ?? 0),
         triggerActorRef: event.triggerActorRef ?? null,
         anomalySource: event.anomalySource ?? null,
         fixedMultiplier: Number(event.fixedMultiplier ?? 0),
@@ -6916,7 +6944,7 @@ function denseAnomalyCritMultiplier(compiledEvent, sums, panel = {}, outOfCombat
             ? releaseCritRateBonusForEvent(compiledEvent, panel, outOfCombatPanel)
             : 0
     const critRate = clampNumber(baseCritRate + convertedCritRate, 0, 1)
-    const critDmg = Math.max(0, denseModifierSum(sums, "anomalyCritDmg"))
+    const critDmg = Math.max(0, denseModifierSum(sums, "anomalyCritDmg") + Number(compiledEvent.releaseAnomalyCritDmgBonus ?? 0))
     return anomalyCritMultiplierForMode(critRate, critDmg, compiledEvent.critMode)
 }
 
@@ -9399,6 +9427,8 @@ export function createInCombatPanelCalculator(catalog, input) {
                     elapsedSeconds: event.elapsedSeconds,
                     releaseProfile: event.releaseProfile,
                     releaseCoreScalingRow: event.releaseCoreScalingRow,
+                    releaseSkillMultiplier: event.releaseSkillMultiplier,
+                    releaseAnomalyCritDmgBonus: event.releaseAnomalyCritDmgBonus,
                     triggerActorRef: event.triggerActorRef,
                     anomalySource: event.anomalySource,
                     stunned: event.stunned,
@@ -9461,7 +9491,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                         1 + (event.isTurbulence ? 0 : denseModifierSum(sums, "alienationCoefficientBonus")),
                     ),
                     anomalyCritRate: denseModifierSum(sums, "anomalyCritRate"),
-                    anomalyCritDmg: Math.max(0, denseModifierSum(sums, "anomalyCritDmg")),
+                    anomalyCritDmg: Math.max(0, denseModifierSum(sums, "anomalyCritDmg") + Number(event.releaseAnomalyCritDmgBonus ?? 0)),
                     anomalyCritRatePerInitialMasteryAbove100: denseModifierSum(
                         sums,
                         "anomalyCritRatePerInitialMasteryAbove100",
@@ -9736,6 +9766,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                                 outOfCombatPanel: formulaOutOfCombatIntervalPanel,
                             },
                             coreScalingRow: event.releaseCoreScalingRow,
+                            releaseSkillMultiplier: event.releaseSkillMultiplier,
                             releaseModifiers: {
                                 releaseProficiencyYieldBonus: event.releaseProficiencyYieldBonus,
                             },
@@ -9773,6 +9804,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                                         outOfCombatPanel: formulaOutOfCombatIntervalPanel,
                                     },
                                     coreScalingRow: event.releaseCoreScalingRow,
+                                    releaseSkillMultiplier: event.releaseSkillMultiplier,
                                     event,
                                     eventElement: event.damageElement,
                                 }).max)

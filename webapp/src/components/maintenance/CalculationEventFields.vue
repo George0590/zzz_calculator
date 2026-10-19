@@ -156,7 +156,7 @@ function groupOptions() {
 }
 
 function releaseProfileOptions() {
-  return anomalyReleaseProfiles(props.agent).map((profile: any) => option(profile.id, textOf(profile.name) || profile.id))
+  return anomalyReleaseProfiles(props.agent, 6).map((profile: any) => option(profile.id, textOf(profile.name) || profile.id))
 }
 
 function velinaReleaseSourceOptions() {
@@ -267,7 +267,7 @@ function critModeOptions() {
     </template>
     <template v-if="visibleKind() === 'release'">
       <label v-if="!isVelinaRelease()" class="maintenance-field"><span>原异常</span><NSelect filterable v-model:value="event.anomalyEffect" :options="anomalyOptions(catalog)" :disabled="disabled" @update:value="emit('change')" /></label>
-      <label class="maintenance-field"><span>{{ isVelinaRelease() ? '异放来源' : '倍率方案' }}</span><NSelect v-if="isVelinaRelease()" v-model:value="event.releaseSource" :options="velinaReleaseSourceOptions()" :disabled="disabled" @update:value="emit('change')" /><NSelect v-else v-model:value="event.triggerActorRef.profileId" :options="releaseProfileOptions()" :disabled="disabled" @update:value="emit('change')" /></label>
+      <label class="maintenance-field"><span>{{ isVelinaRelease() ? '异放来源' : '倍率方案' }}</span><NSelect v-if="isVelinaRelease()" v-model:value="event.releaseSource" :options="velinaReleaseSourceOptions()" :disabled="disabled" @update:value="emit('change')" /><NSelect v-else v-model:value="event.triggerActorRef.profileId" :options="releaseProfileOptions()" :disabled="disabled" @update:value="Object.assign(event, normalizeAnomalyReleaseEventForAgent(event, agent)); emit('change')" /></label>
       <label v-if="!isVelinaRelease()" class="maintenance-field"><span>异放触发者</span><NInput :value="textOf(agent?.name)" disabled /></label>
       <label v-if="!isVelinaRelease()" class="maintenance-field"><span>原异常施加者</span><NInput :value="textOf(agent?.name)" disabled /></label>
     </template>

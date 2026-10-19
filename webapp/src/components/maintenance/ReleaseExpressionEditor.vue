@@ -8,7 +8,7 @@ const props = defineProps<{ node: any, coreScaling?: any, disabled?: boolean, de
 const emit = defineEmits<{ change: [] }>()
 
 const nodeTypeOptions = [
-  option("constant", "常量"), option("triggerStat", "触发者属性"), option("coreSkillScaling", "核心技倍率表"), option("releaseModifier", "异放事件修正"), option("condition", "事件条件"),
+  option("skillMultiplier", "来源技能异放倍率"), option("constant", "常量"), option("triggerStat", "触发者属性"), option("coreSkillScaling", "核心技倍率表"), option("releaseModifier", "异放事件修正"), option("condition", "事件条件"),
   option("add", "相加"), option("subtract", "相减"), option("multiply", "相乘"), option("divide", "相除"),
   option("max", "取最大值"), option("min", "取最小值"), option("clamp", "限制范围"), option("floor", "向下取整"),
 ]
@@ -43,6 +43,8 @@ function replaceNode(type: string) {
     Object.assign(props.node, { kind: type, panel: "outOfCombat", stat: "anomalyMastery", unit: "raw" })
   } else if (type === "coreSkillScaling") {
     Object.assign(props.node, { kind: type, field: coreFieldOptions()[0]?.value ?? "", key: "eventElement", unit: "percent" })
+  } else if (type === "skillMultiplier") {
+    Object.assign(props.node, { kind: type, unit: "percent", whiteBoxRole: "conversionSource" })
   } else if (type === "releaseModifier") {
     Object.assign(props.node, { kind: type, modifier: "releaseProficiencyYieldBonus", unit: "decimal" })
   } else if (type === "condition") {

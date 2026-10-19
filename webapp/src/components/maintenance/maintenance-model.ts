@@ -337,7 +337,12 @@ function normalizeEffectRule(rule: any) {
         : "storedValue"
     } else if (rule.source.kind === "outOfCombatStat") {
       rule.scope = "inCombat"
-      rule.target = { kind: "default" }
+      const anomalyCritTarget = rule.stat === "anomalyCritRate"
+        && rule.source.stat === "anomalyMastery"
+        && rule.formula?.valueUnit === "storedPercent"
+        && rule.target?.kind === "anomaly"
+        && ["attribute", "release"].includes(rule.target?.settlementType)
+      if (!anomalyCritTarget) rule.target = { kind: "default" }
       rule.source.variable = "x"
       rule.source.unit ??= ["critRate", "critDmg", "energyRegen", "penRatio"].includes(rule.source.stat)
         ? "storedPercent"

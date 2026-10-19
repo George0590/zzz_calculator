@@ -98,7 +98,7 @@ function normalizeEntry(entry: any) {
         Object.keys(event).forEach(key => delete event[key])
         Object.assign(event, normalized)
       } else {
-        const profile = anomalyReleaseProfile(props.agent, event.triggerActorRef?.profileId)
+        const profile = anomalyReleaseProfile(props.agent, event.triggerActorRef?.profileId, "", Number(entry.cinemaLevel ?? 0))
         event.kind = "anomaly"
         event.settlementType = "release"
         event.triggerActorRef = {

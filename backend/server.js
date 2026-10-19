@@ -1308,6 +1308,7 @@ function cleanCalculationEvent(event = {}, index = 0, options = {}) {
                 settlementType: "release",
                 anomalyEffect: String(event.anomalyEffect ?? "").trim(),
                 triggerActorRef: { agentId: triggerAgentId, profileId },
+                ...(cleanCalculationSkillRef(event.releaseSkillRef) ? { releaseSkillRef: cleanCalculationSkillRef(event.releaseSkillRef) } : {}),
                 anomalySource: {
                     actorRef: { agentId: sourceAgentId },
                     ...(snapshot ? { snapshot } : {}),

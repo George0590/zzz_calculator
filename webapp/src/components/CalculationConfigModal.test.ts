@@ -2083,3 +2083,23 @@ describe("CalculationConfigModal", () => {
     expect(saved.events[0]).not.toHaveProperty("sharpScenario")
   })
 })
+
+it('previews Fioni skill-bound release, switches profiles and preserves the choice on save', async () => {
+ const agent=(agentsData as any).agents.find((a:any)=>a.id==='fioni')
+ const wrapper=mountModal({agent,cinemaLevel:4,damageConfig:{...agent.defaultCalculationConfig,mode:'anomaly'}})
+ await openModal(wrapper)
+ expect(wrapper.text()).toContain('445%')
+ const source=wrapper.find('[data-layout-field="fioni-release-profile"]')
+ expect(wrapper.findAll('[data-layout-field="fioni-release-profile"]')).toHaveLength(1)
+ const selector=selectComponentWithOption(wrapper,'fioni_soul_searching_blaze_release')!
+ await selector.vm.$emit('update:value','fioni_soul_searching_blaze_release')
+ await nextTick()
+ expect(wrapper.text()).toContain('597%')
+ await wrapper.setProps({skillLevels:{basic:16,chain:16}})
+ expect(wrapper.text()).toContain('705%')
+ const saved=await saveModal(wrapper)
+ expect(saved.events[0].releaseSkillRef.categoryId).toBe('chain')
+ expect(saved.events[0].triggerActorRef.profileId).toBe('fioni_soul_searching_blaze_release')
+ expect(wrapper.find('[aria-label="原异常施加者"]').exists()).toBe(false)
+ expect(source.exists()).toBe(true)
+})

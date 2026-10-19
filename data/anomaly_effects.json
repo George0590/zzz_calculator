@@ -31,7 +31,9 @@
       },
       "element": "fire",
       "baseMultiplier": 0.5,
-      "defaultProcCount": 20
+      "defaultProcCount": 20,
+      "baseDurationSeconds": 10,
+      "tickIntervalSeconds": 0.5
     },
     {
       "id": "shock",

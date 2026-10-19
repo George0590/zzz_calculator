@@ -23,6 +23,7 @@ import {
   disorderEffectLabel,
   formatPercent,
   labelOf,
+  textOf,
   skillCategoryLabel,
   skillRowLabel,
 } from "@/utils/format"
@@ -58,7 +59,9 @@ import {
   anomalyReleaseProfile,
   anomalyReleaseProfiles,
   evaluateAnomalyReleaseProfile,
+  resolveReleaseSkillRef,
   isAriaReleaseSourceLocked,
+  isFioniReleaseSourceLocked,
   isVelinaReleaseAgent,
   isReleaseSettlement,
   normalizeAnomalyReleaseEventForAgent,
@@ -131,10 +134,15 @@ const sharpCritModeOptions = [
   { label: "一次锐暴", value: "sharpCrit" },
   { label: "二次锐暴", value: "lacerationCrit" },
 ]
-const releaseProfiles = computed(() => anomalyReleaseProfiles(props.agent))
+const releaseProfiles = computed(() => anomalyReleaseProfiles(props.agent, props.cinemaLevel ?? 0))
 const supportsRelease = computed(() => releaseProfiles.value.length > 0)
 const supportsLuminescence = computed(() => props.agent?.id === "remielle_dan" || props.agent?.luminescenceModel?.status === "implemented")
 const releaseSourceLocked = computed(() => isAriaReleaseSourceLocked(props.agent))
+const releaseSourceReadOnly = computed(() => releaseSourceLocked.value || isFioniReleaseSourceLocked(props.agent))
+const fioniReleaseProfileOptions = computed(() => releaseProfiles.value.map((profile: any) => ({
+  label: textOf(profile.name) || profile.id,
+  value: profile.id,
+})))
 const isVelinaRelease = computed(() => isVelinaReleaseAgent(props.agent))
 const isWindAgent = computed(() => hasWindAttribute(props.agent))
 const velinaReleaseSourceOptions = computed(() => VELINA_RELEASE_SOURCES.map(source => ({
@@ -365,7 +373,7 @@ function releaseBreakdown(event: any) {
   const profileId = isVelinaReleaseAgent(props.agent)
     ? event?.releaseSource
     : event?.triggerActorRef?.profileId
-  const profile = anomalyReleaseProfile(props.agent, profileId, effect?.element)
+  const profile = anomalyReleaseProfile(props.agent, profileId, effect?.element, props.cinemaLevel ?? 0)
   if (!effect || !profile) return null
   try {
     const releaseModifiers = releaseModifierValues(event, effect)
@@ -377,6 +385,7 @@ function releaseBreakdown(event: any) {
       },
       releaseModifiers,
       coreScalingRow: corePassiveScalingRow(props.agent, props.releaseContext?.coreSkillLevel),
+      releaseSkillMultiplier: releaseSkillMultiplierFor(profile, event),
       event,
       eventElement: effect.element,
     })
@@ -397,6 +406,7 @@ function releaseBreakdown(event: any) {
       snapshot: event?.anomalySource?.snapshot ?? null,
       conversionSourceLabel: conversionSource?.label ?? "转换数据来源",
       conversionSourceValue: Number(conversionSource?.rawValue ?? conversionSource?.value ?? 0),
+      conversionSourceUnit: conversionSource?.unit,
       hasStunnedRatio: Boolean(stunnedCondition),
       stunnedRatio: stunnedCondition ? Number(stunnedCondition.value ?? 1) : 1,
       hasProficiencyYieldModifier: Number(proficiencyYieldModifier?.modifierBonus ?? 0) !== 0,
@@ -405,6 +415,20 @@ function releaseBreakdown(event: any) {
   } catch {
     return null
   }
+}
+
+function releaseSkillMultiplierFor(profile: any, event: any) {
+  return resolveReleaseSkillRef({ agentSkills: props.skillCatalog ? [props.skillCatalog] : [] }, props.agent,
+    profile?.releaseSkillRef ?? event?.releaseSkillRef, { skillLevelsByCategory: props.skillLevels, coreSkillLevel: props.releaseContext?.coreSkillLevel })?.releaseSkillMultiplier
+}
+
+function updateFioniReleaseProfile(profileId: string) {
+  const profile = anomalyReleaseProfile(props.agent, profileId, "", props.cinemaLevel ?? 0)
+  if (!profile || !selectedEvent.value) return
+  updateSelectedEvent({
+    triggerActorRef: { agentId: String(props.agent?.id ?? ""), profileId: profile.id },
+    releaseSkillRef: profile.releaseSkillRef ? { ...profile.releaseSkillRef } : undefined,
+  }, { clearLabel: true })
 }
 
 function releaseTraceNode(trace: any, predicate: (value: any) => boolean): any | null {
@@ -492,9 +516,16 @@ function anomalyCritPreviewEvent(event: any) {
     damageElement: effect?.element ?? damageElementForAgent(props.agent),
     stunned: eventStunValue(event),
     releaseProfile: settlementType === "release"
-      ? anomalyReleaseProfile(props.agent, isVelinaRelease.value ? event.releaseSource : event.triggerActorRef?.profileId, effect?.element)
+      ? anomalyReleaseProfile(props.agent, isVelinaRelease.value ? event.releaseSource : event.triggerActorRef?.profileId, effect?.element, props.cinemaLevel ?? 0)
       : undefined,
     releaseCoreScalingRow: settlementType === "release" ? corePassiveScalingRow(props.agent, props.releaseContext?.coreSkillLevel) : undefined,
+    ...(settlementType === "release" ? {
+      releaseSkillMultiplier: releaseSkillMultiplierFor(
+        anomalyReleaseProfile(props.agent, event.triggerActorRef?.profileId, effect?.element, props.cinemaLevel ?? 0),
+        event,
+      ),
+      releaseAnomalyCritDmgBonus: Number(anomalyReleaseProfile(props.agent, event.triggerActorRef?.profileId, effect?.element, props.cinemaLevel ?? 0)?.critDmgBonus ?? 0),
+    } : {}),
   }
 }
 
@@ -1045,7 +1076,7 @@ function normalizeDraftAnomalyEffects() {
       return cleanStoredReactiveEvent(normalizeTurbulenceEditorEvent(event, props.agent, props.meta), props.agent)
     }
     if (release) {
-      return normalizeAnomalyReleaseEventForAgent(normalized, props.agent)
+      return normalizeAnomalyReleaseEventForAgent(normalized, props.agent, { cinemaLevel: props.cinemaLevel ?? 0 })
     }
     return normalized
   }).filter(Boolean)
@@ -1128,8 +1159,8 @@ function updateSelectedEvent(patch: any, options: { clearLabel?: boolean } = {})
       return event
     }
     const merged = { ...event, ...patch }
-    const next = isVelinaRelease.value && isReleaseSettlement(merged)
-      ? normalizeAnomalyReleaseEventForAgent(merged, props.agent)
+    const next = isReleaseSettlement(merged)
+      ? normalizeAnomalyReleaseEventForAgent(merged, props.agent, { cinemaLevel: props.cinemaLevel ?? 0 })
       : merged
     if (options.clearLabel) {
       delete next.label
@@ -1163,7 +1194,7 @@ function newEvent(kind: string) {
   }
   if (kind === "anomaly") {
     const releaseProfile = isVelinaRelease.value || !hasAdminDefaultCalculation(props.agent, props.cinemaLevel ?? 0, props.potentialLevel ?? 0)
-      ? anomalyReleaseProfile(props.agent, "", damageElementForAgent(props.agent))
+      ? anomalyReleaseProfile(props.agent, "", damageElementForAgent(props.agent), props.cinemaLevel ?? 0)
       : null
     if (releaseProfile) {
       return normalizeAnomalyReleaseEventForAgent({
@@ -1175,7 +1206,7 @@ function newEvent(kind: string) {
         stunned: true,
         triggerActorRef: { agentId: String(props.agent?.id ?? ""), profileId: releaseProfile.id },
         anomalySource: { actorRef: { agentId: String(props.agent?.id ?? "") } },
-      }, props.agent)
+      }, props.agent, { cinemaLevel: props.cinemaLevel ?? 0 })
     }
     return { id, kind, settlementType: "attribute", anomalyEffect: defaultAgentEffectId("attribute"), procCount: 1, count: 1, stunned: true }
   }
@@ -1440,7 +1471,7 @@ function updateAnomalySettlementType(value: string) {
   }
   if (value === "release") {
     if (!supportsRelease.value) return
-    const profile = anomalyReleaseProfile(props.agent, "", damageElementForAgent(props.agent)) ?? releaseProfiles.value[0]
+    const profile = anomalyReleaseProfile(props.agent, "", damageElementForAgent(props.agent), props.cinemaLevel ?? 0) ?? releaseProfiles.value[0]
     const releaseEvent = normalizeAnomalyReleaseEventForAgent({
       ...selectedEvent.value,
       settlementType: "release",
@@ -1448,7 +1479,7 @@ function updateAnomalySettlementType(value: string) {
       ...(isVelinaRelease.value ? { releaseSource: "broad_vortex" } : {}),
       triggerActorRef: { agentId: String(props.agent?.id ?? ""), profileId: String(profile?.id ?? "") },
       anomalySource: { actorRef: { agentId: String(props.agent?.id ?? "") } },
-    }, props.agent)
+    }, props.agent, { cinemaLevel: props.cinemaLevel ?? 0 })
     updateSelectedEvent({ ...releaseEvent, ...luminescenceFieldsToClear() }, { clearLabel: true })
     return
   }
@@ -1849,7 +1880,7 @@ function save() {
                   <NSelect v-else :value="selectedEvent?.releaseSource ?? 'broad_vortex'" :options="velinaReleaseSourceOptions" aria-label="异放来源" @update:value="updateSelectedEvent({ releaseSource: String($event), anomalyEffect: 'wind_corrosion' }, { clearLabel: true })" />
                 </div>
               </div>
-              <div v-if="isReleaseSettlement(selectedEvent) && !isVelinaRelease" class="metric calculation-editor-field calculation-editor-field-wide ui-field ui-field--wide" data-layout-field="release-source">
+              <div v-if="isReleaseSettlement(selectedEvent) && !isVelinaRelease && !isFioniReleaseSourceLocked(agent)" class="metric calculation-editor-field calculation-editor-field-wide ui-field ui-field--wide" data-layout-field="release-source">
                 <span class="metric-title">原异常施加者</span>
                 <div class="metric-value">
                   <span v-if="isAdminDefaultMode || releaseSourceLocked" class="calculation-readonly-value release-source-readonly">
@@ -1859,7 +1890,14 @@ function save() {
                   <NSelect v-else :value="selectedEvent?.anomalySource?.actorRef?.agentId" :options="releaseSourceOptions" filterable aria-label="原异常施加者" @update:value="updateReleaseSourceAgent(String($event))" />
                 </div>
               </div>
-              <div v-if="isReleaseSettlement(selectedEvent) && !isVelinaRelease && !releaseSourceLocked" class="metric calculation-editor-field calculation-editor-field-wide ui-field ui-field--wide" data-layout-field="release-snapshot">
+              <div v-if="isReleaseSettlement(selectedEvent) && isFioniReleaseSourceLocked(agent)" class="metric calculation-editor-field calculation-editor-field-wide ui-field ui-field--wide" data-layout-field="fioni-release-profile">
+                <span class="metric-title">异放来源</span>
+                <div class="metric-value">
+                  <span v-if="isAdminDefaultMode" class="calculation-readonly-value">{{ optionLabel(fioniReleaseProfileOptions, selectedEvent?.triggerActorRef?.profileId ?? '') }}</span>
+                  <NSelect v-else :value="selectedEvent?.triggerActorRef?.profileId" :options="fioniReleaseProfileOptions" aria-label="菲欧妮异放来源" @update:value="updateFioniReleaseProfile(String($event))" />
+                </div>
+              </div>
+              <div v-if="isReleaseSettlement(selectedEvent) && !isVelinaRelease && !releaseSourceReadOnly" class="metric calculation-editor-field calculation-editor-field-wide ui-field ui-field--wide" data-layout-field="release-snapshot">
                 <span class="metric-title">来源快照</span>
                 <div class="metric-value release-snapshot-value">
                   <span class="calculation-readonly-value">{{ releaseSnapshotTime(selectedEvent?.anomalySource?.snapshot) }}</span>
@@ -1997,12 +2035,13 @@ function save() {
                 <div>
                   <strong id="release-explanation-title">异放倍率说明</strong>
                   <p v-if="isVelinaRelease">使用维琳娜当前面板结算风属性异放，倍率由所选异放来源决定。</p>
+                  <p v-else-if="isFioniReleaseSourceLocked(agent)">使用菲欧妮当前面板结算所选属性异放，技能倍率随工作台对应技能等级更新。</p>
                   <p v-else>{{ selectedReleaseBreakdown.sourceLabel }}提供原异常单次倍率与伤害快照，{{ selectedReleaseBreakdown.triggerLabel }}提供角色专属异放倍率。</p>
                   <p v-if="releaseSourceLocked">{{ ARIA_RELEASE_CORE_DESCRIPTION }}</p>
                 </div>
               </div>
               <dl class="disorder-explanation-metrics release-explanation-metrics">
-                <div><dt>{{ selectedReleaseBreakdown.conversionSourceLabel }}</dt><dd>{{ formatReleaseValue(selectedReleaseBreakdown.conversionSourceValue) }}</dd></div>
+                <div><dt>{{ selectedReleaseBreakdown.conversionSourceLabel }}</dt><dd>{{ formatReleaseValue(selectedReleaseBreakdown.conversionSourceValue) }}{{ selectedReleaseBreakdown.conversionSourceUnit === "percent" ? "%" : "" }}</dd></div>
                 <div v-if="selectedReleaseBreakdown.hasProficiencyYieldModifier"><dt>异放精通收益修正</dt><dd>× {{ formatReleaseValue(selectedReleaseBreakdown.proficiencyYieldFactor) }}</dd></div>
                 <div v-if="selectedReleaseBreakdown.hasStunnedRatio"><dt>异放失衡倍率修正</dt><dd>× {{ formatReleaseValue(selectedReleaseBreakdown.stunnedRatio) }}</dd></div>
                 <div><dt>异放最终倍率</dt><dd>{{ formatDisorderMultiplier(selectedReleaseBreakdown.currentMultiplier) }}</dd></div>

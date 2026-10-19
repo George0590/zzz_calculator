@@ -35,6 +35,13 @@ export function isOutOfCombatFormulaRule(rule = {}) {
     return rule?.type === "formula" && rule?.source?.kind === "outOfCombatStat"
 }
 
+export function isInitialMasteryAnomalyCritRule(rule = {}) {
+    return isOutOfCombatFormulaRule(rule) && rule.source?.stat === "anomalyMastery"
+        && rule.source?.unit === "storedValue" && rule.stat === "anomalyCritRate"
+        && rule.target?.kind === "anomaly" && ["attribute", "release"].includes(rule.target.settlementType)
+        && rule.formula?.valueUnit === "storedPercent" && (rule.mode ?? "flat") === "flat"
+}
+
 // A deliberately small, monotone subset of the existing expression language.
 // Preserve the interpreter's operation order, including floor at FP boundaries.
 // Unsupported expressions must retain the ordinary calculator fallback.
