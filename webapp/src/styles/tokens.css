@@ -81,25 +81,23 @@ textarea {
 }
 
 .n-select .n-base-suffix {
-  right: 2px;
+  right: 1px;
   z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: calc(var(--n-height) - 4px);
+  width: 28px;
+  height: calc(var(--n-height) - 2px);
   box-sizing: border-box;
-  border-left: 1px solid #94a3b8;
   border-radius: 0 4px 4px 0;
-  background: #eef2f7;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  background: transparent;
+  transition: background-color 0.2s ease;
 }
 
 .n-select .n-base-selection:not(.n-base-selection--disabled):hover .n-base-suffix,
 .n-select .n-base-selection--focus .n-base-suffix,
 .n-select .n-base-selection--active .n-base-suffix {
-  border-left-color: #93c5fd;
-  background: #eaf2ff;
+  background: var(--app-blue-soft);
 }
 
 .n-select .n-base-selection:not(.n-base-selection--disabled):hover .n-base-suffix__arrow,
@@ -109,8 +107,7 @@ textarea {
 }
 
 .n-select .n-base-selection--disabled .n-base-suffix {
-  border-left-color: #cbd5e1;
-  background: #e9eef4;
+  background: transparent;
   cursor: not-allowed;
 }
 
@@ -165,6 +162,7 @@ textarea {
 
 /* 主导航是一条分段轨道：当前页是浮起的白色块，其余为文字 */
 .nav {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -173,7 +171,34 @@ textarea {
   background: var(--app-panel-sunken);
 }
 
+/* 当前页的白色滑块，由 App.vue 量出位置；切换页面时滑过去 */
+.nav-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  z-index: 0;
+  border-radius: 999px;
+  background: var(--app-panel);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.03);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, width;
+}
+
+.nav-indicator.is-visible {
+  opacity: 1;
+}
+
+.nav-indicator.is-animated {
+  transition:
+    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .nav a {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -199,8 +224,28 @@ textarea {
 
 .nav a.router-link-active {
   color: var(--app-blue-strong);
+}
+
+/* 滑块尚未就绪（首帧、测试环境）时由链接自身画出白底 */
+.nav:not(.nav--has-indicator) a.router-link-active {
   background: var(--app-panel);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.nav a svg {
+  transition: transform 0.2s ease;
+}
+
+.nav a.router-link-active svg {
+  transform: scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-indicator.is-animated,
+  .nav a,
+  .nav a svg {
+    transition: none;
+  }
 }
 
 .account-chip {
@@ -283,6 +328,32 @@ textarea {
 
 .muted {
   color: var(--app-muted);
+}
+
+/* 手写提示框与 NAlert 同一套配色；默认为中性说明 */
+.ui-notice {
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel-muted);
+  color: var(--app-text-secondary);
+  font-size: var(--font-xs);
+  line-height: 1.5;
+}
+
+.ui-notice--info {
+  border-color: #bcd4fb;
+  background: #edf4ff;
+}
+
+.ui-notice--warning {
+  border-color: #f5d38b;
+  background: #fff8eb;
+}
+
+.ui-notice--error {
+  border-color: #f5b5b0;
+  background: #fdecec;
 }
 
 .section-band {

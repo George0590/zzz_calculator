@@ -46,14 +46,22 @@ function mountSelector(modelValue = 1, resultOptions = results, stale = false) {
 }
 
 describe("OptimizerResultSelector", () => {
+  // 评分区分三块：标签、数值、“第 N 套 · 比例”说明
+  function expectScore(wrapper: any, label: string, value: string, caption: string | null) {
+    const tile = wrapper.get(".optimizer-result-score")
+    expect(tile.get(".optimizer-result-metric-label").text()).toBe(label)
+    expect(tile.get(".optimizer-result-score-value").text()).toBe(value)
+    if (caption === null) expect(tile.find(".optimizer-result-caption").exists()).toBe(false)
+    else expect(tile.get(".optimizer-result-caption").text()).toBe(caption)
+  }
   it("shows the selected result relative to the best score", async () => {
     const wrapper = mountSelector()
 
-    expect(wrapper.text()).toContain("第 1 套 · 100% · 评分 1,000")
+    expectScore(wrapper, "评分", "1,000", "第 1 套 · 相对第一套 100%")
 
     await wrapper.setProps({ modelValue: 2 })
 
-    expect(wrapper.text()).toContain("第 2 套 · 97.8% · 评分 978")
+    expectScore(wrapper, "评分", "978", "第 2 套 · 相对第一套 97.8%")
     expect(wrapper.get("[role='progressbar']").attributes("aria-valuenow")).toBe("97.8")
   })
 
@@ -105,7 +113,7 @@ describe("OptimizerResultSelector", () => {
     await wrapper.setProps({ modelValue: 1, results: [{ rank: 1, score: 1000 }] })
     expect(wrapper.get("[data-testid='optimizer-result-slider']").attributes("disabled")).toBeDefined()
     expect(wrapper.get("[data-testid='optimizer-result-rank-input'] input").attributes("disabled")).toBeDefined()
-    expect(wrapper.text()).toContain("第 1 套 · 100%")
+    expect(wrapper.get(".optimizer-result-caption").text()).toBe("第 1 套 · 相对第一套 100%")
   })
 
   it("does not render for an invalid best score", () => {
@@ -119,7 +127,7 @@ describe("OptimizerResultSelector", () => {
   it("labels retained result scores as stale after constraints change", () => {
     const wrapper = mountSelector(2, results, true)
 
-    expect(wrapper.text()).toContain("第 2 套 · 97.8% · 上次评分 978")
+    expectScore(wrapper, "上次评分", "978", "第 2 套 · 相对第一套 97.8%")
     expect(wrapper.get("[role='progressbar']").classes()).toContain("is-stale")
     expect(wrapper.get("[role='progressbar']").attributes("aria-label")).toContain("上次评分")
   })
@@ -135,7 +143,7 @@ describe("OptimizerResultSelector", () => {
       },
     })
 
-    expect(wrapper.text()).toContain("第 1 套 · 100% · 队伍异常评分 5,134.289 × k")
+    expectScore(wrapper, "队伍异常评分", "5,134.289 × k", "第 1 套 · 相对第一套 100%")
     expect(wrapper.get("[role='progressbar']").attributes("aria-label")).toContain("队伍异常评分比例")
   })
 
@@ -151,8 +159,8 @@ describe("OptimizerResultSelector", () => {
       },
     })
 
-    expect(wrapper.text()).toContain("90.0% · 评分 810")
-    expect(wrapper.text()).not.toContain("第")
+    expectScore(wrapper, "评分", "810", "相对优化第一套 90.0%")
+    expect(wrapper.text()).not.toMatch(/第 \d+ 套/)
     expect(wrapper.find("[data-testid='optimizer-result-slider']").exists()).toBe(false)
     expect(wrapper.get("[role='progressbar']").attributes("aria-valuenow")).toBe("90")
     expect(wrapper.get("[role='progressbar']").attributes("aria-label")).toContain("当前方案相对优化第一套")
@@ -170,7 +178,7 @@ describe("OptimizerResultSelector", () => {
       },
     })
 
-    expect(wrapper.text()).toContain("100% · 评分 810")
+    expectScore(wrapper, "评分", "810", "相对优化第一套 100%")
   })
 
   it("hides the comparison percentage for a stale manual or loadout score", () => {
@@ -186,10 +194,10 @@ describe("OptimizerResultSelector", () => {
       },
     })
 
-    expect(wrapper.text()).toContain("评分 810")
+    expectScore(wrapper, "评分", "810", null)
     expect(wrapper.text()).not.toContain("90%")
-    expect(wrapper.get("[role='progressbar']").attributes("aria-valuenow")).toBeUndefined()
-    expect(wrapper.get("[role='progressbar']").attributes("aria-label")).toBe("当前方案评分")
+    expect(wrapper.find("[role='progressbar']").exists()).toBe(false)
+    expect(wrapper.get(".optimizer-result-score").attributes("aria-label")).toBe("当前方案评分")
   })
 
   it("shows one effective-substat line when PEN is not important", () => {
@@ -234,7 +242,7 @@ describe("OptimizerResultSelector", () => {
       },
     })
 
-    expect(wrapper.text()).toContain("评分 810")
+    expectScore(wrapper, "评分", "810", null)
     expect(wrapper.text()).toContain("有效副词条数量 9")
     expect(wrapper.text()).not.toContain("90%")
   })

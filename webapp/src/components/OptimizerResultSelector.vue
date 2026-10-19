@@ -93,10 +93,10 @@ const ratioAriaLabel = computed(() => {
   if (showRank.value) return `当前优化结果相对第一套的${displayedScoreLabel.value}比例`
   return `当前方案相对优化第一套的${displayedScoreLabel.value}比例`
 })
-const resultSummaryText = computed(() => [
+// 评分下方的说明：第几套、相对第一套的比例
+const resultCaptionText = computed(() => [
   showRank.value ? `第 ${currentRank.value} 套` : "",
-  showPercentage.value ? percentageText.value : "",
-  `${displayedScoreLabel.value} ${scoreText.value}`,
+  showPercentage.value ? `${showRank.value ? "相对第一套" : "相对优化第一套"} ${percentageText.value}` : "",
 ].filter(Boolean).join(" · "))
 const effectiveSubstatLines = computed(() => {
   const counts = props.effectiveSubstatCounts
@@ -186,19 +186,30 @@ function rankTooltip(value: number) {
       </div>
     </div>
 
-    <div
-      class="optimizer-result-ratio"
-      :class="{ 'is-stale': props.stale }"
-      :style="ratioStyle"
-      role="progressbar"
-      :aria-label="ratioAriaLabel"
-      aria-valuemin="0"
-      aria-valuemax="100"
-      :aria-valuenow="scorePercentage ?? undefined"
-    >
-      <span class="optimizer-result-ratio-fill"></span>
-      <strong>{{ resultSummaryText }}</strong>
-      <span
+    <div class="optimizer-result-metrics" :class="{ 'is-stale': props.stale }">
+      <div
+        class="optimizer-result-score"
+        :role="showPercentage ? undefined : 'group'"
+        :aria-label="showPercentage ? undefined : ratioAriaLabel"
+      >
+        <span class="optimizer-result-metric-label">{{ displayedScoreLabel }}</span>
+        <strong class="optimizer-result-score-value num">{{ scoreText }}</strong>
+        <div
+          v-if="showPercentage"
+          class="optimizer-result-ratio"
+          :class="{ 'is-stale': props.stale }"
+          :style="ratioStyle"
+          role="progressbar"
+          :aria-label="ratioAriaLabel"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-valuenow="scorePercentage ?? undefined"
+        >
+          <span class="optimizer-result-ratio-fill"></span>
+        </div>
+        <span v-if="resultCaptionText" class="optimizer-result-caption">{{ resultCaptionText }}</span>
+      </div>
+      <div
         v-if="effectiveSubstatLines.length"
         class="optimizer-result-effective-substats"
         role="group"
@@ -208,8 +219,8 @@ function rankTooltip(value: number) {
           v-for="line in effectiveSubstatLines"
           :key="line.label"
           class="optimizer-result-effective-substat-line"
-        >{{ line.label }} <b>{{ line.count }}</b></span>
-      </span>
+        ><span class="optimizer-result-metric-label">{{ line.label }}</span> <b class="num">{{ line.count }}</b></span>
+      </div>
     </div>
   </div>
 </template>
@@ -249,64 +260,100 @@ function rankTooltip(value: number) {
   max-width: 100%;
 }
 
+/* 评分区：左侧大号评分 + 比例条，右侧有效副词条小指标 */
+.optimizer-result-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+
+.optimizer-result-score,
+.optimizer-result-effective-substat-line {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-panel-muted, #f4f6fa);
+}
+
+.optimizer-result-metrics.is-stale .optimizer-result-score {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.optimizer-result-metric-label {
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.optimizer-result-score-value {
+  color: var(--app-text);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
 .optimizer-result-ratio {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  min-height: 36px;
+  height: 6px;
   overflow: hidden;
-  padding: 8px 12px;
-  border: 1px solid #bfdbfe;
-  border-radius: var(--app-radius-sm);
-  background: #f1f5f9;
-  color: var(--app-text);
-  text-align: center;
+  border-radius: 999px;
+  background: #dde6f5;
 }
 
 .optimizer-result-ratio-fill {
   position: absolute;
   inset: 0 auto 0 0;
   width: var(--optimizer-result-ratio);
-  background: #dbeafe;
+  border-radius: inherit;
+  background: var(--app-blue, #2f7df6);
   transition: width 160ms ease;
 }
 
-.optimizer-result-ratio.is-stale {
-  border-color: #f59e0b;
-  background: #fffbeb;
-}
-
 .optimizer-result-ratio.is-stale .optimizer-result-ratio-fill {
-  background: #fef3c7;
+  background: #f59e0b;
 }
 
-.optimizer-result-ratio strong {
-  position: relative;
-  z-index: 1;
-  max-width: 100%;
-  font-size: 13px;
-  line-height: 1.35;
+.optimizer-result-caption {
+  color: var(--app-text-secondary, #334155);
+  font-size: 12px;
+  font-weight: 650;
   overflow-wrap: anywhere;
 }
 
 .optimizer-result-effective-substats {
-  position: relative;
-  z-index: 1;
   display: grid;
-  max-width: 100%;
-  gap: 1px;
-  color: var(--app-muted);
-  font-size: 12px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(88px, max-content);
+  gap: 8px;
+  min-width: 0;
+}
+
+.optimizer-result-effective-substat-line {
+  align-content: space-between;
+  max-width: 140px;
 }
 
 .optimizer-result-effective-substat-line b {
   color: var(--app-text);
+  font-size: 20px;
   font-weight: 800;
+  line-height: 1.1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .optimizer-result-ratio-fill {
+    transition: none;
+  }
 }
 
 @container ui-layout (max-width: 680px) {
@@ -317,6 +364,21 @@ function rankTooltip(value: number) {
 
   .optimizer-result-rank-controls {
     justify-self: end;
+  }
+}
+
+@container ui-layout (max-width: 460px) {
+  .optimizer-result-metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .optimizer-result-effective-substats {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  }
+
+  .optimizer-result-effective-substat-line {
+    max-width: none;
   }
 }
 </style>

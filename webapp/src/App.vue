@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { NAlert, NButton, NConfigProvider, NMessageProvider, type GlobalThemeOverrides } from "naive-ui"
 import { storageIssues, exportUnreadableData } from "@runtime/storage-guard.js"
 import { Calculator, Database, Download, HardDrive, Settings2, UserRound } from "lucide-vue-next"
@@ -23,6 +23,48 @@ const accountChipText = computed(() => {
   return "账号加载中"
 })
 
+// 主导航的滑块：量出当前链接的位置，用一个绝对定位的白色块滑过去
+const navRef = ref<HTMLElement | null>(null)
+const navIndicator = ref({ left: 0, width: 0, visible: false, animated: false })
+const navIndicatorStyle = computed(() => ({
+  width: `${navIndicator.value.width}px`,
+  transform: `translateX(${navIndicator.value.left}px)`,
+}))
+let navResizeObserver: ResizeObserver | null = null
+
+// animate 为 false 时瞬移：首次定位、窗口缩放、字体加载后的校准都不应播放滑动
+function measureNavIndicator(animate: boolean) {
+  const active = navRef.value?.querySelector<HTMLElement>("a.router-link-active")
+  if (!active) {
+    navIndicator.value = { ...navIndicator.value, visible: false }
+    return
+  }
+  navIndicator.value = {
+    left: active.offsetLeft,
+    width: active.offsetWidth,
+    visible: true,
+    animated: animate && navIndicator.value.visible,
+  }
+}
+
+watch(() => route.path, () => {
+  void nextTick(() => measureNavIndicator(true))
+})
+
+watch(() => [maintenanceEnabled.value, enkaImportEnabled.value], () => {
+  void nextTick(() => measureNavIndicator(false))
+})
+
+onMounted(() => {
+  void nextTick(() => measureNavIndicator(false))
+  if (typeof ResizeObserver !== "undefined" && navRef.value) {
+    navResizeObserver = new ResizeObserver(() => measureNavIndicator(false))
+    navResizeObserver.observe(navRef.value)
+  }
+})
+
+onBeforeUnmount(() => navResizeObserver?.disconnect())
+
 const themeOverrides: GlobalThemeOverrides = {
   common: {
     primaryColor: "#2f7df6",
@@ -38,38 +80,52 @@ const themeOverrides: GlobalThemeOverrides = {
   Card: {
     borderRadius: "8px",
   },
+  // 全站提示统一为浅底 + 细边：信息蓝、成功绿、警告琥珀、错误红
+  Alert: {
+    borderRadius: "8px",
+    padding: "10px 12px",
+    titleFontWeight: "700",
+    colorInfo: "#edf4ff",
+    borderInfo: "1px solid #bcd4fb",
+    colorSuccess: "#e9f7f1",
+    borderSuccess: "1px solid #b7e2cf",
+    colorWarning: "#fff8eb",
+    borderWarning: "1px solid #f5d38b",
+    colorError: "#fdecec",
+    borderError: "1px solid #f5b5b0",
+  },
   Select: {
     menuBoxShadow: "0 10px 30px rgba(15, 23, 42, 0.16)",
     peers: {
       InternalSelection: {
-        color: "#f8fafc",
+        color: "#ffffff",
         colorActive: "#ffffff",
         colorDisabled: "#f1f5f9",
-        textColor: "#111827",
+        textColor: "#0f172a",
         textColorDisabled: "#64748b",
-        border: "2px solid #64748b",
-        borderHover: "2px solid #2f7df6",
-        borderActive: "2px solid #2f7df6",
-        borderFocus: "2px solid #2f7df6",
-        boxShadowHover: "0 0 0 2px rgba(47, 125, 246, 0.10)",
+        border: "1px solid #c5cedb",
+        borderHover: "1px solid #2f7df6",
+        borderActive: "1px solid #2f7df6",
+        borderFocus: "1px solid #2f7df6",
+        boxShadowHover: "none",
         boxShadowActive: "0 0 0 3px rgba(47, 125, 246, 0.20)",
         boxShadowFocus: "0 0 0 3px rgba(47, 125, 246, 0.20)",
-        arrowColor: "#334155",
+        arrowColor: "#5b6577",
         arrowColorDisabled: "#94a3b8",
-        arrowSize: "18px",
-        paddingSingle: "0 40px 0 12px",
-        paddingMultiple: "3px 40px 0 12px",
-        borderWarning: "2px solid #b7791f",
-        borderHoverWarning: "2px solid #9a5f13",
-        borderActiveWarning: "2px solid #b7791f",
-        borderFocusWarning: "2px solid #9a5f13",
+        arrowSize: "16px",
+        paddingSingle: "0 34px 0 12px",
+        paddingMultiple: "3px 34px 0 12px",
+        borderWarning: "1px solid #b7791f",
+        borderHoverWarning: "1px solid #9a5f13",
+        borderActiveWarning: "1px solid #b7791f",
+        borderFocusWarning: "1px solid #9a5f13",
         boxShadowHoverWarning: "0 0 0 2px rgba(183, 121, 31, 0.10)",
         boxShadowActiveWarning: "0 0 0 3px rgba(183, 121, 31, 0.18)",
         boxShadowFocusWarning: "0 0 0 3px rgba(183, 121, 31, 0.18)",
-        borderError: "2px solid #d14343",
-        borderHoverError: "2px solid #b42318",
-        borderActiveError: "2px solid #d14343",
-        borderFocusError: "2px solid #b42318",
+        borderError: "1px solid #d14343",
+        borderHoverError: "1px solid #b42318",
+        borderActiveError: "1px solid #d14343",
+        borderFocusError: "1px solid #b42318",
         boxShadowHoverError: "0 0 0 2px rgba(209, 67, 67, 0.10)",
         boxShadowActiveError: "0 0 0 3px rgba(209, 67, 67, 0.18)",
         boxShadowFocusError: "0 0 0 3px rgba(209, 67, 67, 0.18)",
@@ -95,7 +151,13 @@ const themeOverrides: GlobalThemeOverrides = {
             <img class="brand-mark" src="/zzz-mark.svg" alt="">
             <span>ZZZ Calculator</span>
           </div>
-          <nav class="nav" aria-label="主导航">
+          <nav ref="navRef" class="nav" :class="{ 'nav--has-indicator': navIndicator.visible }" aria-label="主导航">
+            <span
+              class="nav-indicator"
+              :class="{ 'is-visible': navIndicator.visible, 'is-animated': navIndicator.animated }"
+              :style="navIndicatorStyle"
+              aria-hidden="true"
+            ></span>
             <RouterLink to="/">
               <Calculator :size="16" />
               <span>计算</span>
