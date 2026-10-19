@@ -105,13 +105,11 @@ async function expectProminentConfigButton(
     }
   })
 
-  expect(appearance.width).toBeGreaterThanOrEqual(density === "compact" ? 96 : 116)
-  expect(appearance.height).toBeGreaterThanOrEqual(density === "compact" ? 34 : 40)
-  expect(
-    appearance.backgroundColor !== "rgba(0, 0, 0, 0)" || appearance.backgroundImage !== "none",
-  ).toBe(true)
+  expect(appearance.width).toBeGreaterThanOrEqual(88)
+  expect(appearance.height).toBeGreaterThanOrEqual(density === "compact" ? 32 : 34)
+  expect(appearance.backgroundColor).not.toBe("rgba(0, 0, 0, 0)")
   expect(appearance.fontWeight).toBeGreaterThanOrEqual(700)
-  expect(appearance.borderWidth).toBeGreaterThanOrEqual(density === "compact" ? 1 : 2)
+  expect(appearance.borderWidth).toBeGreaterThanOrEqual(1)
   expect(appearance.borderColor).not.toBe(appearance.backgroundColor)
 
   await button.focus()
@@ -133,6 +131,7 @@ async function readActionButtonAppearance(page: Page, testId: string) {
   return page.getByTestId(testId).evaluate(element => {
     const style = getComputedStyle(element)
     return {
+      backgroundColor: style.backgroundColor,
       backgroundImage: style.backgroundImage,
       borderColor: style.borderColor,
       borderWidth: Number.parseFloat(style.borderWidth),
@@ -164,38 +163,70 @@ async function expectNoBorderOverlay(page: Page, button: Locator, label: string)
   expect(await readVisibleBorderedDescendants(), `${label} on focus`).toEqual([])
 }
 
-test("right workbench column keeps panel, summary, and white box in order", async ({ page }) => {
+test("workbench keeps the result first, then panel and white box", async ({ page }) => {
   await openApp(page)
 
-  const rightColumn = page.locator(".workbench-right-sticky")
-  const panel = rightColumn.locator(".damage-panel-card")
-  const summary = rightColumn.locator(".workbench-summary-section")
-  const whiteBox = rightColumn.locator(".workbench-whitebox-section")
+  const viewport = page.viewportSize()!
+  const panel = page.locator(".damage-panel-card")
+  const summary = page.locator(".workbench-summary-section")
+  const whiteBox = page.locator(".workbench-whitebox-section")
 
   await expect(panel).toBeVisible()
   await expect(summary).toBeVisible()
   await expect(whiteBox).toBeVisible()
 
-  const [columnBox, panelBox, summaryBox, whiteBoxBox] = await Promise.all([
-    rightColumn.boundingBox(),
+  const [panelBox, summaryBox, whiteBoxBox] = await Promise.all([
     panel.boundingBox(),
     summary.boundingBox(),
     whiteBox.boundingBox(),
   ])
-
-  expect(columnBox).not.toBeNull()
   expect(panelBox).not.toBeNull()
   expect(summaryBox).not.toBeNull()
   expect(whiteBoxBox).not.toBeNull()
-  expect(summaryBox!.y).toBeGreaterThanOrEqual(panelBox!.y + panelBox!.height)
-  expect(whiteBoxBox!.y).toBeGreaterThanOrEqual(summaryBox!.y + summaryBox!.height)
-  await expect(summary).toHaveCSS("border-top-width", "1px")
-  await expect(whiteBox).toHaveCSS("border-top-width", "1px")
 
-  for (const sectionBox of [panelBox!, summaryBox!, whiteBoxBox!]) {
-    expect(sectionBox.x).toBeGreaterThanOrEqual(columnBox!.x - 1)
-    expect(sectionBox.x + sectionBox.width).toBeLessThanOrEqual(columnBox!.x + columnBox!.width + 1)
+  if (viewport.width > 1280) {
+    // 宽屏：右栏内依次是结果、面板、白盒，左右两栏吸顶且不超过视口高度。
+    const rightColumn = page.locator(".workbench-right-sticky")
+    const columnBox = await rightColumn.boundingBox()
+    expect(columnBox).not.toBeNull()
+    expect(panelBox!.y).toBeGreaterThanOrEqual(summaryBox!.y + summaryBox!.height - 1)
+    expect(whiteBoxBox!.y).toBeGreaterThanOrEqual(panelBox!.y + panelBox!.height)
+    await expect(whiteBox).toHaveCSS("border-top-width", "1px")
+    for (const sectionBox of [panelBox!, summaryBox!, whiteBoxBox!]) {
+      expect(sectionBox.x).toBeGreaterThanOrEqual(columnBox!.x - 1)
+      expect(sectionBox.x + sectionBox.width).toBeLessThanOrEqual(columnBox!.x + columnBox!.width + 1)
+    }
+    for (const column of [".workbench-left", ".workbench-right-sticky"]) {
+      const metrics = await page.locator(column).evaluate(element => ({
+        position: getComputedStyle(element).position,
+        height: element.getBoundingClientRect().height,
+      }))
+      expect(metrics.position, column).toBe("sticky")
+      expect(metrics.height, column).toBeLessThanOrEqual(viewport.height)
+    }
+  } else {
+    // 窄屏：结果条在全部配置之前，面板和白盒在驱动盘之后。
+    const [agentBox, driveDiscBox] = await Promise.all([
+      page.locator(".workbench-agent-section").boundingBox(),
+      page.locator(".drive-disc-workbench-panel").boundingBox(),
+    ])
+    expect(agentBox).not.toBeNull()
+    expect(driveDiscBox).not.toBeNull()
+    expect(agentBox!.y).toBeGreaterThanOrEqual(summaryBox!.y + summaryBox!.height)
+    expect(panelBox!.y).toBeGreaterThanOrEqual(driveDiscBox!.y + driveDiscBox!.height)
   }
+
+  // 结果条吸顶时不能压住顶栏。
+  const [topbarBottom, summaryTop] = await Promise.all([
+    page.locator(".app-topbar").evaluate(element => element.getBoundingClientRect().bottom),
+    page.evaluate(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight)
+      return new Promise<number>(resolve => requestAnimationFrame(() =>
+        resolve(document.querySelector(".workbench-summary-section")!.getBoundingClientRect().top)))
+    }),
+  ])
+  expect(summaryTop).toBeGreaterThanOrEqual(topbarBottom - 1)
+  await page.evaluate(() => window.scrollTo(0, 0))
 
   await expectStableLayout(page, "damage-whitebox")
 })
@@ -355,8 +386,14 @@ test("optimizer and buff configuration use protected field layouts", async ({ pa
   await expectProminentConfigButton(page, "open-optimizer-config", "计算配置")
   await expectProminentConfigButton(page, "open-buff-picker", "选择 Buff", "compact")
 
+  // 三个配置入口外观一致，并且都是浅色强调（不是实心主按钮）。
+  await page.mouse.move(0, 0)
+  for (const testId of ["open-buff-picker", "open-optimizer-config", "open-calculation-config"]) {
+    // toHaveCSS 会重试，等颜色过渡结束后再读外观
+    await expect(page.getByTestId(testId)).toHaveCSS("background-color", "rgb(237, 244, 255)")
+  }
   const buffActionAppearance = await readActionButtonAppearance(page, "open-buff-picker")
-  expect(buffActionAppearance.backgroundImage).toContain("linear-gradient")
+  expect(buffActionAppearance.backgroundImage).toBe("none")
   expect(await readActionButtonAppearance(page, "open-optimizer-config")).toEqual(buffActionAppearance)
   expect(await readActionButtonAppearance(page, "open-calculation-config")).toEqual(buffActionAppearance)
 
@@ -369,19 +406,17 @@ test("optimizer and buff configuration use protected field layouts", async ({ pa
     return {
       width: rect.width,
       height: rect.height,
-      backgroundImage: style.backgroundImage,
+      backgroundColor: style.backgroundColor,
       borderColor: style.borderColor,
       borderWidth: Number.parseFloat(style.borderWidth),
       fontWeight: Number(style.fontWeight),
     }
   })
-  expect(startAppearance.width).toBeGreaterThanOrEqual(116)
+  expect(startAppearance.width).toBeGreaterThanOrEqual(128)
   expect(startAppearance.height).toBeGreaterThanOrEqual(40)
-  expect(startAppearance.backgroundImage).toContain("linear-gradient")
-  expect(startAppearance.backgroundImage).toContain("rgb(15, 159, 110)")
-  expect(startAppearance.backgroundImage).toContain("rgb(8, 122, 85)")
-  expect(startAppearance.borderColor).toBe("rgb(6, 104, 71)")
-  expect(startAppearance.borderWidth).toBeGreaterThanOrEqual(2)
+  expect(startAppearance.backgroundColor).toBe("rgb(15, 159, 110)")
+  expect(startAppearance.borderColor).toBe("rgb(8, 122, 85)")
+  expect(startAppearance.borderWidth).toBeGreaterThanOrEqual(1)
   expect(startAppearance.fontWeight).toBeGreaterThanOrEqual(800)
 
   await optimizerStart.focus()
@@ -391,29 +426,22 @@ test("optimizer and buff configuration use protected field layouts", async ({ pa
 
   const configurationAppearance = await page.getByTestId("open-optimizer-config").evaluate(element => {
     const style = getComputedStyle(element)
-    return { backgroundImage: style.backgroundImage, borderColor: style.borderColor }
+    return { backgroundColor: style.backgroundColor, borderColor: style.borderColor }
   })
-  expect(configurationAppearance.backgroundImage).not.toContain("rgb(15, 159, 110)")
+  expect(configurationAppearance.backgroundColor).not.toBe(startAppearance.backgroundColor)
   expect(configurationAppearance.borderColor).not.toBe(startAppearance.borderColor)
 
   await page.emulateMedia({ reducedMotion: "reduce" })
   await optimizerStart.hover()
   const reducedMotionAppearance = await optimizerStart.evaluate(element => {
     const style = getComputedStyle(element)
-    const sweepStyle = getComputedStyle(element, "::after")
     return {
       transitionDuration: style.transitionDuration,
       transform: style.transform,
-      sweepOpacity: sweepStyle.opacity,
-      sweepTransform: sweepStyle.transform,
-      sweepTransitionDuration: sweepStyle.transitionDuration,
     }
   })
   expect(reducedMotionAppearance.transitionDuration.split(",").every(value => value.trim() === "0s")).toBe(true)
   expect(reducedMotionAppearance.transform).toBe("none")
-  expect(reducedMotionAppearance.sweepOpacity).toBe("0")
-  expect(reducedMotionAppearance.sweepTransform).toBe("none")
-  expect(reducedMotionAppearance.sweepTransitionDuration.split(",").every(value => value.trim() === "0s")).toBe(true)
   await page.emulateMedia({ reducedMotion: "no-preference" })
 
   await expectNoBorderOverlay(page, optimizerStart, "开始优化")

@@ -29,6 +29,10 @@ const themeOverrides: GlobalThemeOverrides = {
     primaryColorHover: "#1f6fe6",
     primaryColorPressed: "#185abd",
     borderRadius: "6px",
+    textColorBase: "#0f172a",
+    textColor1: "#0f172a",
+    textColor2: "#334155",
+    textColor3: "#5b6577",
     fontFamily: "system-ui, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif",
   },
   Card: {

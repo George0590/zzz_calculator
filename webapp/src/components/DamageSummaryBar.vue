@@ -29,7 +29,7 @@ const statusText = computed(() => props.error
 
 <template>
   <section class="summary-bar">
-    <div>
+    <div class="summary-copy">
       <div class="muted">{{ damageLabel }}</div>
       <div class="summary-value num">
         {{ error ? "计算异常" : scalarBlocked ? "参数待确认" : displayedValue }}

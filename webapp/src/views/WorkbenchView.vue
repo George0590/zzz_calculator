@@ -1485,7 +1485,7 @@ function formatPercentValue(value: any) {
       <section class="workbench-section workbench-buff-section">
         <div class="panel-header workbench-section-header">
           <h2 class="panel-title">局内 Buff</h2>
-          <NButton class="prominent-config-button workbench-action-button workbench-action-button--buff" type="primary" size="small" data-testid="open-buff-picker" :loading="openingBuffPicker" :disabled="openingBuffPicker || !buffContextReady" @click="openBuffPicker">
+          <NButton class="prominent-config-button workbench-action-button workbench-action-button--buff" size="small" data-testid="open-buff-picker" :loading="openingBuffPicker" :disabled="openingBuffPicker || !buffContextReady" @click="openBuffPicker">
             <template #icon><SlidersHorizontal :size="16" /></template>
             选择 Buff
           </NButton>
@@ -1506,7 +1506,7 @@ function formatPercentValue(value: any) {
       <section class="workbench-section workbench-calculation-section">
         <div class="panel-header workbench-section-header">
           <h2 class="panel-title">计算设置</h2>
-          <NButton class="prominent-config-button workbench-action-button workbench-action-button--calculation" type="primary" size="small" data-testid="open-calculation-config" :disabled="optimizerStore.isBusy" @click="showCalculationConfig = true">
+          <NButton class="prominent-config-button workbench-action-button workbench-action-button--calculation" size="small" data-testid="open-calculation-config" :disabled="optimizerStore.isBusy" @click="showCalculationConfig = true">
             <template #icon><CheckSquare :size="16" /></template>
             编辑事件
           </NButton>
@@ -1602,7 +1602,7 @@ function formatPercentValue(value: any) {
             <p class="panel-subtitle">外部只保留套装限制，高级项在计算配置中调整</p>
           </div>
           <div class="toolbar optimizer-config-actions">
-            <NButton class="prominent-config-button workbench-action-button workbench-action-button--optimizer" type="primary" size="large" data-testid="open-optimizer-config" @click="showOptimizerConfig = true">
+            <NButton class="prominent-config-button workbench-action-button workbench-action-button--optimizer" size="medium" data-testid="open-optimizer-config" @click="showOptimizerConfig = true">
               <template #icon><SlidersHorizontal :size="18" /></template>
               计算配置
             </NButton>
@@ -1701,6 +1701,17 @@ function formatPercentValue(value: any) {
         <div class="panel-header workbench-section-header">
           <div>
             <h2 class="panel-title">驱动盘方案</h2>
+            <p class="panel-subtitle">{{ selectedDriveDiscs.length ? `${selectedDriveDiscs.length} 件驱动盘参与当前${isLuminescenceScore ? "评分" : "伤害"}计算` : "选择驱动盘后可查看词条分析" }}</p>
+          </div>
+          <div class="toolbar drive-disc-action-toolbar">
+            <NButton size="small" :disabled="!canSaveCurrentScheme" @click="openSaveCurrentLoadout">
+              <template #icon><Save :size="16" /></template>
+              存为套装
+            </NButton>
+            <NButton type="primary" size="small" data-testid="open-drive-disc-analysis" :disabled="!selectedDriveDiscs.length" @click="showDriveDiscAnalysis = true">
+              <template #icon><LineChart :size="16" /></template>
+              词条分析
+            </NButton>
           </div>
         </div>
         <div class="workbench-section-body section-band">
@@ -1722,16 +1733,6 @@ function formatPercentValue(value: any) {
               </NRadioButton>
             </NRadioGroup>
           </div>
-          <div class="toolbar drive-disc-action-toolbar">
-            <NButton size="small" :disabled="!canSaveCurrentScheme" @click="openSaveCurrentLoadout">
-              <template #icon><Save :size="16" /></template>
-              存为套装
-            </NButton>
-            <NButton type="primary" size="small" data-testid="open-drive-disc-analysis" :disabled="!selectedDriveDiscs.length" @click="showDriveDiscAnalysis = true">
-              <template #icon><LineChart :size="16" /></template>
-              词条分析
-            </NButton>
-          </div>
 
           <NAlert v-if="optimizerStore.resultsAreProvisional" type="info" :show-icon="false" data-testid="optimizer-provisional-notice">
             {{ optimizerStore.isBusy ? '搜索仍在进行' : '搜索未完成' }}，以下为当前已找到的方案，尚未确认最终最优。完整结果出来后可保存或锁定。
@@ -1739,12 +1740,6 @@ function formatPercentValue(value: any) {
               查看当前方案
             </NButton>
           </NAlert>
-
-          <div class="drive-disc-analysis-strip">
-            <div>
-              <span>{{ selectedDriveDiscs.length ? `${selectedDriveDiscs.length} 件驱动盘参与当前${isLuminescenceScore ? "评分" : "伤害"}计算` : "选择驱动盘后可查看词条分析" }}</span>
-            </div>
-          </div>
 
           <div v-if="buildStore.discMode === 'loadout'" class="drive-disc-mode-control">
             <NSelect
@@ -1858,6 +1853,7 @@ function formatPercentValue(value: any) {
 
     <aside class="workbench-right">
       <div class="workbench-right-sticky workbench-surface">
+        <DamageSummaryBar class="workbench-summary-section" :result="buildStore.result" :error="buildStore.error" :loading="catalogStore.loading" />
         <section class="workbench-section damage-panel-card">
           <div class="panel-header workbench-section-header">
             <div>
@@ -1886,7 +1882,6 @@ function formatPercentValue(value: any) {
             </div>
           </div>
         </section>
-        <DamageSummaryBar class="workbench-summary-section" :result="buildStore.result" :error="buildStore.error" :loading="catalogStore.loading" />
         <section class="workbench-section workbench-whitebox-section">
           <div class="panel-header workbench-section-header">
             <div>
@@ -2213,9 +2208,23 @@ function formatPercentValue(value: any) {
 </template>
 
 <style scoped>
+/*
+ * 工作台三栏：左侧输入、中间驱动盘、右侧结果。
+ * 宽屏时左右两栏各自吸顶并独立滚动，滚动中间驱动盘时配置和结果始终可见。
+ */
 .workbench-merged-grid {
-  grid-template-columns: minmax(250px, 300px) minmax(480px, 1fr) minmax(340px, 430px);
-  gap: 14px;
+  /* 吸顶栏不能超出网格底部，否则滚到页底时会被页脚顶上去、压到顶栏下面；留出主区底部留白和页脚高度 */
+  --app-bottom-clearance: 84px;
+  --workbench-sticky-top: calc(var(--app-topbar-height) + var(--app-sticky-gap));
+  --workbench-sticky-height: calc(100vh - var(--app-topbar-height) - var(--app-sticky-gap) - var(--app-bottom-clearance));
+  grid-template-columns: minmax(268px, 312px) minmax(480px, 1fr) minmax(340px, 420px);
+  gap: var(--space-4);
+}
+
+@supports (height: 100dvh) {
+  .workbench-merged-grid {
+    --workbench-sticky-height: calc(100dvh - var(--app-topbar-height) - var(--app-sticky-gap) - var(--app-bottom-clearance));
+  }
 }
 
 .workbench-surface {
@@ -2225,9 +2234,22 @@ function formatPercentValue(value: any) {
   gap: 0;
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
+  border-radius: var(--app-radius);
   background: var(--app-panel);
-  box-shadow: none;
+  box-shadow: var(--app-shadow-sm);
+}
+
+.workbench-left,
+.workbench-right-sticky {
+  position: sticky;
+  top: var(--workbench-sticky-top);
+  max-height: var(--workbench-sticky-height);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border-strong) transparent;
 }
 
 .workbench-section {
@@ -2246,13 +2268,17 @@ function formatPercentValue(value: any) {
 
 .workbench-section-header {
   min-height: 0;
-  padding: 10px 12px;
+  padding: 12px 14px 8px;
   border-bottom: 0;
+}
+
+.workbench-section-header .panel-title {
+  font-size: 15px;
 }
 
 .workbench-section-body {
   min-width: 0;
-  padding: 8px 12px 12px;
+  padding: 6px 14px 14px;
 }
 
 .workbench-surface :deep(.metric:not(.layer-metric)) {
@@ -2273,21 +2299,39 @@ function formatPercentValue(value: any) {
   background: transparent;
 }
 
+/* 结果数字是工作台最重要的输出：放在右栏顶部，并在右栏滚动时吸附在顶端 */
 .workbench-summary-section {
-  position: static;
-  top: auto;
+  position: sticky;
+  top: 0;
+  z-index: 3;
   margin: 0;
-  padding: 12px;
+  padding: 14px;
   border: 0;
   border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  background: linear-gradient(180deg, #f5f9ff 0%, #ffffff 100%);
+  box-shadow: inset 0 -1px 0 var(--app-border);
+}
+
+.workbench-summary-section :deep(.muted) {
+  color: var(--app-text-secondary);
+  font-size: var(--font-sm);
+  font-weight: 650;
+}
+
+.workbench-section + .workbench-summary-section,
+.workbench-summary-section + .workbench-section {
+  border-top-color: transparent;
 }
 
 .workbench-left,
 .workbench-center,
 .workbench-right {
   min-width: 0;
+}
+
+/* 右栏吸顶块的包含块是这个 aside：拉满整行，吸顶块才有滑动空间 */
+.workbench-right {
+  align-self: stretch;
 }
 
 .workbench-left {
@@ -2352,24 +2396,21 @@ function formatPercentValue(value: any) {
   gap: 4px;
 }
 
-.workbench-left .prominent-config-button {
-  min-width: 112px;
-  height: 40px;
-  padding: 0 12px;
-  border-width: 2px;
-}
-
 .workbench-left .workbench-buff-tags {
   gap: 4px 6px;
 }
 
 .workbench-enemy-section :deep(.enemy-target-config-header) {
-  padding: 10px 12px;
+  padding: 12px 14px 8px;
   border-bottom: 0;
 }
 
+.workbench-enemy-section :deep(.enemy-target-config-header .panel-title) {
+  font-size: 15px;
+}
+
 .workbench-enemy-section :deep(.enemy-target-config-body) {
-  padding: 8px 12px 12px;
+  padding: 6px 14px 14px;
 }
 
 .workbench-left :deep(.n-input),
@@ -2521,11 +2562,6 @@ function formatPercentValue(value: any) {
   overflow-wrap: anywhere;
 }
 
-.workbench-right-sticky {
-  position: sticky;
-  top: 74px;
-}
-
 .panel-subtitle {
   margin: 4px 0 0;
   color: var(--app-muted);
@@ -2533,178 +2569,115 @@ function formatPercentValue(value: any) {
   line-height: 1.35;
 }
 
+/*
+ * 按钮层级：
+ * - “开始优化”是中栏唯一的实心主按钮；
+ * - “选择 Buff / 编辑事件 / 计算配置”是配置入口，统一用浅色强调样式，醒目但不和主操作抢视觉。
+ */
 .prominent-config-button {
-  min-width: 116px;
-  height: 40px;
-  padding: 0 16px;
-  border: 2px solid var(--app-blue);
-  background: #eef5ff;
-  color: #185abd;
-  font-weight: 750;
-  box-shadow: 0 2px 5px rgba(47, 125, 246, 0.12);
-  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  min-width: 96px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--app-blue-line);
+  border-radius: 8px;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
+  font-weight: 700;
+  box-shadow: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+/* Naive UI 的 :focus 规则会把默认按钮背景改成透明，需同等优先级覆盖 */
+.prominent-config-button:not(.n-button--disabled):focus {
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
 }
 
 .prominent-config-button:not(.n-button--disabled):hover {
-  border-color: #1f6fe6;
-  background: #dbeafe;
-  color: #124b9c;
-  box-shadow: 0 3px 8px rgba(47, 125, 246, 0.18);
-  transform: translateY(-1px);
+  border-color: var(--app-blue);
+  background: #e0ecff;
+  color: #174ea6;
 }
 
 .prominent-config-button:not(.n-button--disabled):active {
-  background: #cfe1ff;
-  color: #0f438c;
-  box-shadow: 0 1px 3px rgba(47, 125, 246, 0.16);
-  transform: translateY(0);
+  background: #d3e3ff;
+  color: #123f87;
 }
 
 .prominent-config-button:focus-visible {
-  outline: 3px solid rgba(47, 125, 246, 0.28);
+  outline: var(--app-focus-ring);
   outline-offset: 2px;
 }
 
+.prominent-config-button :deep(.n-button__icon),
+.prominent-config-button :deep(.n-icon-slot) {
+  color: inherit;
+}
+
 .workbench-action-button {
-  position: relative;
-  overflow: hidden;
-  border-radius: 9px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-}
-
-.workbench-action-button::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  background: linear-gradient(115deg, transparent 25%, rgba(255, 255, 255, 0.28) 50%, transparent 75%);
-  opacity: 0;
-  transform: translateX(-120%);
-  transition: opacity 0.18s ease, transform 0.45s ease;
-}
-
-.workbench-action-button :deep(.n-button__content),
-.workbench-action-button :deep(.n-button__icon) {
-  position: relative;
-  z-index: 1;
+  font-weight: 700;
 }
 
 .workbench-action-button :deep(.n-button__icon) {
   margin-right: 6px;
 }
 
+/* 三个配置入口共用同一套外观 */
 .workbench-action-button--buff,
 .workbench-action-button--calculation,
 .workbench-action-button--optimizer {
-  border-color: #1d64d8;
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: #fff;
-  box-shadow: 0 5px 12px rgba(37, 99, 235, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
 }
 
-.workbench-action-button--buff:not(.n-button--disabled):hover,
-.workbench-action-button--calculation:not(.n-button--disabled):hover,
-.workbench-action-button--optimizer:not(.n-button--disabled):hover {
-  border-color: #174ea6;
-  background: linear-gradient(135deg, #4b8df8 0%, #1d4ed8 100%);
-  color: #fff;
-  box-shadow: 0 7px 16px rgba(37, 99, 235, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.28);
-  transform: translateY(-2px);
-}
-
-.workbench-action-button:not(.n-button--disabled):hover::after {
-  opacity: 1;
-  transform: translateX(120%);
-}
-
-.workbench-action-button:not(.n-button--disabled):active {
-  box-shadow: 0 2px 5px rgba(47, 125, 246, 0.2), inset 0 1px 3px rgba(15, 23, 42, 0.12);
-  transform: translateY(0);
-}
-
-.workbench-action-button:focus-visible {
-  outline: 3px solid rgba(47, 125, 246, 0.32);
-  outline-offset: 3px;
+.workbench-action-button--optimizer {
+  height: 36px;
 }
 
 .workbench-action-button.n-button--disabled {
-  opacity: 0.56;
-  box-shadow: none;
+  opacity: 0.55;
 }
 
 .optimizer-action-button {
-  position: relative;
-  min-width: 116px;
+  min-width: 128px;
   height: 40px;
-  padding: 0 16px;
-  overflow: hidden;
-  border-radius: 9px;
+  padding: 0 18px;
+  border-radius: 8px;
   border-style: solid;
-  border-width: 2px;
+  border-width: 1px;
   font-weight: 800;
-  letter-spacing: 0.01em;
-  transition: background-color 0.18s ease, background-image 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, transform 0.18s ease;
-}
-
-.optimizer-action-button::after {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  content: "";
-  background: linear-gradient(115deg, transparent 25%, rgba(255, 255, 255, 0.28) 50%, transparent 75%);
-  opacity: 0;
-  transform: translateX(-120%);
-  transition: opacity 0.18s ease, transform 0.45s ease;
-}
-
-.optimizer-action-button :deep(.n-button__content),
-.optimizer-action-button :deep(.n-button__icon) {
-  position: relative;
-  z-index: 1;
+  letter-spacing: 0.02em;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 }
 
 .optimizer-action-button :deep(.n-button__icon) {
   margin-right: 6px;
 }
 
-.optimizer-action-button:not(.n-button--disabled):hover {
-  transform: translateY(-2px);
-}
-
-.optimizer-action-button:not(.n-button--disabled):hover::after {
-  opacity: 1;
-  transform: translateX(120%);
-}
-
-.optimizer-action-button:not(.n-button--disabled):active {
-  transform: translateY(0);
-}
-
 .optimizer-action-button--start {
-  border-color: #066847;
-  background: linear-gradient(135deg, #0f9f6e 0%, #087a55 100%);
+  border-color: var(--app-green-strong);
+  background: var(--app-green);
   color: #fff;
-  box-shadow: 0 5px 12px rgba(8, 122, 85, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  box-shadow: 0 2px 6px rgba(8, 122, 85, 0.22);
 }
 
 .optimizer-action-button--start:not(.n-button--disabled):hover {
-  border-color: #05573d;
-  background: linear-gradient(135deg, #18b57e 0%, #066847 100%);
+  border-color: #066847;
+  background: var(--app-green-strong);
   color: #fff;
-  box-shadow: 0 7px 16px rgba(8, 122, 85, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  box-shadow: 0 4px 12px rgba(8, 122, 85, 0.28);
 }
 
 .optimizer-action-button--start:not(.n-button--disabled):active {
   border-color: #04452f;
-  background: #05573d;
+  background: #066847;
   color: #fff;
-  box-shadow: 0 2px 5px rgba(8, 122, 85, 0.22), inset 0 1px 3px rgba(4, 69, 47, 0.2);
+  box-shadow: none;
 }
 
 .optimizer-action-button--start:focus-visible {
-  outline: 3px solid rgba(8, 122, 85, 0.28);
+  outline: 3px solid rgba(8, 122, 85, 0.32);
   outline-offset: 3px;
 }
 
@@ -2714,15 +2687,9 @@ function formatPercentValue(value: any) {
 }
 
 .optimizer-action-button.n-button--disabled {
-  opacity: 0.56;
+  opacity: 0.5;
   filter: saturate(0.35);
   box-shadow: none;
-}
-
-.optimizer-action-button.n-button--disabled::after {
-  opacity: 0;
-  transform: none;
-  transition: none;
 }
 
 .optimizer-action-button :deep(.n-button__border),
@@ -2734,18 +2701,8 @@ function formatPercentValue(value: any) {
 
 @media (prefers-reduced-motion: reduce) {
   .optimizer-action-button,
-  .optimizer-action-button::after {
+  .prominent-config-button {
     transition: none;
-  }
-
-  .optimizer-action-button:not(.n-button--disabled):hover,
-  .optimizer-action-button:not(.n-button--disabled):active {
-    transform: none;
-  }
-
-  .optimizer-action-button:not(.n-button--disabled):hover::after {
-    opacity: 0;
-    transform: none;
   }
 }
 
@@ -2784,17 +2741,14 @@ function formatPercentValue(value: any) {
 
 .drive-disc-source-row {
   display: grid;
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
-  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
   align-items: center;
-  padding: 8px 10px;
-  border-left: 3px solid var(--app-blue);
-  background: #f1f5fb;
 }
 
 .drive-disc-source-label {
-  color: var(--app-text);
-  font-size: 13px;
+  color: var(--app-muted);
+  font-size: var(--font-xs);
   font-weight: 700;
 }
 
@@ -2818,26 +2772,9 @@ function formatPercentValue(value: any) {
 }
 
 .drive-disc-action-toolbar {
+  flex: 0 0 auto;
   justify-content: flex-end;
-}
-
-.drive-disc-analysis-strip {
-  padding: 8px 10px;
-  border: 0;
-  border-left: 3px solid #93c5fd;
-  border-radius: 0;
-  background: #f8fbff;
-}
-
-.drive-disc-analysis-strip > div {
-  display: grid;
-  min-width: 0;
-  gap: 2px;
-}
-
-.drive-disc-analysis-strip span {
-  color: var(--app-muted);
-  font-size: 12px;
+  gap: var(--space-2);
 }
 
 .drive-disc-mode-control {
@@ -2886,9 +2823,9 @@ function formatPercentValue(value: any) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
-  padding: 10px;
-  border-left: 3px solid #3b82f6;
-  background: #f8fbff;
+  padding: 10px 12px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-panel-muted);
   color: var(--app-muted);
   font-size: 12px;
   line-height: 1.5;
@@ -3719,32 +3656,84 @@ function formatPercentValue(value: any) {
   overflow-wrap: anywhere;
 }
 
+/*
+ * 中等宽度：两栏。右栏拆开——结果数字成为整行吸顶条，面板与白盒并排放在最下方，
+ * 不再把整块结果区压在配置上方。
+ */
 @media (max-width: 1280px) {
   .workbench-merged-grid {
-    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    --workbench-summary-height: 64px;
+    grid-template-columns: minmax(248px, 300px) minmax(0, 1fr);
   }
 
-  .workbench-right {
-    grid-column: 1 / -1;
-  }
-
+  .workbench-right,
   .workbench-right-sticky {
-    position: static;
-    grid-template-columns: minmax(0, 1fr);
+    display: contents;
+  }
+
+  .workbench-summary-section {
+    grid-column: 1 / -1;
+    order: -1;
+    top: var(--workbench-sticky-top);
+    z-index: 6;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--workbench-summary-height);
+    padding: 10px 16px;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: var(--app-shadow);
+    backdrop-filter: blur(8px);
+  }
+
+  .workbench-summary-section :deep(.summary-copy) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    min-width: 0;
+  }
+
+  .workbench-summary-section :deep(.summary-value) {
+    font-size: 26px;
+  }
+
+  .workbench-left {
+    top: calc(var(--workbench-sticky-top) + var(--workbench-summary-height) + var(--app-sticky-gap));
+    max-height: calc(var(--workbench-sticky-height) - var(--workbench-summary-height) - var(--app-sticky-gap));
+  }
+
+  .damage-panel-card,
+  .workbench-whitebox-section {
+    order: 2;
+    align-self: start;
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius);
+    background: var(--app-panel);
+    box-shadow: var(--app-shadow-sm);
+  }
+
+  .workbench-section.damage-panel-card + .workbench-section.workbench-whitebox-section {
+    border-top: 1px solid var(--app-border);
   }
 }
 
 @media (max-width: 980px) {
   .workbench-merged-grid {
+    --workbench-summary-height: 56px;
     grid-template-columns: 1fr;
   }
 
-  .workbench-right {
-    order: -1;
-  }
-
   .workbench-left {
+    position: static;
     order: 0;
+    max-height: none;
+    overflow-y: visible;
   }
 
   .workbench-center {
@@ -3768,13 +3757,12 @@ function formatPercentValue(value: any) {
     gap: 8px;
   }
 
-  .drive-disc-action-toolbar {
-    justify-content: flex-start;
+  .drive-disc-workbench-panel > .workbench-section-header {
+    flex-wrap: wrap;
   }
 
-  .drive-disc-analysis-strip {
-    align-items: stretch;
-    flex-direction: column;
+  .drive-disc-action-toolbar {
+    justify-content: flex-start;
   }
 }
 

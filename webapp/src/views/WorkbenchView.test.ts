@@ -205,15 +205,25 @@ describe("WorkbenchView optimizer progress", () => {
     expect(source).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));")
   })
 
-  it("orders the right column as panel, damage summary, then white box", () => {
-    const panelStart = source.indexOf('<section class="workbench-section damage-panel-card">')
+  it("orders the right column as damage summary, panel, then white box", () => {
     const summaryStart = source.indexOf('<DamageSummaryBar class="workbench-summary-section"')
+    const panelStart = source.indexOf('<section class="workbench-section damage-panel-card">')
     const whiteBoxStart = source.indexOf('<section class="workbench-section workbench-whitebox-section">')
 
-    expect(panelStart).toBeGreaterThan(-1)
-    expect(summaryStart).toBeGreaterThan(panelStart)
-    expect(whiteBoxStart).toBeGreaterThan(summaryStart)
+    expect(summaryStart).toBeGreaterThan(-1)
+    expect(panelStart).toBeGreaterThan(summaryStart)
+    expect(whiteBoxStart).toBeGreaterThan(panelStart)
     expect(source).toContain(".workbench-section + .workbench-summary-section,")
+  })
+
+  it("keeps configuration and results in view while the drive-disc column scrolls", () => {
+    const stickyRule = source.slice(source.indexOf(".workbench-left,\n.workbench-right-sticky {"))
+    expect(stickyRule).toMatch(/^[^}]*position: sticky;[^}]*overflow-y: auto;/)
+    expect(source).toContain("--workbench-sticky-height")
+    expect(source).toMatch(/\.workbench-summary-section \{\n  position: sticky;\n  top: 0;/)
+    const mediumLayout = source.slice(source.indexOf("@media (max-width: 1280px)"), source.indexOf("@media (max-width: 980px)"))
+    expect(mediumLayout).toContain(".workbench-right,\n  .workbench-right-sticky {\n    display: contents;")
+    expect(mediumLayout).toContain("order: -1;")
   })
 
   it("prevents long Miyabi calculation labels from widening the left workbench column", () => {
@@ -286,29 +296,26 @@ describe("WorkbenchView optimizer progress", () => {
     expect(source).not.toContain('{ key: "energyRegen", label: "能量自动回复%" }')
   })
 
-  it("makes all workbench configuration entrypoints prominent", () => {
-    expect(source).toContain('<NButton class="prominent-config-button workbench-action-button workbench-action-button--buff" type="primary" size="small" data-testid="open-buff-picker"')
-    expect(source).toContain('<NButton class="prominent-config-button workbench-action-button workbench-action-button--calculation" type="primary" size="small" data-testid="open-calculation-config"')
+  it("makes all workbench configuration entrypoints prominent without competing with the run action", () => {
+    expect(source).toContain('<NButton class="prominent-config-button workbench-action-button workbench-action-button--buff" size="small" data-testid="open-buff-picker"')
+    expect(source).toContain('<NButton class="prominent-config-button workbench-action-button workbench-action-button--calculation" size="small" data-testid="open-calculation-config"')
     expect(source).toContain("编辑事件")
-    expect(source).toContain('<NButton class="prominent-config-button workbench-action-button workbench-action-button--optimizer" type="primary" size="large" data-testid="open-optimizer-config"')
+    expect(source).toContain('<NButton class="prominent-config-button workbench-action-button workbench-action-button--optimizer" size="medium" data-testid="open-optimizer-config"')
     expect(source.match(/class="prominent-config-button(?:\s|"|')/g)).toHaveLength(3)
     expect(source).toContain("选择 Buff")
-    expect(source).toContain(".workbench-left .prominent-config-button")
-    expect(source).toContain("min-width: 112px;")
-    expect(source).toContain("height: 40px;")
-    expect(source).toContain("border: 2px solid var(--app-blue);")
+    expect(source).toContain("background: var(--app-blue-soft);")
     expect(source).toContain(".prominent-config-button:focus-visible")
     // All three entrypoints share one fill, so they must share one rule.
     expect(source).toContain(".workbench-action-button--buff,\n.workbench-action-button--calculation,\n.workbench-action-button--optimizer {")
+    expect(source).not.toContain("linear-gradient(135deg, #3b82f6")
   })
 
   it("separates optimizer execution styling from configuration actions", () => {
     expect(source).toContain('<NButton v-if="!optimizerStore.isBusy" class="optimizer-action-button optimizer-action-button--start" type="primary" :disabled="!canRunOptimization" @click="runOptimization">')
     expect(source).toContain('<NButton v-else class="optimizer-action-button optimizer-action-button--cancel" type="warning" @click="optimizerStore.cancel">取消优化</NButton>')
-    expect(source).toContain("linear-gradient(135deg, #0f9f6e 0%, #087a55 100%)")
-    expect(source).toContain("linear-gradient(135deg, #18b57e 0%, #066847 100%)")
-    expect(source).toContain("rgba(8, 122, 85, 0.28)")
-    expect(source).toContain("min-width: 116px;")
+    expect(source).toContain("background: var(--app-green);")
+    expect(source).toContain("rgba(8, 122, 85, 0.32)")
+    expect(source).toContain("min-width: 128px;")
     expect(source).toContain("height: 40px;")
     expect(source).toContain("@media (prefers-reduced-motion: reduce)")
   })
@@ -340,6 +347,8 @@ describe("WorkbenchView optimizer progress", () => {
     expect(source).toContain(".workbench-left .build-profile-grid .compact-field-wide")
     expect(source).toContain(".workbench-agent-section .build-skill-grid")
     expect(source).toContain("min-height: 30px;")
+    // 左栏配置入口与其他配置入口同尺寸，不再单独放大
+    expect(source).not.toContain("\n.workbench-left .prominent-config-button {")
   })
 
   it("keeps workbench borders scoped to one surface per column", () => {

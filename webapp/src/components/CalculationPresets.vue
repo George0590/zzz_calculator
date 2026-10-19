@@ -11,7 +11,7 @@ import { calculateInCombatPanel } from "@core/calculator-core.js"
 import { formatNumber, formatPercent, formatStoredStatValue, storedStatLabel, labelOf, statLabel, damageEventSummaryTitle } from "@/utils/format"
 const props = defineProps<{ discs: any[], options?: any, disabled?: boolean }>()
 const build = useBuildStore(), accounts = useAccountStore(), catalog = useCatalogStore(), optimizer = useOptimizerStore()
-const name = ref(""), selected = ref(""), error = ref(""), busy = ref(false), compare = ref(false), confirmDelete = ref(false)
+const name = ref(""), selected = ref(""), error = ref(""), busy = ref(false), compare = ref(false), confirmDelete = ref(false), saving = ref(false)
 const group = ref<any>({ entries: [], pinnedId: "" })
 let contextVersion = 0
 const selection = computed(() => group.value.entries.find((entry: any) => entry.id === selected.value))
@@ -26,7 +26,12 @@ watch(() => [accounts.currentOwnerId, build.agentId], () => {
   selected.value = ""
   compare.value = false
   confirmDelete.value = false
+  saving.value = false
 }, { immediate: true })
+function toggleSaving() {
+  saving.value = !saving.value
+  if (!saving.value) name.value = ""
+}
 async function act(action: () => Promise<any>, onSuccess?: () => void) {
   if (busy.value) return
   const version = contextVersion
@@ -43,10 +48,10 @@ async function act(action: () => Promise<any>, onSuccess?: () => void) {
   finally { busy.value = false }
 }
 function save() {
-  if (props.disabled) return
+  if (props.disabled || !name.value.trim()) return
   const input = build.buildInput(catalog.catalog, catalog.meta, props.discs, props.options)
   const config = build.configurationSnapshot()
-  void act(() => saveCalculationPreset(name.value, config, input), () => { name.value = "" })
+  void act(() => saveCalculationPreset(name.value, config, input), () => { name.value = ""; saving.value = false })
 }
 function apply() {
   const entry = selection.value
@@ -112,20 +117,32 @@ function discDetails(input: any, slot: number) {
 </script>
 
 <template>
-  <section class="workbench-section" data-layout-surface="calculation-presets">
-    <div class="panel-header"><h2 class="panel-title">计算方案</h2></div>
-    <div class="panel-body section-band">
+  <section class="workbench-section calculation-presets" data-layout-surface="calculation-presets">
+    <div class="panel-header calculation-presets-header">
+      <h2 class="panel-title">计算方案</h2>
+      <NButton size="small" :type="saving ? 'default' : 'primary'" secondary :disabled="busy || (!saving && disabled)" data-testid="toggle-save-calculation-preset" @click="toggleSaving">
+        {{ saving ? "取消" : "另存当前" }}
+      </NButton>
+    </div>
+    <div class="calculation-presets-body">
       <NAlert v-if="error" type="error">{{ error }}</NAlert>
-      <NInput v-model:value="name" placeholder="方案名称，如失衡爆发" aria-label="计算方案名称" :disabled="busy" maxlength="80" />
-      <NButton :disabled="busy || disabled || !name.trim()" :loading="busy" @click="save">保存当前完整方案</NButton>
-      <NSelect v-model:value="selected" :options="group.entries.map((entry: any) => ({ label: entry.name, value: entry.id }))" placeholder="选择已保存方案" aria-label="已保存计算方案" :disabled="busy" />
-      <div class="toolbar">
-        <NButton :disabled="busy || !selection" @click="apply">应用方案</NButton>
-        <NButton :disabled="busy || !selection" @click="act(() => pinCalculationPreset(accounts.currentOwnerId!, build.agentId, selected))">固定为 A</NButton>
-        <NButton :disabled="busy || !selection" @click="confirmDelete = true">删除</NButton>
-      </div>
-      <p v-if="pinned">固定 A：{{ pinned.name }}（保存时的完整盘与条件）</p>
-      <NButton :disabled="!pinned || busy || disabled" @click="compare = true">对比 A 与当前 B</NButton>
+      <form v-if="saving" class="preset-row" @submit.prevent="save">
+        <NInput v-model:value="name" placeholder="方案名称，如失衡爆发" aria-label="计算方案名称" :disabled="busy" maxlength="80" autofocus />
+        <NButton type="primary" attr-type="submit" :disabled="busy || disabled || !name.trim()" :loading="busy">保存</NButton>
+      </form>
+      <template v-if="group.entries.length">
+        <div class="preset-row">
+          <NSelect v-model:value="selected" :options="group.entries.map((entry: any) => ({ label: entry.name, value: entry.id }))" placeholder="选择已保存方案" aria-label="已保存计算方案" :disabled="busy" />
+          <NButton :disabled="busy || !selection" @click="apply">应用</NButton>
+        </div>
+        <div class="preset-secondary">
+          <NButton size="tiny" quaternary :disabled="busy || !selection" @click="act(() => pinCalculationPreset(accounts.currentOwnerId!, build.agentId, selected))">固定为 A</NButton>
+          <NButton size="tiny" quaternary :disabled="!pinned || busy || disabled" @click="compare = true">对比 A 与当前 B</NButton>
+          <NButton size="tiny" quaternary type="error" :disabled="busy || !selection" @click="confirmDelete = true">删除</NButton>
+        </div>
+        <p v-if="pinned" class="preset-note">固定 A：{{ pinned.name }}（保存时的完整盘与条件）</p>
+      </template>
+      <p v-else-if="!saving" class="preset-note">还没有保存的方案。调好角色、Buff 和驱动盘后点“另存当前”，之后可一键切回或对比。</p>
     </div>
   </section>
   <ConfirmDialog :show="confirmDelete" title="删除计算方案" :message="`删除「${selection?.name ?? ''}」，库存和当前计算条件保持原样。`" :busy="busy" danger
@@ -165,6 +182,15 @@ function discDetails(input: any, slot: number) {
 </template>
 
 <style scoped>
+.calculation-presets-header {
+  padding: 12px 14px 8px;
+  border-bottom: 0;
+}
+.calculation-presets-header .panel-title { font-size: 15px; }
+.calculation-presets-body { display: grid; gap: 8px; min-width: 0; padding: 0 14px 12px; }
+.preset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; min-width: 0; margin: 0; }
+.preset-secondary { display: flex; flex-wrap: wrap; gap: 2px 4px; margin: -2px 0 0 -6px; }
+.preset-note { margin: 0; color: var(--app-muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .comparison-content { display: grid; gap: 16px; max-height: 70vh; overflow: auto; }
 .comparison-content table { table-layout: fixed; width: 100%; }
 .comparison-content th, .comparison-content td { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
