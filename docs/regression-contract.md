@@ -328,6 +328,14 @@
 
 ## 驱动盘、账号与本地数据
 
+本地可靠性扩展（2026-10-19）：任务切换不得回写旧结果；账号操作须防重复且失败保留草稿；
+JSON 解析失败保留原始内容并阻止相关保存。仓库和选盘分页不得影响完整候选或导出。
+完整恢复、普通导入撤销和命名计算方案的保存、冲突、回滚与验证入口见[本地数据工具说明](local-data-tools.md)。
+
+本地扩展（2026-10-19）：抓包导入必须冻结目标账号，保留原生游戏物品 ID，始终仅新增/更新；
+仅本任务明确成功且结果验证通过才允许预览。流程和未实测边界见[抓包导入说明](drive-capture-import.md)，
+回归入口为 `tests/drive-capture.test.js`、`webapp/src/stores/drive-capture.test.ts` 和既有库存事务测试。
+
 验证入口：[存储兼容](../webapp/src/stores/local-store-indexeddb-compat.test.ts)、[导入事务](../tests/drive-disc-import-transaction.test.js)、[配装保存锁](../webapp/e2e/drive-disc-loadout-save-lock.e2e.ts)。
 
 - 账号、当前账号、驱动盘、导入记录和套装预设继续使用既有 IndexedDB `zzz-calculator-user-store` 与 localStorage fallback `zzz-calculator.userStore.v1`，不迁移存储结构或键名。

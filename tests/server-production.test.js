@@ -190,6 +190,15 @@ try {
     assert.equal(JSON.parse(appConfig.body).driveDiscReservationsUiEnabled, false)
     assert.equal(JSON.parse(appConfig.body).driveDiscExclusionsUiEnabled, false)
 
+    for (const method of ["GET", "POST"]) {
+        const response = await fetch(`${baseUrl}/api/drive-capture`, {
+            method,
+            headers: { "X-ZZZ-Local-Request": "1", Origin: baseUrl, "Content-Type": "application/json" },
+            ...(method === "POST" ? { body: "{}" } : {}),
+        })
+        assert.equal(response.status, 403, "packet capture must remain disabled in production even for a loopback caller")
+    }
+
     const malformedUrl = await getRaw("/%")
     assert.equal(malformedUrl.status, 400)
     assert.match(JSON.parse(malformedUrl.body).error, /malformed url/i)

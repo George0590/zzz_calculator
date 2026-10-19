@@ -47,6 +47,7 @@ import {
   writeSelectionDocuments,
 } from "@runtime/build-storage"
 import { withDriveDiscImportOwnerLock } from "@runtime/drive-disc-import-lock"
+import { readSafeJson } from "@runtime/storage-guard.js"
 
 export const STORAGE_KEY = WEBAPP_BUILD_STORAGE_KEY
 const OLD_HOME_SELECTION_KEY = "zzz-calculator.homeSelection.v1"
@@ -66,11 +67,7 @@ const TARGET_PRESET_DEFENSES: Record<string, number> = {
 }
 
 function readJson(key: string) {
-  try {
-    return JSON.parse(localStorage.getItem(key) || "null")
-  } catch {
-    return null
-  }
+  return readSafeJson(key, null)
 }
 
 function clone<T>(value: T): T {
@@ -891,6 +888,7 @@ type BuildPersistOptions = {
   expectedBuild?: any
   expectedLegacy?: any
   validate?: () => Promise<void>
+  extraDocument?: { key: string, previous: string | null, value: string }
 }
 
 function writeBuildPersistSnapshot(snapshot: any, options: BuildPersistOptions = {}) {
@@ -969,10 +967,11 @@ function writeBuildPersistSnapshot(snapshot: any, options: BuildPersistOptions =
     writeSelectionDocuments(nextBuildSelection, nextLegacySelection)
     return
   }
-  const previousDocuments = [STORAGE_KEY, OLD_HOME_SELECTION_KEY]
+  const previousDocuments = [STORAGE_KEY, OLD_HOME_SELECTION_KEY, ...(options.extraDocument ? [options.extraDocument.key] : [])]
     .map(key => [key, localStorage.getItem(key)] as const)
   try {
     writeSelectionDocuments(nextBuildSelection, nextLegacySelection)
+    if (options.extraDocument) localStorage.setItem(options.extraDocument.key, options.extraDocument.value)
   } catch (error) {
     try {
       for (const [key, previous] of previousDocuments) {
@@ -1759,6 +1758,38 @@ export const useBuildStore = defineStore("build", {
         this.error = error instanceof Error ? error.message : String(error)
       })
       return request
+    },
+    configurationSnapshot() {
+      return buildPersistSnapshotFor(this)
+    },
+    async applyCalculationPreset(snapshot: any, meta: any, validate?: () => Promise<void>, extraDocument?: BuildPersistOptions["extraDocument"]) {
+      const ownerId = activeOwnerId()
+      const agentId = this.agentId
+      if (snapshot.ownerId !== ownerId || snapshot.agentId !== agentId) throw new Error("方案所属账号或角色已切换。")
+      if (!displayAgents(meta).some((agent: any) => agent.id === agentId)) throw new Error("方案角色当前不可用。")
+      await buildPersistQueue
+      await persistBuildSnapshot(clone(snapshot), {
+        rollbackOnFailure: true,
+        expectedBuild: readBuildSelectionDocument(),
+        expectedLegacy: readLegacySelectionDocument(),
+        extraDocument,
+        validate: async () => {
+          if (activeOwnerId() !== ownerId || this.agentId !== agentId) throw new Error("应用前账号或角色已切换。")
+          if (extraDocument && localStorage.getItem(extraDocument.key) !== extraDocument.previous) throw new Error("套装触发条件已变化，请重新应用方案。")
+          await validate?.()
+        },
+      })
+      if (activeOwnerId() === ownerId && this.agentId === agentId) this.applyAgentConfig(agentId, meta, {
+        ...snapshot,
+        damage: snapshot.damageConfig,
+        combat: {
+          activeBuffIds: snapshot.selectedBuffIds,
+          addedBuffs: snapshot.addedBuffs,
+          runtimeInputs: snapshot.runtimeInputs,
+          manuallyUncheckedDefaultBuffIds: snapshot.manuallyUncheckedDefaultBuffIds,
+          janeFrenzySplitVersion: snapshot.janeFrenzySplitVersion,
+        },
+      })
     },
   },
 })

@@ -8,6 +8,8 @@ import DamageSummaryBar from "@/components/DamageSummaryBar.vue"
 import DamageWhiteBox from "@/components/DamageWhiteBox.vue"
 import DriveDiscAnalysisModal from "@/components/DriveDiscAnalysisModal.vue"
 import DriveDiscPickerModal from "@/components/DriveDiscPickerModal.vue"
+import DriveDiscPagination from "@/components/DriveDiscPagination.vue"
+import { useDriveDiscPagination } from "@/utils/driveDiscPagination"
 import DriveDiscSlotCard from "@/components/DriveDiscSlotCard.vue"
 import EnemyTargetConfigPanel from "@/components/EnemyTargetConfigPanel.vue"
 import AgentSelect from "@/components/AgentSelect.vue"
@@ -51,6 +53,7 @@ import { resolveDefaultCalculationConfig } from "@core/defaultCalculationConfig.
 import { driveDiscUsageStateForAgent } from "@core/inventory-model.js"
 import { isLuminescenceSettlement } from "@core/luminescence.js"
 import { resolveLuminescenceParameters } from "@/utils/luminescenceParameters"
+import CalculationPresets from "@/components/CalculationPresets.vue"
 
 const catalogStore = useCatalogStore()
 const accountStore = useAccountStore()
@@ -70,7 +73,13 @@ const buffPickerResetNotice = ref("")
 const teammateSources = ref<TeammateSources>()
 let buffSession: { context: Awaited<ReturnType<typeof readTeammateSources>>, state: string, agentId: string } | null = null
 let disposed = false
-onBeforeUnmount(() => { disposed = true })
+let optimizationRequest = 0
+function invalidateOptimization() {
+  optimizationRequest++
+  optimizerStore.reset()
+}
+watch(() => [accountStore.currentOwnerId, buildStore.agentId], invalidateOptimization, { flush: "sync" })
+onBeforeUnmount(() => { disposed = true; invalidateOptimization() })
 
 function currentBuffPayload() {
   return { selectedBuffIds: buildStore.activeBuffIds(catalogStore.meta), addedBuffs: buildStore.addedBuffs,
@@ -473,6 +482,7 @@ const filteredManualDiscOptions = computed(() => {
         || Number(left.source?.sequence ?? 999999) - Number(right.source?.sequence ?? 999999)
     })
 })
+const { page: manualDiscPage, pageSize: manualDiscPageSize, pagedItems: pagedManualDiscOptions } = useDriveDiscPagination(filteredManualDiscOptions)
 const saveLoadoutIdsBySlot = computed(() => saveLoadoutDraft.value?.driveDiscIdsBySlot ?? {})
 const saveLoadoutDiscCount = computed(() => Object.keys(saveLoadoutIdsBySlot.value).length)
 const saveLoadoutMissingSlots = computed(() => OPTIMIZER_RESULT_SLOTS.filter(slot => !saveLoadoutIdsBySlot.value[String(slot)]))
@@ -874,7 +884,18 @@ function optimizerInput(ownerId = inventoryStore.store?.currentOwnerId ?? accoun
 }
 
 async function runOptimization() {
-  await inventoryStore.load()
+  const request = ++optimizationRequest
+  const requestedOwnerId = accountStore.currentOwnerId
+  const requestedAgentId = buildStore.agentId
+  const isCurrent = () => !disposed && request === optimizationRequest
+    && requestedOwnerId === accountStore.currentOwnerId && requestedAgentId === buildStore.agentId
+  try {
+    await inventoryStore.load()
+  } catch (error) {
+    if (isCurrent()) optimizerStore.failBeforeRun(error instanceof Error ? error.message : String(error), optimizerStore.settings)
+    return
+  }
+  if (!isCurrent()) return
   const ownerId = inventoryStore.store?.currentOwnerId ?? accountStore.currentOwnerId ?? "default"
   const owner = (inventoryStore.store?.owners ?? accountStore.owners ?? []).find((item: any) => item.id === ownerId)
   if (!luminescenceParametersValid.value) {
@@ -902,7 +923,7 @@ async function runOptimization() {
     return
   }
   await optimizerStore.run(catalogStore.catalog, inventoryStore.store, input)
-  if (optimizerStore.resultSchemes[0]) {
+  if (isCurrent() && optimizerStore.status === "done" && optimizerStore.resultSchemes[0]) {
     buildStore.selectOptimizedRank(Number(optimizerStore.resultSchemes[0].rank))
   }
 }
@@ -1375,6 +1396,7 @@ function formatPercentValue(value: any) {
 <template>
   <section class="workbench-grid workbench-merged-grid ui-layout-scope" data-layout-surface="workbench">
     <aside class="workbench-left workbench-surface">
+      <CalculationPresets :discs="selectedDriveDiscs" :options="selectedBuildOptions" :disabled="!buffContextReady || Boolean(buildStore.error) || (buildStore.discMode === 'optimized' && optimizerStore.resultsAreProvisional)" />
       <section class="workbench-section workbench-agent-section">
         <div class="panel-header workbench-section-header workbench-agent-header">
           <h1 class="panel-title">角色</h1>
@@ -1949,7 +1971,7 @@ function formatPercentValue(value: any) {
 
       <div v-if="filteredManualDiscOptions.length" class="manual-disc-option-list">
         <button
-          v-for="disc in filteredManualDiscOptions"
+          v-for="disc in pagedManualDiscOptions"
           :key="disc.id"
           type="button"
           class="manual-disc-option"
@@ -1972,6 +1994,7 @@ function formatPercentValue(value: any) {
         <strong>暂无驱动盘</strong>
         <span>暂无符合筛选条件的驱动盘</span>
       </div>
+      <DriveDiscPagination v-model:page="manualDiscPage" :total="filteredManualDiscOptions.length" :page-size="manualDiscPageSize" />
     </div>
     <template #footer>
       <div class="drawer-footer">

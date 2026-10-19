@@ -1,6 +1,7 @@
 import { defineStore } from "pinia"
 import { toRaw } from "vue"
 import { driveDiscOptimizationInventoryFingerprint } from "@core/inventory-model.js"
+import { readSafeJson } from "@runtime/storage-guard.js"
 
 type OptimizerStatus = "idle" | "estimating" | "preparing" | "running" | "cancelling" | "cancelled" | "done" | "error"
 
@@ -46,11 +47,13 @@ function clearActiveRun() {
 }
 
 function disposeWorker() {
+  const resolve = activeRunResolve
   clearActiveRun()
   activeWorker?.terminate()
   activeWorker = null
   activeWorkerCatalog = null
   activeWorkerCatalogFingerprint = ""
+  resolve?.()
 }
 
 function reusableWorker() {
@@ -78,11 +81,7 @@ function runId() {
 }
 
 function readSettings() {
-  try {
-    return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null")
-  } catch {
-    return null
-  }
+  return readSafeJson(SETTINGS_KEY, null)
 }
 
 function writeSettings(value: any) {
@@ -630,6 +629,18 @@ export const useOptimizerStore = defineStore("optimizer", {
         byAgent,
       })
     },
+    preparePresetRuntimeSettings(runtimeInputs: Record<string, any>) {
+      const saved = readSettings()
+      const envelope = settingsEnvelope(saved)
+      const currentAgentId = this.activeAgentId
+      const inputs = Object.fromEntries(Object.entries(runtimeInputs).filter(([id]) => id.startsWith("driveDisc4pc:")))
+      const previous = envelope?.byAgent?.[currentAgentId] ?? storedOptimizerSettingsForAgent(saved, currentAgentId)
+      const value = { ...plainObject(envelope), version: SETTINGS_VERSION, currentAgentId,
+        byAgent: { ...(envelope?.byAgent ?? {}), [currentAgentId]: optimizerSettingsPayload({
+          ...this, fourPieceBuffMode: "manual", fourPieceBuffRuntimeInputs: inputs,
+        }, previous) } }
+      return { key: SETTINGS_KEY, previous: localStorage.getItem(SETTINGS_KEY), value: JSON.stringify(value), inputs }
+    },
     setAlgorithm(value: string) {
       this.algorithm = normalizeBrowserOptimizerAlgorithm(value)
       this.persistSettings()
@@ -710,6 +721,7 @@ export const useOptimizerStore = defineStore("optimizer", {
       this.persistSettings()
     },
     reset() {
+      disposeWorker()
       this.resultsAreProvisional = false
       this.status = "idle"
       this.metrics = null
@@ -779,13 +791,15 @@ export const useOptimizerStore = defineStore("optimizer", {
       }
       const worker = reusableWorker()
       const id = runId()
+      activeRunId = id
       const workerInput = this.inputWithSettings(input, store)
       const workerStore = optimizerStorePayload(store, workerInput.ownerId)
       const workerCatalog = catalogForWorker(catalog)
       return new Promise(resolve => {
+        activeRunResolve = () => resolve(null)
         worker.onmessage = event => {
           const message = event.data ?? {}
-          if (message.runId !== id) {
+          if (message.runId !== id || activeRunId !== id || activeWorker !== worker) {
             return
           }
           if (message.type === "preview") {
@@ -798,6 +812,7 @@ export const useOptimizerStore = defineStore("optimizer", {
               percent: 0,
             })
             this.status = "idle"
+            clearActiveRun()
             resolve(message.preview)
           } else {
             this.error = message.error ?? "预估失败"
@@ -807,6 +822,7 @@ export const useOptimizerStore = defineStore("optimizer", {
           }
         }
         worker.onerror = event => {
+          if (activeRunId !== id || activeWorker !== worker) return
           this.error = event.message
           this.status = "error"
           disposeWorker()
@@ -851,7 +867,8 @@ export const useOptimizerStore = defineStore("optimizer", {
         percent: 0,
         elapsedMs: 0,
       })
-      activeRunId = runId()
+      const id = runId()
+      activeRunId = id
       lastWorkerMessageAt = Date.now()
       const worker = reusableWorker()
       const workerInput = this.inputWithSettings(input, store)
@@ -897,7 +914,7 @@ export const useOptimizerStore = defineStore("optimizer", {
 
         worker.onmessage = event => {
           const message = event.data ?? {}
-          if (message.runId !== activeRunId) {
+          if (message.runId !== id || activeRunId !== id || activeWorker !== worker) {
             return
           }
           lastWorkerMessageAt = Date.now()
@@ -1002,6 +1019,7 @@ export const useOptimizerStore = defineStore("optimizer", {
           }
         }
         worker.onerror = event => {
+          if (activeRunId !== id || activeWorker !== worker) return
           this.error = event.message
           this.status = "error"
           this.applyProgress({
@@ -1036,7 +1054,7 @@ export const useOptimizerStore = defineStore("optimizer", {
       })
     },
     cancel() {
-      if (!["preparing", "running", "cancelling"].includes(this.status)) {
+      if (!["estimating", "preparing", "running", "cancelling"].includes(this.status)) {
         return
       }
       const resolve = activeRunResolve

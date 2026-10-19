@@ -1,4 +1,5 @@
 import { createServer } from "node:http"
+import { DriveCaptureManager } from "./driveCapture.js"
 import { normalizeAnomalyCritMode } from "../core/anomalyCrit.js"
 import { createHash, randomUUID } from "node:crypto"
 import { AgentMaintenanceError, AgentMaintenanceHistory, agentRevision, agentRevisions, assertAgentRevision } from "./agentMaintenance.js"
@@ -255,6 +256,7 @@ function createRequestStore(input = {}) {
 }
 
 let catalog = await loadCatalog(dataDir, exampleDir)
+let driveCapture = null
 let catalogResponse = serializeCatalog(catalog)
 const agentHistory = new AgentMaintenanceHistory(dataDir)
 await agentHistory.recover((await readDataFile("agents.json")).agents ?? []).catch(() => {
@@ -2535,6 +2537,42 @@ async function routeScanTelemetry(req, res, pathname, searchParams) {
 }
 
 async function routeApi(req, res, pathname, searchParams) {
+    if (pathname.startsWith("/api/drive-capture")) {
+        const remote = String(req.socket.remoteAddress ?? "").replace(/^::ffff:/, "")
+        const localHost = /^(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$/.test(String(req.headers.host ?? ""))
+        if (nodeEnv === "production" || !localHost || !["127.0.0.1", "::1"].includes(remote)
+            || req.headers["x-zzz-local-request"] !== "1"
+            || (req.headers.origin && !isSameOriginRequest(req))
+            || (req.method !== "GET" && !isSameOriginRequest(req))) {
+            sendSameOriginJson(res, 403, { ok: false, error: "抓包接口只允许本机计算器页面调用。" })
+            return
+        }
+        try {
+            driveCapture ??= new DriveCaptureManager({ rootDir, driveDiscSets: catalog.driveDiscSets })
+            if (req.method === "GET" && pathname === "/api/drive-capture") {
+                sendSameOriginJson(res, 200, { ok: true, ...await driveCapture.status() })
+                return
+            }
+            const match = pathname.match(/^\/api\/drive-capture\/([0-9a-f-]+)\/(cancel|continue|result)$/)
+            if (req.method === "GET" && match?.[2] === "result") {
+                sendSameOriginJson(res, 200, { ok: true, ...await driveCapture.result(match[1]) })
+                return
+            }
+            if (req.method !== "POST" || !String(req.headers["content-type"] ?? "").startsWith("application/json")) {
+                sendSameOriginJson(res, 405, { ok: false, error: "Method not allowed." })
+                return
+            }
+            const input = JSON.parse(await readBody(req, 8192) || "{}")
+            const task = pathname === "/api/drive-capture"
+                ? await driveCapture.start(input)
+                : match?.[2] === "cancel" ? await driveCapture.cancel(match[1])
+                    : match?.[2] === "continue" ? await driveCapture.continueSecond(match[1]) : null
+            sendSameOriginJson(res, task ? 200 : 404, { ok: Boolean(task), task })
+        } catch (error) {
+            sendSameOriginJson(res, error.status ?? 400, { ok: false, code: error.code ?? "CAPTURE_REQUEST_FAILED", error: error.message })
+        }
+        return
+    }
     if (await routeScanTelemetry(req, res, pathname, searchParams)) {
         return
     }

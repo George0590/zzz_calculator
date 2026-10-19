@@ -41,7 +41,10 @@ export function driveDiscSourceDescriptors(disc: any): DriveDiscSourceDescriptor
   }
   const legacyKey = legacySourceKey(disc?.source)
   if (legacyKey) present.add(legacyKey)
-  return SOURCE_DESCRIPTORS.filter(descriptor => present.has(descriptor.key))
+  return SOURCE_DESCRIPTORS.filter(descriptor => present.has(descriptor.key)).map(descriptor =>
+    descriptor.key === "calculatorJson" && provenance?.calculatorJson?.exporter === "zzz-drive-exporter"
+      ? { ...descriptor, label: "抓包" }
+      : descriptor)
 }
 
 export function driveDiscScannerSequence(disc: any): string | null {

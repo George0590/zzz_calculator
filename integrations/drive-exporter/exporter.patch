@@ -1,0 +1,259 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 7998067..822edf4 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -495,8 +495,6 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+ [[package]]
+ name = "pktmon"
+ version = "0.6.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "138ba8229225b0334707e461dee957b8bbb0ca61c9be21d773991443e4364a08"
+ dependencies = [
+  "async-stream",
+  "cidr",
+diff --git a/Cargo.toml b/Cargo.toml
+index 372bae0..7b65b56 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -8,6 +8,9 @@ description = "Capture Zenless Zone Zero drive discs and export ZOOD and zzz_cal
+ repository = "https://github.com/Treageer/zzz-drive-exporter"
+ publish = false
+ 
++[patch.crates-io]
++pktmon = { path = "vendor/pktmon" }
++
+ [dependencies]
+ anyhow = "1.0"
+ chrono = { version = "0.4", default-features = false, features = ["clock"] }
+diff --git a/src/export_api.rs b/src/export_api.rs
+index 7e2903d..8e80ef7 100644
+--- a/src/export_api.rs
++++ b/src/export_api.rs
+@@ -23,10 +23,33 @@ pub enum ExporterOutcome {
+ 
+ const ZZZ_GAME_PORT: u16 = 20501;
+ 
++#[derive(Debug)]
++pub struct ExporterFailure(pub &'static str);
++impl std::fmt::Display for ExporterFailure {
++    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(self.0) }
++}
++impl std::error::Error for ExporterFailure {}
++
+ /// Capture UDP until the current GetEquipDataScRsp has been completely reassembled.
+ /// The encrypted command envelope is plaintext, so this stop condition does not need
+ /// the per-session XOR pad.
+ pub async fn capture_until_current_equip(output_root: &Path) -> Result<PathBuf> {
++    capture_until_current_equip_with_observer(output_root, |_| Ok(())).await
++}
++
++pub async fn capture_until_current_equip_with_observer(
++    output_root: &Path,
++    observe: impl FnMut(&str) -> Result<()>,
++) -> Result<PathBuf> {
++    capture_until_current_equip_controlled(output_root, observe, std::future::pending()).await
++}
++
++pub async fn capture_until_current_equip_controlled(
++    output_root: &Path,
++    mut observe: impl FnMut(&str) -> Result<()>,
++    stop: impl std::future::Future<Output = &'static str>,
++) -> Result<PathBuf> {
++    tokio::pin!(stop);
+     let schema = EQUIP_SCHEMAS
+         .last()
+         .copied()
+@@ -41,7 +64,7 @@ pub async fn capture_until_current_equip(output_root: &Path) -> Result<PathBuf>
+         .with_context(|| format!("creating {}", extracted_dir.display()))?;
+     let mut message_manifest = BufWriter::new(File::create(extracted_dir.join("messages.jsonl"))?);
+     let mut capture =
+-        Capture::new().context("creating pktmon capture; run this executable as administrator")?;
++        Capture::new_exclusive().context("creating pktmon capture; run this executable as administrator")?;
+     capture
+         .add_filter(PktMonFilter {
+             name: "ZZZ UDP".to_string(),
+@@ -59,6 +82,7 @@ pub async fn capture_until_current_equip(output_root: &Path) -> Result<PathBuf>
+     );
+ 
+     let mut stream = capture.stream().context("opening pktmon stream")?;
++    observe("waiting_login")?;
+     let (packet_tx, mut packet_rx) = tokio::sync::mpsc::unbounded_channel();
+     let capture_task = tokio::spawn(async move {
+         while let Some(packet) = stream.next().await {
+@@ -75,6 +99,7 @@ pub async fn capture_until_current_equip(output_root: &Path) -> Result<PathBuf>
+     let mut message_index = 0_u64;
+     let mut target_seen = false;
+ 
++    let result: Result<()> = async {
+     'capture: loop {
+         let packet = tokio::select! {
+             packet = packet_rx.recv() => {
+@@ -83,8 +108,9 @@ pub async fn capture_until_current_equip(output_root: &Path) -> Result<PathBuf>
+             }
+             _ = tokio::signal::ctrl_c() => {
+                 warn!("capture interrupted before automatic completion");
+-                break;
++                return Err(ExporterFailure("CANCELLED").into());
+             }
++            code = &mut stop => return Err(ExporterFailure(code).into()),
+         };
+ 
+         packet_index += 1;
+@@ -96,6 +122,7 @@ pub async fn capture_until_current_equip(output_root: &Path) -> Result<PathBuf>
+         };
+ 
+         kept_index += 1;
++        if kept_index == 1 { observe("capturing")?; }
+         kept_bytes += udp.payload.len() as u64;
+ 
+         let packet_row = PacketRow {
+@@ -168,6 +195,9 @@ pub async fn capture_until_current_equip(output_root: &Path) -> Result<PathBuf>
+                         "preview_hex": hex::encode(&message[..message.len().min(32)]),
+                     })
+                 )?;
++                if envelope.command_id == schema.command_id && envelope.body.len() < 8192 {
++                    return Err(ExporterFailure("SMALL_INVENTORY_UNSUPPORTED").into());
++                }
+                 if envelope.command_id == schema.command_id && envelope.body.len() >= 8192 {
+                     target_seen = true;
+                     info!(
+@@ -182,9 +212,14 @@ pub async fn capture_until_current_equip(output_root: &Path) -> Result<PathBuf>
+     }
+ 
+     message_manifest.flush()?;
++    Ok(())
++    }.await;
+     drop(packet_rx);
+     capture_task.abort();
++    // Await stream destruction on every result, including cancellation and IO
++    // errors, before the machine process is permitted to report completion.
+     let _ = capture_task.await;
++    result?;
+     fs::write(
+         extracted_dir.join("summary.txt"),
+         format!(
+@@ -245,22 +280,24 @@ pub fn process_exporter_capture(
+     replace_calculator: bool,
+ ) -> Result<ExporterOutcome> {
+     prepare_exporter_capture(run_dir)?;
+-    if explicit_baseline.is_none()
+-        && let Ok((_pad_path, equip_json, disc_count)) = single_session_export(
++    if explicit_baseline.is_none() {
++        match single_session_export(
+             run_dir,
+             zood_output,
+             calculator_output,
+             replace_zood,
+             replace_calculator,
+-        )
+-    {
+-            return Ok(ExporterOutcome::ExportedSingleSession {
++        ) {
++            Ok((_pad_path, equip_json, disc_count)) => return Ok(ExporterOutcome::ExportedSingleSession {
+                 capture: run_dir.to_path_buf(),
+                 equip_json,
+                 zood_json: zood_output.to_path_buf(),
+                 calculator_json: calculator_output.to_path_buf(),
+                 disc_count,
+-            });
++            }),
++            Err(error) if error.downcast_ref::<ExporterFailure>().is_some_and(|failure| failure.0 == "RECOVERY_UNAVAILABLE") => {},
++            Err(error) => return Err(error),
++        }
+     }
+ 
+     let candidates = baseline_candidates(run_dir, capture_root, explicit_baseline)?;
+@@ -386,7 +423,7 @@ fn single_session_export(
+         break;
+     }
+     if !recovered {
+-        bail!("single-session statistical recovery did not validate");
++        return Err(ExporterFailure("RECOVERY_UNAVAILABLE").into());
+     }
+     let equip_json = commands_dir.join("equip.json");
+     decode_equip(DecodeEquipArgs {
+@@ -450,8 +487,8 @@ pub fn export_formats_from_equip(
+     if zood_output == calculator_output {
+         bail!("ZOOD and zzz_calculator outputs must use different paths");
+     }
+-    ensure_output_available(zood_output, replace_zood)?;
+-    ensure_output_available(calculator_output, replace_calculator)?;
++    ensure_output_available(zood_output, replace_zood).context(ExporterFailure("RESULT_WRITE"))?;
++    ensure_output_available(calculator_output, replace_calculator).context(ExporterFailure("RESULT_WRITE"))?;
+ 
+     let data: Value = serde_json::from_slice(
+         &fs::read(equip_json).with_context(|| format!("reading {}", equip_json.display()))?,
+@@ -461,16 +498,16 @@ pub fn export_formats_from_equip(
+         .and_then(Value::as_array)
+         .context("equip.json has no equip_list array")?;
+     if records.is_empty() {
+-        bail!("equip.json contains no drive discs");
++        return Err(ExporterFailure("EMPTY_INVENTORY").into());
+     }
+ 
+     let set_map: Value =
+         serde_json::from_str(include_str!("../resources/zzz_cn31_disc_sets.json"))?;
+-    validate_record_ids(records)?;
+-    let zood = build_zood(records, &set_map)?;
+-    let calculator = build_zzz_calculator(records, &set_map)?;
+-    write_pretty_json(zood_output, &zood)?;
+-    write_pretty_json(calculator_output, &calculator)?;
++    validate_record_ids(records).context(ExporterFailure("RESULT_INVALID"))?;
++    let zood = build_zood(records, &set_map).context(ExporterFailure("VERSION_MAPPING"))?;
++    let calculator = build_zzz_calculator(records, &set_map).context(ExporterFailure("VERSION_MAPPING"))?;
++    write_pretty_json(zood_output, &zood).context(ExporterFailure("RESULT_WRITE"))?;
++    write_pretty_json(calculator_output, &calculator).context(ExporterFailure("RESULT_WRITE"))?;
+     Ok(records.len())
+ }
+ 
+@@ -861,6 +898,15 @@ mod exporter_tests {
+         assert_eq!(calculator["driveDiscs"][1]["mainStat"]["stat"], "windDmg");
+         assert_eq!(calculator["driveDiscs"][1]["mainStat"]["value"], 7.5);
+ 
++        // A write or mapping failure must not be reclassified as a request to log in again.
++        let write_error = export_formats_from_equip(&equip_path, &zood_path, &calculator_path, false, false).unwrap_err();
++        assert_eq!(write_error.downcast_ref::<ExporterFailure>().unwrap().0, "RESULT_WRITE");
++        let mut unmapped = equip.clone();
++        unmapped["equip_list"][0]["suit_id"] = json!(999999);
++        fs::write(&equip_path, serde_json::to_vec(&unmapped).unwrap()).unwrap();
++        let mapping_error = export_formats_from_equip(&equip_path, &zood_path, &calculator_path, true, true).unwrap_err();
++        assert_eq!(mapping_error.downcast_ref::<ExporterFailure>().unwrap().0, "VERSION_MAPPING");
++
+         fs::remove_dir_all(temp_dir).unwrap();
+     }
+ }
+diff --git a/src/main.rs b/src/main.rs
+index 747435b..2fcc8be 100644
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -7,6 +7,7 @@ use anyhow::{Context, Result};
+ use clap::Parser;
+ use tracing_subscriber::EnvFilter;
+ use zzz_drive_exporter::{ExporterOutcome, capture_until_current_equip, process_exporter_capture};
++mod machine;
+ 
+ #[derive(Debug, Parser)]
+ #[command(
+@@ -15,6 +16,11 @@ use zzz_drive_exporter::{ExporterOutcome, capture_until_current_equip, process_e
+     about = "Capture ZZZ drive discs and export ZOOD and zzz_calculator JSON"
+ )]
+ struct Cli {
++    /// Calculator machine protocol v1. All files are scoped to this existing task directory.
++    #[arg(long)]
++    machine_task_dir: Option<PathBuf>,
++    #[arg(long, requires = "machine_task_dir")]
++    task_id: Option<String>,
+     /// Process an existing capture instead of starting a live capture.
+     #[arg(long)]
+     from_capture: Option<PathBuf>,
+@@ -48,6 +54,10 @@ async fn main() -> Result<()> {
+         )
+         .init();
+     let cli = Cli::parse();
++    if let Some(directory) = cli.machine_task_dir {
++        let code = machine::run(directory, cli.task_id.context("--task-id is required")?).await;
++        std::process::exit(code);
++    }
+ 
+     let replace_zood = cli.force || cli.output.is_none();
+     let replace_calculator = cli.force || cli.calculator_output.is_none();

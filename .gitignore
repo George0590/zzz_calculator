@@ -31,6 +31,9 @@ imports/
 downloads/
 *.scanner-export.json
 
+# Local capture tasks, private network data, binaries and build toolchain
+.local-runtime/
+
 .vscode/
 .idea/
 

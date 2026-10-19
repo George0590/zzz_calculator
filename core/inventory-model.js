@@ -483,7 +483,8 @@ export function normalizeDriveDiscSetAlias(disc, options = {}) {
     if (!setMatch?.id) return disc
 
     const currentSetId = String(disc.setId ?? "").trim()
-    const replaceSetId = !currentSetId || currentSetId.startsWith("scanner-set-")
+    const replaceSetId = currentSetId !== setMatch.id
+        && (!currentSetId || currentSetId.startsWith("scanner-set-"))
     const fillCanonicalSetName = (replaceSetId || currentSetId === setMatch.id)
         && isMissingCanonicalSetName(disc.canonicalSetName)
     if (!replaceSetId && !fillCanonicalSetName) return disc
@@ -784,6 +785,7 @@ function normalizeNativeDriveDisc(rawItem, index, options) {
             sourceAccountKey: options.sourceAccountKey ?? null,
             sourceAccountId: options.sourceAccountId ?? null,
             sourceAccountLabel: options.sourceAccountLabel ?? null,
+            ...(options.captureImport ? { exporter: "zzz-drive-exporter" } : {}),
         },
     })
     return withDriveDiscProvenance({
@@ -1081,7 +1083,7 @@ function mergeReconciledDriveDisc(existing, imported, { sourceKind, matchReason,
         ownerId: existing.ownerId ?? imported.ownerId,
         locked: sourceKind === "enka"
             ? Boolean(imported.locked)
-            : sourceKind === "calculatorJson" && strongNativeMatch
+            : sourceKind === "calculatorJson" && (strongNativeMatch || (options.captureImport && matchReason === "resolved-identity"))
                 ? Boolean(imported.locked)
                 : Boolean(existing.locked),
         equippedBy: sourceKind === "enka"
@@ -1233,6 +1235,31 @@ export function planDriveDiscReconciliation({
             candidates = contentCandidates(currentItems, imported)
                 .filter(item => !excludesDifferentStrongIdentity(item, imported))
             if (candidates.length) matchReason = "same-content"
+        }
+
+        // Packet captures have stable item IDs. Content/shape equality with an
+        // older Scanner/manual record is only a candidate, never proof of identity.
+        if (options.captureImport && !["same-native-source"].includes(matchReason)
+            && !(matchReason === "same-native-id" && sourceWasAlreadyObserved(candidates[0], imported, sourceKind))) {
+            const weakCandidates = candidates.length ? candidates : identityCandidates(currentItems, imported)
+                .filter(item => !excludesDifferentStrongIdentity(item, imported))
+            if (weakCandidates.length) {
+                const key = reconciliationKey(sourceKind, imported, index)
+                const resolution = resolutions[key]
+                if (resolution?.action === "add") {
+                    candidates = []
+                } else if (resolution?.action === "update") {
+                    const selected = weakCandidates.find(item => String(item.id) === String(resolution.existingId))
+                    if (!selected || matchedExistingIds.has(String(selected.id))) {
+                        throw new Error("疑似同盘的选择已失效或被另一张盘占用，请重新预览。")
+                    }
+                    candidates = [selected]
+                    matchReason = "resolved-identity"
+                } else {
+                    conflicts.push({ key, imported, candidates: weakCandidates, reason: "capture-identity-unconfirmed" })
+                    return
+                }
+            }
         }
 
         if (candidates.length) {

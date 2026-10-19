@@ -7,6 +7,7 @@ import { useAppConfigStore } from "@/stores/app-config"
 import { recoverAllPendingDriveDiscImports } from "@runtime/drive-disc-import-transaction"
 import { recoverPendingEnkaImport } from "@runtime/enka-import-transaction"
 import { loadUserDriveDiscStoreFresh } from "@runtime/local-store.js"
+import { recoverPersonalRestore } from "@runtime/personal-backup"
 import "@/styles/tokens.css"
 
 const STARTUP_RECOVERY_LOCK_TIMEOUT_MS = 5_000
@@ -16,6 +17,7 @@ async function bootstrap() {
   const accountStore = useAccountStore(pinia)
   let startupError = ""
   try {
+    await recoverPersonalRestore()
     const recoveryLockOptions = {
       waitTimeoutMs: STARTUP_RECOVERY_LOCK_TIMEOUT_MS,
       purpose: "恢复未完成的驱动盘导入",
@@ -31,7 +33,7 @@ async function bootstrap() {
       await recoverPendingEnkaImport(ownerId, recoveryLockOptions)
     }
   } catch (error) {
-    startupError = `未完成的驱动盘导入自动恢复失败，请刷新页面后再修改配置：${error instanceof Error ? error.message : String(error)}`
+    startupError = `本地数据读取或事务恢复失败，已停止修改。请先导出原始内容或从备份恢复：${error instanceof Error ? error.message : String(error)}`
   }
   if (!startupError) {
     try {

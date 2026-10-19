@@ -1,0 +1,93 @@
+diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -253,6 +253,14 @@ impl Debug for Capture {
+ }
+ 
+ impl Capture {
++    /// Refuse an occupied legacy pktmon session instead of stopping it.
++    pub fn new_exclusive() -> io::Result<Self> {
++        let backend = match RealTimeBackend::new() {
++            Ok(backend) => DispatchCaptureBackend::RealTime(backend),
++            Err(_) => DispatchCaptureBackend::Legacy(LegacyBackend::new_exclusive()?),
++        };
++        Ok(Self { backend, running: false })
++    }
+     /// Create a new capture instance.
+     pub fn new() -> io::Result<Self> {
+         // Try to use the RealTimeBackend first (Windows 11+)
+diff --git a/src/legacy/mod.rs b/src/legacy/mod.rs
+--- a/src/legacy/mod.rs
++++ b/src/legacy/mod.rs
+@@ -23,6 +23,7 @@ pub struct LegacyBackend {
+     consumer: Option<EtwConsumer>,
+     receiver: Option<Receiver<Packet>>,
+     running: bool,
++    exclusive: bool,
+     #[cfg(feature = "tokio")]
+     notify: Option<std::sync::Arc<tokio::sync::Notify>>,
+ }
+@@ -34,6 +35,19 @@ impl Debug for LegacyBackend {
+ }
+ 
+ impl LegacyBackend {
++    pub fn new_exclusive() -> io::Result<Self> {
++        // No shutdown hook: it opens a new global driver and can stop someone else's capture.
++        Ok(Self {
++            driver: Driver::new_exclusive()?,
++            etw: EtwSession::new()?,
++            consumer: None,
++            receiver: None,
++            running: false,
++            exclusive: true,
++            #[cfg(feature = "tokio")]
++            notify: Some(std::sync::Arc::new(tokio::sync::Notify::new())),
++        })
++    }
+     /// Create a new capture instance.
+     ///
+     /// Loads the PktMon driver and creates an ETW session.
+@@ -51,6 +65,7 @@ impl LegacyBackend {
+             consumer: None,
+             receiver: None,
+             running: false,
++            exclusive: false,
+ 
+             #[cfg(feature = "tokio")]
+             notify: Some(std::sync::Arc::new(tokio::sync::Notify::new())),
+@@ -117,6 +132,9 @@ impl CaptureBackend for LegacyBackend {
+     ///
+     /// This will ensure the driver isn't used after this.
+     fn unload(&mut self) -> io::Result<()> {
++        // Exclusive capture stops only its successfully started session; never
++        // unload the global driver on a failed start or after releasing it.
++        if self.exclusive { return Ok(()); }
+         Driver::unload(&self.driver)?;
+ 
+         Ok(())
+diff --git a/src/legacy/driver.rs b/src/legacy/driver.rs
+--- a/src/legacy/driver.rs
++++ b/src/legacy/driver.rs
+@@ -55,6 +55,14 @@ struct PktMonApi {
+ 
+ impl Driver {
+     pub fn new() -> win::Result<Self> {
++        Self::new_with_exclusive(false)
++    }
++
++    pub fn new_exclusive() -> win::Result<Self> {
++        Self::new_with_exclusive(true)
++    }
++
++    fn new_with_exclusive(exclusive: bool) -> win::Result<Self> {
+         unsafe {
+             let module = LoadLibraryA(s!("PktMonApi.dll"))?;
+ 
+@@ -83,6 +91,7 @@ impl Driver {
+ 
+             // If the driver is already running, stop it
+             if driver.is_running()? {
++                if exclusive { return Err(WIN32_ERROR(170).into()); }
+                 debug!("Driver is already running, stopping it...");
+                 driver.stop_capture()?;
+             }

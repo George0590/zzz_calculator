@@ -1,0 +1,17 @@
+{
+  "format": "zzz-calculator-drive-disc-export",
+  "version": 1,
+  "exportedAt": "2026-10-19T00:00:00.000Z",
+  "sourceAccount": { "label": "zzz-drive-exporter" },
+  "driveDiscs": [{
+    "id": "10000000000000001",
+    "setId": "woodpecker_electro", "setName": "啄木鸟电音",
+    "partition": 6, "rarity": "S", "level": 15, "maxLevel": 15,
+    "locked": true, "equippedBy": null,
+    "mainStat": { "stat": "anomalyMastery", "mode": "pct", "value": 30 },
+    "subStats": [
+      { "stat": "critRate", "mode": "pct", "value": 4.8 },
+      { "stat": "atkFlat", "mode": "flat", "value": 19 }
+    ]
+  }]
+}

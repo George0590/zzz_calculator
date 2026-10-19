@@ -396,6 +396,7 @@ declare module "@runtime/local-store.js" {
   export const DRIVE_DISC_STORAGE_TIMEOUT: "DRIVE_DISC_STORAGE_TIMEOUT"
   export const DEFAULT_STORAGE_TIMEOUT_MS: number
   export interface LocalStoreOperationOptions {
+    unreadableFallback?: string
     ownerId?: string
     waitTimeoutMs?: number
     lockTimeoutMs?: number
@@ -404,6 +405,7 @@ declare module "@runtime/local-store.js" {
     signal?: AbortSignal
   }
   export function clearAllBrowserData(): Promise<void>
+  export function currentInventoryWriteRevision(): number
   export function driveDiscContentFingerprint(disc: any): string
   export function driveDiscIdentityFingerprint(disc: any): string
   export function ownerScopedStore(store: any, ownerId?: string): any
@@ -419,6 +421,7 @@ declare module "@runtime/local-store.js" {
   export function exportCurrentUserDriveDiscs(options?: LocalStoreOperationOptions & { exportedAt?: string }): Promise<any>
   export function saveUserDriveDiscStore(store: any, options?: LocalStoreOperationOptions): Promise<any>
   export function saveUserDriveDiscStoreUnlocked(store: any, options?: LocalStoreOperationOptions): Promise<any>
+  export function restoreUnreadableInventoryFallback(raw: string, transactionId: string): void
   export function clearUserDriveDiscStore(ownerId?: string | null, options?: LocalStoreOperationOptions): Promise<any>
   export function previewScannerExportImport(input: any, options?: any): Promise<any>
   export function planScannerExportImport(input: any, options?: any): Promise<any>
@@ -548,6 +551,7 @@ declare module "@core/drive-disc-import/transaction-plan.js" {
   export function buildDriveDiscImportTransactionPlan(options: any): any
   export function clearPendingDriveDiscImportJournal(store: any, ownerId: string, transactionId?: string | null): any
   export function driveDiscImportBaseMatches(input: any): boolean
+  export function driveDiscImportFingerprint(input: any): string
   export function driveDiscImportSnapshotMatches(input: any, phase?: "before" | "after"): boolean
   export function pendingDriveDiscImportJournal(store: any, ownerId: string): any
   export function pendingDriveDiscImportOwners(store: any): string[]

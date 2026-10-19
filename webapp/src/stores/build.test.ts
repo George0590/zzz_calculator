@@ -88,6 +88,55 @@ describe("build store", () => {
     localStorage.clear()
   })
 
+  it("applies a complete preset and retains default buff opt-outs after reload", async () => {
+    const { store, meta } = legacyBuffPickerBuild()
+    await store.persist()
+    const snapshot = store.configurationSnapshot()
+    store.agentLevel = 50
+    store.manuallyUncheckedDefaultBuffIds = []
+    store.selectedBuffIds = []
+    await store.persist()
+    await store.applyCalculationPreset(snapshot, meta, async () => {})
+    expect(store.agentLevel).toBe(snapshot.agentLevel)
+    expect(store.manuallyUncheckedDefaultBuffIds).toEqual(snapshot.manuallyUncheckedDefaultBuffIds)
+    store.initialize({}, meta)
+    expect(store.agentLevel).toBe(snapshot.agentLevel)
+    expect(store.manuallyUncheckedDefaultBuffIds).toEqual(snapshot.manuallyUncheckedDefaultBuffIds)
+    expect(store.buffPickerState).toEqual(snapshot.buffPickerState)
+  })
+
+  it("keeps current state and saved documents when preset validation fails", async () => {
+    const { store, meta } = legacyBuffPickerBuild()
+    await store.persist()
+    const before = readBuildSelectionDocument()
+    const snapshot = { ...store.configurationSnapshot(), agentLevel: 30 }
+    await expect(store.applyCalculationPreset(snapshot, meta, async () => { throw new Error("盘已变化") })).rejects.toThrow("盘已变化")
+    expect(store.agentLevel).toBe(60)
+    expect(readBuildSelectionDocument()).toEqual(before)
+  })
+
+  it("rolls back all preset documents when writing four-piece settings fails", async () => {
+    const { store, meta } = legacyBuffPickerBuild()
+    await store.persist()
+    const before = readBuildSelectionDocument()
+    const legacy = readLegacySelectionDocument()
+    const key = "zzz-calculator.webapp.optimizer.v1"
+    localStorage.setItem(key, '{"before":true}')
+    const original = Storage.prototype.setItem
+    const failure = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (storageKey, value) {
+      if (storageKey === key) throw new Error("quota")
+      original.call(this, storageKey, value)
+    })
+    try {
+      await expect(store.applyCalculationPreset({ ...store.configurationSnapshot(), agentLevel: 30 }, meta, async () => {},
+        { key, previous: '{"before":true}', value: '{"after":true}' })).rejects.toThrow("quota")
+      expect(store.agentLevel).toBe(60)
+      expect(readBuildSelectionDocument()).toEqual(before)
+      expect(readLegacySelectionDocument()).toEqual(legacy)
+      expect(localStorage.getItem(key)).toBe('{"before":true}')
+    } finally { failure.mockRestore() }
+  })
+
   it("persists dormant anomaly CRIT choices for attribute, turbulence and release across reloads", async () => {
     const catalog = await loadCalculatorContext(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.."))
     const meta = buildMeta(catalog)
