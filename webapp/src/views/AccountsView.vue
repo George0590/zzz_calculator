@@ -81,8 +81,13 @@ async function switchAccount(id: string) {
       <div v-else-if="accountStore.loadState === 'loading' || accountStore.loadState === 'idle'" class="empty-state">
         正在加载账号…
       </div>
-      <div v-else-if="accountStore.owners.length" class="entity-grid">
-        <article v-for="owner in accountStore.owners" :key="owner.id" class="panel">
+      <div v-else-if="accountStore.owners.length" class="entity-grid account-grid">
+        <article
+          v-for="owner in accountStore.owners"
+          :key="owner.id"
+          class="panel account-card"
+          :class="{ 'is-current': owner.id === accountStore.currentOwnerId }"
+        >
           <div class="panel-header">
             <h2 class="panel-title">{{ owner.label }}</h2>
             <NTag v-if="owner.id === accountStore.currentOwnerId" type="success" round>
@@ -90,7 +95,7 @@ async function switchAccount(id: string) {
             </NTag>
           </div>
           <div class="panel-body section-band">
-            <dl class="metric-grid">
+            <dl class="metric-grid account-metrics">
               <div class="metric">
                 <dt>驱动盘</dt>
                 <dd class="num">{{ owner.driveDiscCount ?? 0 }}</dd>
@@ -150,3 +155,20 @@ async function switchAccount(id: string) {
     @confirm="confirmDelete"
   />
 </template>
+
+<style scoped>
+/* 账号卡片：每张至少 300px 宽，当前账号用主色描边 */
+.account-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+
+.account-card.is-current {
+  border-color: var(--app-blue-line);
+  box-shadow: 0 0 0 1px var(--app-blue-line);
+}
+
+.account-metrics {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+</style>

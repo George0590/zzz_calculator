@@ -3,6 +3,7 @@ import { ref } from "vue"
 import { NAlert, NButton, NCheckbox, NModal } from "naive-ui"
 import { createPersonalBackup, downloadData, previewPersonalRestore, restorePersonalBackup } from "@runtime/personal-backup"
 const busy = ref(false)
+const restoreInput = ref<HTMLInputElement | null>(null)
 const error = ref("")
 const plan = ref<any>(null)
 const backedUp = ref(false)
@@ -45,7 +46,18 @@ async function restore() {
       <NAlert v-if="error && !plan" type="error">{{ error }}</NAlert>
       <div class="toolbar">
         <NButton :loading="busy" :disabled="busy" @click="exportBackup">导出完整备份</NButton>
-        <label>选择完整备份恢复 <input type="file" accept=".json,application/json" :disabled="busy" aria-label="选择完整备份恢复" @change="selectFile"></label>
+        <!-- 用统一样式的按钮代替浏览器原生文件框；文件框保留给读屏和测试，只是视觉上隐藏 -->
+        <NButton :disabled="busy" data-testid="choose-backup-file" @click="restoreInput?.click()">从备份恢复…</NButton>
+        <input
+          ref="restoreInput"
+          class="visually-hidden-file"
+          type="file"
+          accept=".json,application/json"
+          :disabled="busy"
+          aria-label="选择完整备份恢复"
+          tabindex="-1"
+          @change="selectFile"
+        >
       </div>
     </div>
   </section>
@@ -66,3 +78,14 @@ async function restore() {
     </div></template>
   </NModal>
 </template>
+
+<style scoped>
+.visually-hidden-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+</style>
