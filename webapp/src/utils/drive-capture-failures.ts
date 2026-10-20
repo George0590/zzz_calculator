@@ -47,7 +47,7 @@ const GUIDES: Record<CaptureFailureCategory, Omit<CaptureFailureGuide, "category
   retry: { title: "本次采集未完成", description: "未在时限内完成授权或登录，可直接重新开始。", primaryLabel: "重新开始", primaryAction: "restart" },
   environment: { title: "采集环境需要处理", description: "本机环境阻止了采集，处理后可重新开始。", primaryLabel: "已处理，重新开始", primaryAction: "restart" },
   pairing: { title: "两次登录数据不一致", description: "两次登录之间账号、版本或库存发生了变化，需要重新采集。", primaryLabel: "重新采集", primaryAction: "restart" },
-  unsupported: { title: "当前情况暂不支持抓包", description: "这不是操作问题，本次无法通过抓包读取。可改用扫描助手。", primaryLabel: "改用扫描助手", primaryAction: "scan" },
+  unsupported: { title: "当前情况暂不支持抓包", description: "并非操作问题，本次无法通过抓包读取，可改用扫描助手。", primaryLabel: "改用扫描助手", primaryAction: "scan" },
   decode: { title: "数据解析失败", description: "本次数据未能解析，可重新开始。", primaryLabel: "重新开始", primaryAction: "restart" },
 }
 

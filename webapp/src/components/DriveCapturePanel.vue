@@ -1,64 +1,109 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue"
-import { NAlert, NButton, NCheckbox, NInput, NModal, NSelect, NTag } from "naive-ui"
+import { NAlert, NButton, NCheckbox, NInput, NModal, NSelect, NSpin, NTag } from "naive-ui"
 import DriveDiscConflictResolver from "./DriveDiscConflictResolver.vue"
 import { useDriveCaptureStore } from "@/stores/drive-capture"
 import { useAccountStore } from "@/stores/account"
 import { useCatalogStore } from "@/stores/catalog"
 import { formatStoredStatValue, storedStatLabel } from "@/utils/format"
+import { CAPTURE_ERROR_DETAILS, captureFailureCategory, captureFailureGuide } from "@/utils/drive-capture-failures"
+import { normalizeDeclaredUid } from "@core/drive-disc-capture.js"
+
+// 抓包导入向导：一步一屏，每屏一个主操作。步骤由任务阶段推导，后端与任务状态机不变。
+type DraftStep = "intro" | "target" | "prepare"
+type Step = DraftStep | "unavailable" | "authorize" | "login" | "working" | "second" | "review" | "done" | "failed"
 
 const props = defineProps<{ show: boolean }>()
-const emit = defineEmits<{ "update:show": [show: boolean] }>()
+const emit = defineEmits<{ "update:show": [show: boolean], "use-scanner": [] }>()
 const capture = useDriveCaptureStore()
 const accounts = useAccountStore()
 const catalog = useCatalogStore()
+const INTRO_KEY = "zzz-calculator.capture-intro-dismissed.v1"
+const LOGIN_LIMIT_MS = 180_000
+
 const ownerId = ref("")
 const uid = ref("")
 const mismatch = ref("")
 const acknowledgeMismatch = ref(false)
 const secondConfirmed = ref(false)
+const gameAtLogin = ref(false)
+const noOtherCapture = ref(false)
+const introDismissChecked = ref(false)
+const introShown = ref(false)
+const draftStep = ref<DraftStep>("target")
+// 上一次任务已结束、用户选择重新开始时，不再展示旧任务状态
+const composing = ref(true)
+const showDetails = ref(false)
+const now = ref(Date.now())
+const decodeFailures = ref(new Set<string>())
 let polling: ReturnType<typeof setInterval> | null = null
 let refreshing = false
 
-const phases: Record<string, string> = {
-  awaiting_elevation: "等待 Windows 管理员授权", preparing: "正在准备采集", waiting_login: "已就绪，请登录游戏",
-  capturing: "正在采集登录数据", parsing: "正在解析驱动盘", needs_second_login: "需要第二次登录确认",
-  ready: "采集完成，等待预览和入库", failed: "采集失败", cancelled: "采集已取消", timed_out: "采集已超时", cancelling: "正在停止采集",
-}
-const errors: Record<string, string> = {
-  START_FAILED: "无法启动本机导出器，请检查安装文件和 Windows 授权。",
-  CAPTURE_MUTEX_FAILED: "无法取得本机采集锁，请稍后重试。",
-  PROTOCOL_INVALID: "导出器返回的状态不符合本次任务协议，结果未导入。",
-  TASK_IO: "本地任务文件读写失败，请检查磁盘空间与目录权限。",
-  TASK_TIMEOUT: "等待超过时间限制，已请求停止。如果 Windows 授权窗口仍在，请关闭它后重试。",
-  UAC_REJECTED: "你取消了管理员授权。准备好后可以重新采集。",
-  CAPTURE_BUSY: "系统已有 pktmon 采集任务，本次未启动。请先结束你正在使用的其他采集工具。",
-  CAPTURE_PERMISSION: "采集权限不足，请重新启动并允许 Windows 管理员授权。",
-  CAPTURE_FAILED: "无法启动或完成抓包，请检查权限和网络环境后重试。",
-  RESPONSE_TIMEOUT: "没有在 3 分钟内收到支持的完整驱动盘响应。请确认国服正式 PC 客户端、版本及登录步骤。",
-  SMALL_INVENTORY_UNSUPPORTED: "已收到响应，但数据量不足以让当前算法可靠恢复；首版暂不支持这类小库存。",
-  EMPTY_INVENTORY: "未取得驱动盘，首版暂不支持空库存。",
-  PAIRING_FAILED: "两次登录无法配对。请核对同一游戏账号、同一版本，且两次期间库存完全未改变。",
-  VERSION_MAPPING: "游戏版本、套装或属性映射不受当前导出器支持。",
-  RESULT_WRITE: "导出文件写入失败，请检查磁盘空间和目录权限。",
-  RESULT_INVALID: "本次结果校验失败，未导入库存。",
-  DECODE_FAILED: "驱动盘恢复或解码失败，未导入库存。",
-  DECODE_TIMEOUT: "解析超过时间限制，已停止本次任务。",
-  CONFIRM_TIMEOUT: "等待第二次登录确认超时，请重新采集。",
-  SERVICE_LOST: "本地服务连接中断，采集已停止。",
-  SERVICE_RESTARTED: "本地服务已重启，本次任务作废，请重新采集。",
-  PROCESS_EXITED: "采集进程已退出，但未交付本次成功结果。",
-}
+function readIntroDismissed() { try { return localStorage.getItem(INTRO_KEY) === "1" } catch { return false } }
+function saveIntroDismissed() { try { localStorage.setItem(INTRO_KEY, "1") } catch { /* 仅影响下次是否显示说明 */ } }
+
+const step = computed<Step>(() => {
+  const task = capture.task
+  if (capture.loaded && !capture.available && !capture.active) return "unavailable"
+  if (task && (capture.active || !composing.value)) {
+    if (capture.imported) return "done"
+    const phase = task.phase
+    if (["awaiting_elevation", "preparing"].includes(phase)) return "authorize"
+    if (phase === "waiting_login") return "login"
+    if (["capturing", "parsing", "cancelling"].includes(phase)) return "working"
+    if (phase === "needs_second_login") return "second"
+    if (phase === "ready") return "review"
+    if (["failed", "timed_out", "cancelled"].includes(phase)) return "failed"
+    return "working"
+  }
+  return draftStep.value
+})
+const stepGroup = computed(() => ({
+  intro: 0, target: 0, prepare: 1, authorize: 1, login: 2, working: 2, second: 2, review: 3, done: 3,
+} as Record<string, number>)[step.value] ?? -1)
+const stepLabels = ["账号", "准备", "登录", "入库"]
+
 const options = computed(() => accounts.owners.map((owner: any) => ({ label: owner.label, value: owner.id })))
+const ownerLabel = (id: string) => accounts.owners.find((owner: any) => owner.id === id)?.label ?? ""
+const normalizedUid = computed(() => { try { return normalizeDeclaredUid(uid.value) } catch { return "" } })
+const uidInvalid = computed(() => { try { normalizeDeclaredUid(uid.value); return "" } catch (error: any) { return error.message } })
+const uidOwner = computed(() => normalizedUid.value
+  ? accounts.owners.find((owner: any) => owner.id !== ownerId.value && capture.declaredUid(owner.id) === normalizedUid.value) ?? null
+  : null)
+const targetLine = computed(() => {
+  const task = capture.task && (capture.active || !composing.value) ? capture.task : null
+  const label = task?.ownerLabel ?? ownerLabel(ownerId.value)
+  const declared = task ? task.declaredUid : normalizedUid.value
+  return `将导入到：${label} · ${declared ? `声明 UID ${declared}（未核验）` : "未提供 UID"}`
+})
+const switchingAccount = computed(() => !!ownerId.value && ownerId.value !== accounts.currentOwnerId)
+const canLeaveTarget = computed(() => !!ownerId.value && !uidInvalid.value && (!mismatch.value || acknowledgeMismatch.value))
+const canStart = computed(() => capture.available && canLeaveTarget.value && gameAtLogin.value && noOtherCapture.value
+  && !capture.active && !capture.busy)
+const countdown = computed(() => {
+  const phaseAt = Number(capture.task?.phaseAt)
+  if (!Number.isFinite(phaseAt) || phaseAt <= 0) return ""
+  const remaining = Math.max(0, Math.ceil((phaseAt + LOGIN_LIMIT_MS - now.value) / 1000))
+  return `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`
+})
+const workingLabel = computed(() => ({
+  capturing: "正在采集登录数据", parsing: "正在解析驱动盘", cancelling: "正在停止采集",
+} as Record<string, string>)[capture.task?.phase] ?? "正在读取任务状态")
+const failure = computed(() => {
+  const task = capture.task
+  if (!task) return null
+  if (task.phase === "cancelled") {
+    return { title: "采集已取消", description: "可重新开始。", detail: "", primaryLabel: "重新开始", primaryAction: "restart" as const, code: "" }
+  }
+  const code = task.errorCode ?? ""
+  return { ...captureFailureGuide(code, decodeFailures.value.size), detail: CAPTURE_ERROR_DETAILS[code] || task.error || "", code }
+})
 const preview = computed(() => capture.plan?.preview)
 const changedRows = computed(() => [
   ...(preview.value?.added ?? []).map((disc: any) => ({ key: `add-${disc.id}`, kind: "新增", after: disc })),
   ...(preview.value?.updated ?? []).map((entry: any) => ({ ...entry, key: `update-${entry.id}`, kind: "更新" })),
   ...(preview.value?.sourceMerged ?? []).map((entry: any) => ({ ...entry, key: `merge-${entry.id}`, kind: "合并来源" })),
 ])
-const errorText = computed(() => errors[capture.task?.errorCode] || capture.task?.error || "本次采集失败，请重试。")
-const canStart = computed(() => capture.available && !!ownerId.value && !capture.active && !capture.busy
-  && (!mismatch.value || acknowledgeMismatch.value))
 
 function statText(stat: any) { return `${storedStatLabel(stat.stat, stat.mode, catalog.meta)} ${formatStoredStatValue(stat.stat, stat.value, stat.mode)}` }
 async function run(action: () => Promise<any>) {
@@ -66,9 +111,10 @@ async function run(action: () => Promise<any>) {
   try { await action() } catch (error: any) { capture.error = error.message }
 }
 async function refresh() {
+  now.value = Date.now()
   if (refreshing || capture.busy) return
   refreshing = true
-  try { await capture.refresh() } catch { capture.error = "无法连接本机采集服务。恢复连接后重新打开面板可查看本次状态。" }
+  try { await capture.refresh() } catch { capture.error = "无法连接本机采集服务。恢复连接后重新打开可查看本次状态。" }
   finally { refreshing = false }
 }
 async function close() {
@@ -78,20 +124,52 @@ async function close() {
   }
   emit("update:show", false)
 }
+async function cancelTask() {
+  await run(async () => { await capture.cancel(); composing.value = true; draftStep.value = "prepare" })
+}
 function selectOwner(value: string) {
   ownerId.value = value
   uid.value = capture.declaredUid(value)
   acknowledgeMismatch.value = false
 }
+function finishIntro() {
+  if (introDismissChecked.value) saveIntroDismissed()
+  draftStep.value = "target"
+}
+function restart(target: DraftStep = "prepare") {
+  composing.value = true
+  draftStep.value = target
+  gameAtLogin.value = false
+  noOtherCapture.value = false
+  capture.error = ""
+}
+function failurePrimary() {
+  if (failure.value?.primaryAction === "scan") emit("use-scanner")
+  else restart("prepare")
+}
+async function copyDiagnostics() {
+  const task = capture.task
+  if (!task) return
+  try { await navigator.clipboard.writeText([task.errorCode, task.id, task.phase, task.error].filter(Boolean).join(" ")) } catch { /* 剪贴板不可用时忽略 */ }
+}
+async function start() {
+  await run(async () => { await capture.start(ownerId.value, uid.value, acknowledgeMismatch.value); composing.value = false })
+}
+
 watch(() => props.show, async show => {
   if (polling) clearInterval(polling)
   polling = null
   if (!show) return
   await run(async () => { await Promise.all([accounts.load(), catalog.load()]); await capture.refresh() })
   if (!props.show) return
-  ownerId.value = capture.task?.ownerId && accounts.owners.some((owner: any) => owner.id === capture.task.ownerId)
-    ? capture.task.ownerId : accounts.currentOwnerId ?? ""
-  uid.value = capture.task?.ownerId === ownerId.value ? capture.task.declaredUid : capture.declaredUid(ownerId.value)
+  const task = capture.task
+  composing.value = !task || capture.imported || task.phase === "cancelled"
+  introShown.value = !readIntroDismissed()
+  draftStep.value = introShown.value ? "intro" : "target"
+  showDetails.value = false
+  ownerId.value = task?.ownerId && accounts.owners.some((owner: any) => owner.id === task.ownerId)
+    ? task.ownerId : accounts.currentOwnerId ?? ""
+  uid.value = task?.ownerId === ownerId.value ? task.declaredUid : capture.declaredUid(ownerId.value)
   polling = setInterval(refresh, 1000)
 }, { immediate: true })
 let mismatchGeneration = 0
@@ -103,6 +181,13 @@ watch([ownerId, uid], async () => {
 })
 watch(() => accounts.currentOwnerId, () => capture.invalidatePreview())
 watch(() => capture.task?.phase, () => { secondConfirmed.value = false })
+watch(() => capture.task?.id, () => { showDetails.value = false })
+watch(() => [capture.task?.id, capture.task?.phase, capture.task?.errorCode], () => {
+  const task = capture.task
+  if (task && ["failed", "timed_out"].includes(task.phase) && captureFailureCategory(task.errorCode) === "decode") {
+    decodeFailures.value = new Set([...decodeFailures.value, task.id])
+  }
+})
 onBeforeUnmount(() => {
   if (polling) clearInterval(polling)
   if (props.show && capture.active) void capture.cancel().catch(() => {})
@@ -110,80 +195,181 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <NModal :show="show" preset="card" title="抓包导入驱动盘" class="capture-modal"
-    style="width: min(860px, calc(100vw - 16px))" :mask-closable="false" :close-on-esc="false"
+  <NModal :show="show" preset="card" title="抓包导入" class="capture-modal"
+    style="width: min(720px, calc(100vw - 16px))" :mask-closable="false" :close-on-esc="false"
     :closable="!capture.busy" @update:show="close">
-    <div class="capture-body ui-layout-scope" data-layout-surface="drive-capture">
-      <p>支持{{ capture.supportedClient }}。先让游戏停在登录页，开始采集并允许管理员授权，等下方显示“已就绪”后再登录。</p>
-      <NAlert v-if="capture.loaded && !capture.available" type="warning">当前环境没有可用的本机抓包导出器。请使用本机计算器，并按安装说明准备导出器。</NAlert>
-      <div class="ui-field-grid">
-        <label data-layout-field>目标计算器账号
-          <NSelect :value="ownerId" :options="options" :disabled="capture.active || capture.busy" aria-label="抓包目标计算器账号" @update:value="selectOwner" />
-        </label>
-        <label data-layout-field>游戏 UID（可留空跳过）
-          <NInput v-model:value="uid" :disabled="capture.active || capture.busy" placeholder="填写游戏 UID 或留空" aria-label="抓包声明 UID" />
-        </label>
-      </div>
-      <p class="capture-hint">UID 是你填写的声明，导出器不会核验实际登录账号。留空将显示“未提供 UID”。盘的游戏物品 ID 与账号 UID 分开处理。</p>
-      <NAlert v-if="mismatch" type="warning">
-        {{ mismatch }}
-        <NCheckbox v-model:checked="acknowledgeMismatch" :disabled="capture.active || capture.busy">我已核对目标账号，确认调整本次声明 UID（不修改 Enka 绑定）</NCheckbox>
-      </NAlert>
-      <NButton :disabled="!canStart" :loading="capture.busy && !capture.plan" @click="run(() => capture.start(ownerId, uid, acknowledgeMismatch))">
-        {{ ownerId && ownerId !== accounts.currentOwnerId ? '切换到所选账号并开始采集' : capture.task ? '新建一次采集' : '开始采集' }}
-      </NButton>
-      <div v-if="capture.task" class="capture-status" role="status" aria-live="polite">
-        <strong>{{ capture.imported ? '已导入本地库存' : phases[capture.task.phase] || '正在读取任务状态' }}</strong>
-        <span>本次固定目标：{{ capture.task.ownerLabel }} · {{ capture.task.declaredUid ? `声明 UID：${capture.task.declaredUid}（未核验）` : '未提供 UID' }} · 第 {{ capture.task.round }} 轮</span>
-        <p v-if="capture.task.phase === 'awaiting_elevation'">请处理 Windows 授权窗口。拒绝授权会结束本次任务；授权后仍需等待“已就绪”再登录。</p>
-        <p v-if="capture.task.phase === 'waiting_login'">现在可以点击游戏登录。进入游戏后保持库存不变，等待自动完成。</p>
-        <p v-if="capture.task.phase === 'ready' && !capture.imported">已取得 {{ capture.task.discCount }} 张盘。尚未入库，请先预览差异。</p>
-        <p v-if="capture.task.processRunning && ['failed', 'timed_out'].includes(capture.task.phase)">已发出取消，正在等待进程退出；如果 Windows 授权窗口仍在，请关闭它。</p>
-      </div>
-      <NAlert v-if="capture.ownerProblem" type="warning">{{ capture.ownerProblem }}</NAlert>
-      <NButton v-if="capture.ownerProblem && accounts.owners.some((owner: any) => owner.id === capture.task?.ownerId)"
-        :disabled="capture.busy" @click="run(() => accounts.switchTo(capture.task.ownerId))">切回采集目标账号</NButton>
-      <NAlert v-if="capture.task?.phase === 'needs_second_login'" type="warning">
-        第一次恢复未成功，需要同一账号再登录一次。请完全退出游戏，再启动并停在登录页。
-        两次之间不要获取、拆解、强化、换装、锁定或解锁驱动盘，也不要更换游戏版本。
-        <NCheckbox v-model:checked="secondConfirmed">我确认仍为同一游戏账号、同一版本，库存没有变化，游戏已停在登录页</NCheckbox>
-        <NButton :disabled="!secondConfirmed || !!capture.ownerProblem || capture.busy" @click="run(() => capture.continueSecond())">开始第二轮采集</NButton>
-      </NAlert>
-      <NAlert v-if="['failed', 'timed_out'].includes(capture.task?.phase)" type="error">
-        {{ errorText }}<span v-if="capture.task.errorCode">（{{ capture.task.errorCode }}）</span>
-      </NAlert>
-      <NAlert v-if="capture.notice" type="info">{{ capture.notice }}</NAlert>
-      <NAlert v-if="capture.error" type="error" role="alert">{{ capture.error }}</NAlert>
-      <template v-if="preview">
-        <div class="capture-summary">
-          <NTag>当前 {{ preview.currentCount }} → {{ preview.nextCount }}</NTag>
-          <NTag type="success">新增 {{ preview.summary.added }}</NTag>
-          <NTag type="info">更新 {{ preview.summary.updated }}</NTag>
-          <NTag>未变 {{ preview.summary.skipped }}</NTag>
-          <NTag>合并来源 {{ preview.summary.sourceMerged }}</NTag>
-          <NTag type="warning">待确认 {{ preview.summary.conflicts }}</NTag>
+    <div class="capture-body ui-layout-scope" data-layout-surface="drive-capture" :data-capture-step="step">
+      <ol v-if="stepGroup >= 0" class="capture-steps" aria-label="导入步骤">
+        <li v-for="(label, index) in stepLabels" :key="label" :aria-current="index === stepGroup ? 'step' : undefined"
+          :class="{ 'is-current': index === stepGroup, 'is-done': index < stepGroup }">{{ label }}</li>
+      </ol>
+
+      <template v-if="step === 'unavailable'">
+        <h2 class="capture-title">抓包导入不可用</h2>
+        <NAlert type="warning">当前环境没有可用的本机抓包导出器。请使用本机版计算器，或改用扫描助手。</NAlert>
+      </template>
+
+      <template v-else-if="step === 'intro'">
+        <h2 class="capture-title">关于抓包导入</h2>
+        <ol class="capture-intro">
+          <li><strong>工作方式</strong><span>在游戏登录过程中读取本机收到的驱动盘数据。不修改游戏文件，数据仅保存在本机。</span></li>
+          <li><strong>使用条件</strong><span>{{ capture.supportedClient }}；需授予一次 Windows 管理员权限，并重新登录游戏。</span></li>
+          <li><strong>数据安全</strong><span>仅新增与更新，不删除已有驱动盘；配装、角色专属与排除设置保持不变。入库前可预览全部变化。已分解的驱动盘不会自动移除。</span></li>
+        </ol>
+        <NCheckbox v-model:checked="introDismissChecked">下次不再显示</NCheckbox>
+      </template>
+
+      <template v-else-if="step === 'target'">
+        <h2 class="capture-title">选择目标账号</h2>
+        <div class="ui-field-grid">
+          <label data-layout-field>计算器账号
+            <NSelect :value="ownerId" :options="options" aria-label="抓包目标计算器账号" @update:value="selectOwner" />
+          </label>
+          <label data-layout-field>游戏 UID（可留空）
+            <NInput v-model:value="uid" placeholder="填写游戏 UID 或留空" aria-label="抓包声明 UID" />
+          </label>
         </div>
-        <p>本次仅新增和更新，不删除缺失盘；保留已有配装、角色专属、排除和穿戴关系。</p>
-        <NAlert v-for="warning in preview.warnings" :key="warning" type="warning">{{ warning }}</NAlert>
-        <DriveDiscConflictResolver :conflicts="capture.plan.conflicts" :resolutions="capture.draft.resolutions"
-          :disabled="capture.busy || !!capture.ownerProblem" :meta="catalog.meta" @resolve="resolution => run(() => capture.resolve(resolution))" />
-        <div v-if="changedRows.length" class="capture-differences">
-          <p>变化明细（展示前 {{ Math.min(30, changedRows.length) }} 条，共 {{ changedRows.length }} 条）：</p>
-          <article v-for="row in changedRows.slice(0, 30)" :key="row.key">
-            <strong>{{ row.kind }} · {{ row.after.setName }} · {{ row.after.partition }} 号位</strong>
-            <span v-if="row.before">原记录：等级 {{ row.before.level }}，{{ row.before.locked ? '游戏已锁定' : '游戏未锁定' }}，{{ statText(row.before.mainStat) }}；{{ row.before.subStats.map(statText).join('、') }}</span>
-            <span>本次：等级 {{ row.after.level }}，{{ row.after.locked ? '游戏已锁定' : '游戏未锁定' }}，{{ statText(row.after.mainStat) }}；{{ row.after.subStats.map(statText).join('、') }}</span>
-          </article>
+        <p class="capture-hint">UID 仅用于区分账号，无法核验实际登录的游戏账号。留空时显示“未提供 UID”。</p>
+        <NAlert v-if="uidInvalid" type="error">{{ uidInvalid }}</NAlert>
+        <div v-else-if="mismatch" class="capture-mismatch" role="group" aria-label="UID 不一致">
+          <strong>UID 与「{{ ownerLabel(ownerId) }}」的已有记录不一致</strong>
+          <span>{{ mismatch }}</span>
+          <button v-if="uidOwner" type="button" class="capture-choice" @click="selectOwner(uidOwner.id)">切换到「{{ uidOwner.label }}」</button>
+          <button v-else type="button" class="capture-choice" @click="uid = capture.declaredUid(ownerId)">恢复已记录的 UID</button>
+          <button type="button" class="capture-choice" :class="{ 'is-selected': acknowledgeMismatch }" :aria-pressed="acknowledgeMismatch"
+            @click="acknowledgeMismatch = true">仍使用「{{ ownerLabel(ownerId) }}」，将声明 UID 改为 {{ normalizedUid }}（不影响 Enka 绑定）</button>
         </div>
       </template>
-      <NAlert v-if="capture.imported" type="success">本次结果已提交到目标账号的本地库存。再次导入相同游戏物品不会新增副本。</NAlert>
-      <p class="capture-hint">关闭面板会请求取消正在进行的采集；刷新后可重新打开查看任务。登录与第二轮确认各限 3 分钟，解析限 2 分钟，总任务最多 10 分钟。网络采集文件仅保留在本机。</p>
+
+      <template v-else-if="step === 'prepare'">
+        <p class="capture-target">{{ targetLine }}</p>
+        <h2 class="capture-title">准备游戏</h2>
+        <NCheckbox v-model:checked="gameAtLogin">游戏已停在登录页面</NCheckbox>
+        <NCheckbox v-model:checked="noOtherCapture">未运行其他抓包工具</NCheckbox>
+        <p class="capture-hint">开始后 Windows 将请求管理员授权，请选择“是”。在出现“请登录游戏”提示前，请勿登录。</p>
+      </template>
+
+      <template v-else-if="step === 'authorize'">
+        <p class="capture-target">{{ targetLine }}</p>
+        <div class="capture-center">
+          <NSpin size="large" />
+          <h2 class="capture-title">{{ capture.task.phase === 'awaiting_elevation' ? '请在 Windows 弹窗中允许授权' : '正在准备采集' }}</h2>
+          <p>授权完成后请等待提示，再登录游戏。拒绝授权将结束本次任务。</p>
+        </div>
+      </template>
+
+      <template v-else-if="step === 'login'">
+        <p class="capture-target">{{ targetLine }}</p>
+        <div class="capture-center" role="status" aria-live="polite">
+          <h2 class="capture-title capture-title--large">请登录游戏</h2>
+          <p>采集已就绪。登录后请保持库存不变，完成后将自动进入下一步。</p>
+          <strong v-if="countdown" class="capture-countdown">{{ countdown }}</strong>
+          <span class="capture-hint">请在 3 分钟内完成登录</span>
+        </div>
+      </template>
+
+      <template v-else-if="step === 'working'">
+        <p class="capture-target">{{ targetLine }}</p>
+        <div class="capture-center" role="status" aria-live="polite">
+          <NSpin size="large" />
+          <h2 class="capture-title">{{ workingLabel }}</h2>
+          <p>无需操作，请稍候。</p>
+        </div>
+      </template>
+
+      <template v-else-if="step === 'second'">
+        <p class="capture-target">{{ targetLine }}</p>
+        <h2 class="capture-title">需要再次登录</h2>
+        <p>首次读取的数据需要再次核对，并非错误。</p>
+        <ol class="capture-list">
+          <li>完全退出游戏，重新启动并停在登录页面。</li>
+          <li>两次登录之间不要获取、分解、强化、穿戴、锁定或解锁驱动盘，也不要更换游戏版本。</li>
+          <li>开始后，等再次出现“请登录游戏”提示时再登录。</li>
+        </ol>
+        <NCheckbox v-model:checked="secondConfirmed">同一游戏账号与版本，库存未变化，游戏已停在登录页面</NCheckbox>
+      </template>
+
+      <template v-else-if="step === 'review'">
+        <p class="capture-target">{{ targetLine }}</p>
+        <h2 class="capture-title">已读取 {{ capture.task.discCount }} 张驱动盘</h2>
+        <p v-if="!preview">尚未入库。请先预览与本地库存的差异。</p>
+        <template v-else>
+          <div class="capture-numbers">
+            <div><strong class="is-added">{{ preview.summary.added }}</strong><span>新增</span></div>
+            <div><strong class="is-updated">{{ preview.summary.updated }}</strong><span>更新</span></div>
+            <div><strong>{{ preview.summary.skipped }}</strong><span>无变化</span></div>
+          </div>
+          <div v-if="preview.summary.sourceMerged || preview.summary.conflicts" class="capture-tags">
+            <NTag v-if="preview.summary.sourceMerged">合并来源 {{ preview.summary.sourceMerged }}</NTag>
+            <NTag v-if="preview.summary.conflicts" type="warning">待确认 {{ preview.summary.conflicts }}</NTag>
+          </div>
+          <NAlert v-for="warning in preview.warnings" :key="warning" type="warning">{{ warning }}</NAlert>
+          <DriveDiscConflictResolver :conflicts="capture.plan.conflicts" :resolutions="capture.draft.resolutions"
+            :disabled="capture.busy || !!capture.ownerProblem" :meta="catalog.meta" @resolve="resolution => run(() => capture.resolve(resolution))" />
+          <button v-if="changedRows.length" type="button" class="capture-link" :aria-expanded="showDetails" @click="showDetails = !showDetails">
+            {{ showDetails ? '收起变化明细' : `查看变化明细（共 ${changedRows.length} 条）` }}
+          </button>
+          <div v-if="showDetails" class="capture-differences">
+            <p v-if="changedRows.length > 30" class="capture-hint">仅展示前 30 条。</p>
+            <article v-for="row in changedRows.slice(0, 30)" :key="row.key">
+              <strong>{{ row.kind }} · {{ row.after.setName }} · {{ row.after.partition }} 号位</strong>
+              <span v-if="row.before">原记录：等级 {{ row.before.level }}，{{ row.before.locked ? '游戏已锁定' : '游戏未锁定' }}，{{ statText(row.before.mainStat) }}；{{ row.before.subStats.map(statText).join('、') }}</span>
+              <span>本次：等级 {{ row.after.level }}，{{ row.after.locked ? '游戏已锁定' : '游戏未锁定' }}，{{ statText(row.after.mainStat) }}；{{ row.after.subStats.map(statText).join('、') }}</span>
+            </article>
+          </div>
+          <p class="capture-hint">仅新增与更新，不删除缺失的驱动盘；配装、角色专属、排除与穿戴关系保持不变。</p>
+        </template>
+      </template>
+
+      <template v-else-if="step === 'done'">
+        <div class="capture-center">
+          <h2 class="capture-title">已导入本地库存</h2>
+          <p v-if="capture.summary">新增 {{ capture.summary.added ?? 0 }}，更新 {{ capture.summary.updated ?? 0 }}。</p>
+          <p class="capture-hint">再次导入相同驱动盘不会产生重复记录。</p>
+        </div>
+      </template>
+
+      <template v-else-if="step === 'failed' && failure">
+        <h2 class="capture-title">{{ failure.title }}</h2>
+        <p>{{ failure.description }}</p>
+        <p v-if="failure.detail" class="capture-hint">{{ failure.detail }}</p>
+        <div class="capture-safe">本地库存未发生任何变化。</div>
+        <p v-if="capture.task.processRunning" class="capture-hint">已发出取消，正在等待进程退出；如 Windows 授权窗口仍在，请关闭。</p>
+        <div v-if="failure.code" class="capture-diagnostics">
+          <span>错误码 {{ failure.code }}</span>
+          <button type="button" class="capture-link" @click="copyDiagnostics">复制诊断信息</button>
+        </div>
+      </template>
+
+      <NAlert v-if="capture.ownerProblem && step !== 'failed'" type="warning">{{ capture.ownerProblem }}</NAlert>
+      <NButton v-if="capture.ownerProblem && step !== 'failed' && accounts.owners.some((owner: any) => owner.id === capture.task?.ownerId)"
+        :disabled="capture.busy" @click="run(() => accounts.switchTo(capture.task.ownerId))">切回采集目标账号</NButton>
+      <NAlert v-if="capture.notice" type="info">{{ capture.notice }}</NAlert>
+      <NAlert v-if="capture.error" type="error" role="alert">{{ capture.error }}</NAlert>
     </div>
     <template #footer>
       <div class="capture-footer">
+        <NButton v-if="step === 'target' && introShown" @click="draftStep = 'intro'">上一步</NButton>
+        <NButton v-else-if="step === 'prepare'" @click="draftStep = 'target'">上一步</NButton>
+        <NButton v-else-if="['authorize', 'login'].includes(step)" :disabled="capture.busy" @click="cancelTask">取消采集</NButton>
+        <NButton v-else-if="step === 'review' && capture.plan" :disabled="capture.busy || !!capture.ownerProblem" @click="run(() => capture.preview())">重新预览</NButton>
+        <NButton v-else-if="step === 'done'" @click="restart('target')">再次采集</NButton>
+        <span class="capture-footer-spacer" />
         <NButton :disabled="capture.busy" @click="close">{{ capture.active ? '取消采集并关闭' : '关闭' }}</NButton>
-        <NButton v-if="capture.task?.phase === 'ready' && !capture.imported" :disabled="capture.busy || !!capture.ownerProblem" @click="run(() => capture.preview())">{{ capture.plan ? '重新预览' : '预览差异' }}</NButton>
-        <NButton v-if="capture.plan" type="primary" :loading="capture.busy" :disabled="capture.busy || !!capture.ownerProblem || capture.plan.hasUnresolvedConflicts" @click="run(() => capture.confirm())">确认入库</NButton>
+        <NButton v-if="step === 'unavailable'" type="primary" @click="emit('use-scanner')">改用扫描助手</NButton>
+        <NButton v-else-if="step === 'intro'" type="primary" @click="finishIntro">下一步</NButton>
+        <NButton v-else-if="step === 'target'" type="primary" :disabled="!canLeaveTarget" @click="draftStep = 'prepare'">下一步</NButton>
+        <NButton v-else-if="step === 'prepare'" type="primary" :disabled="!canStart" :loading="capture.busy" @click="start">
+          {{ switchingAccount ? '切换到所选账号并开始采集' : '开始采集' }}
+        </NButton>
+        <NButton v-else-if="step === 'second'" type="primary" :disabled="!secondConfirmed || !!capture.ownerProblem || capture.busy"
+          @click="run(() => capture.continueSecond())">开始第二轮采集</NButton>
+        <NButton v-else-if="step === 'review' && !capture.plan" type="primary" :loading="capture.busy"
+          :disabled="capture.busy || !!capture.ownerProblem" @click="run(() => capture.preview())">预览变化</NButton>
+        <NButton v-else-if="step === 'review'" type="primary" :loading="capture.busy"
+          :disabled="capture.busy || !!capture.ownerProblem || capture.plan.hasUnresolvedConflicts" @click="run(() => capture.confirm())">确认入库</NButton>
+        <NButton v-else-if="step === 'done'" type="primary" @click="emit('update:show', false)">完成</NButton>
+        <NButton v-else-if="step === 'failed' && failure" type="primary" :disabled="!!capture.task?.processRunning" @click="failurePrimary">{{ failure.primaryLabel }}</NButton>
       </div>
     </template>
   </NModal>
@@ -191,14 +377,49 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .capture-body { display: grid; gap: 12px; min-width: 0; max-height: 65vh; overflow-y: auto; overflow-wrap: anywhere; }
-.capture-body p { margin: 0; }
+.capture-body p { margin: 0; line-height: 1.6; }
 .capture-body label { display: grid; gap: 6px; min-width: 0; }
-.capture-hint { color: var(--app-muted); font-size: 12px; }
-.capture-status, .capture-differences article { display: grid; gap: 6px; padding: 12px; background: var(--app-panel-muted); border-radius: 8px; }
+.capture-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--app-text); }
+.capture-title--large { font-size: 28px; }
+.capture-hint, .capture-target { color: var(--app-muted); font-size: 12px; }
+.capture-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 4px; padding: 0; list-style: none; }
+.capture-steps li {
+  padding: 2px 10px; border-radius: 999px; background: var(--app-panel-muted); color: var(--app-muted); font-size: 12px;
+}
+.capture-steps li.is-done { color: var(--app-text-secondary); }
+.capture-steps li.is-current { background: var(--app-blue-soft); color: var(--app-blue-strong); font-weight: 600; }
+.capture-intro, .capture-list { display: grid; gap: 12px; margin: 0; padding-left: 20px; }
+.capture-intro li { padding-left: 4px; }
+.capture-intro strong { display: block; color: var(--app-text); }
+.capture-intro span, .capture-list li { color: var(--app-text-secondary); font-size: 14px; line-height: 1.6; }
+.capture-mismatch {
+  display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--app-amber-line);
+  border-radius: var(--app-radius-lg); background: var(--app-amber-soft); color: var(--app-amber-strong);
+}
+.capture-choice {
+  min-height: 44px; padding: 10px 14px; border: 1px solid var(--app-border-strong); border-radius: var(--app-radius);
+  background: var(--app-panel); color: var(--app-text); font: inherit; text-align: left; cursor: pointer;
+}
+.capture-choice:hover { border-color: var(--app-blue); }
+.capture-choice.is-selected { border: 2px solid var(--app-blue); color: var(--app-blue-strong); font-weight: 600; }
+.capture-choice:focus-visible, .capture-link:focus-visible { outline: var(--app-focus-ring); }
+.capture-center { display: grid; justify-items: center; gap: 12px; padding: 24px 0; text-align: center; }
+.capture-countdown { color: var(--app-blue); font-size: 40px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.capture-numbers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@container (max-width: 360px) { .capture-numbers { grid-template-columns: minmax(0, 1fr); } }
+.capture-numbers div { display: grid; gap: 2px; padding: 12px 14px; border-radius: var(--app-radius-lg); background: var(--app-panel-muted); }
+.capture-numbers strong { font-size: 26px; color: var(--app-text); }
+.capture-numbers strong.is-added { color: var(--app-green); }
+.capture-numbers strong.is-updated { color: var(--app-blue); }
+.capture-numbers span { color: var(--app-muted); font-size: 12px; }
+.capture-tags, .capture-diagnostics { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.capture-diagnostics { color: var(--app-muted); font-size: 12px; }
+.capture-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--app-blue); font: inherit; font-size: 13px; cursor: pointer; }
+.capture-safe { padding: 10px 14px; border-radius: var(--app-radius); background: var(--app-green-soft); color: var(--app-green-strong); font-size: 14px; }
 .capture-differences { display: grid; gap: 8px; }
-.capture-summary, .capture-footer { display: flex; flex-wrap: wrap; gap: 8px; }
-.capture-footer { justify-content: flex-end; }
-.capture-body :deep(.n-checkbox) { margin: 8px 0; }
+.capture-differences article { display: grid; gap: 6px; padding: 12px; background: var(--app-panel-muted); border-radius: 8px; }
+.capture-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.capture-footer-spacer { flex: 1; }
 .capture-body :deep(.n-button), .capture-footer :deep(.n-button) { height: auto; min-height: 34px; white-space: normal; }
 .capture-body :deep(.n-button__content), .capture-footer :deep(.n-button__content) { white-space: normal; overflow-wrap: anywhere; }
 </style>
