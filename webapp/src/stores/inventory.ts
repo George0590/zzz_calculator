@@ -20,7 +20,6 @@ import {
 } from "@runtime/drive-disc-import-transaction"
 import { toCalculatorDriveDisc } from "@core/drive-disc-core.js"
 import { driveDiscUsageStateForAgent } from "@core/inventory-model.js"
-import { analyzeDriveDiscStatDiffs, analyzeDriveDiscStatGains, analyzeDriveDiscSubstats } from "@core/driveDiscAnalysis-core.js"
 import { ScannerBridge } from "@runtime/scanner-bridge.js"
 import { loadScannerPreferences, saveScannerPreferences, type ScannerPreferences } from "@runtime/scanner-preferences"
 import {
@@ -911,15 +910,6 @@ export const useInventoryStore = defineStore("inventory", {
       this.scanStatus = this.scanConnected ? "ready" : "idle"
       this.scanMessage = this.scanConnected ? "已放弃本次扫描结果，可以重新扫描" : "已放弃本次扫描结果"
       this.scanProgressText = this.scanMessage
-    },
-    analyze(catalog: any, input: any, view: "diff" | "substats" | "gains" = "diff") {
-      if (view === "substats") {
-        return analyzeDriveDiscSubstats(catalog, input)
-      }
-      if (view === "gains") {
-        return analyzeDriveDiscStatGains(catalog, input)
-      }
-      return analyzeDriveDiscStatDiffs(catalog, input)
     },
     ensureScannerBridge() {
       scanner = scanner ?? new ScannerBridge()
