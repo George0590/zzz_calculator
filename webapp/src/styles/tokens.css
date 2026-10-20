@@ -14,7 +14,12 @@
   --app-text-secondary: #334155;
   --app-muted: #5b6577;
   --app-text-muted: var(--app-muted);
+  --app-faint: #94a3b8;
   --app-surface: var(--app-panel);
+  --app-topbar-bg: rgba(255, 255, 255, 0.9);
+  --app-overlay-panel: rgba(255, 255, 255, 0.96);
+  --app-skeleton-a: #e6ebf2;
+  --app-skeleton-b: #f3f6fa;
 
   /* 强调色：主色只用于“当前、可点、结果”，其余信息保持中性 */
   --app-blue: #2f7df6;
@@ -25,8 +30,14 @@
   --app-green-strong: #087a55;
   --app-green-soft: #e9f7f1;
   --app-amber: #b7791f;
+  --app-amber-strong: #9a5f13;
+  --app-amber-soft: #fff8eb;
+  --app-amber-line: #f5d38b;
   --app-highlight: #f97316;
   --app-red: #d14343;
+  --app-red-strong: #b42318;
+  --app-red-soft: #fdecec;
+  --app-red-line: #f5b5b0;
   --app-purple: #7c3aed;
 
   /* 形状、阴影、焦点 */
@@ -53,6 +64,85 @@
   /* 顶栏高度：吸顶区域都以此为偏移 */
   --app-topbar-height: 56px;
   --app-sticky-gap: 12px;
+}
+
+/*
+ * 深色主题：同一组语义变量换一套取值。
+ * 跟随系统时由媒体查询生效；手动选择时 <html data-theme="dark|light"> 覆盖系统设置。
+ * “开始优化”等白字按钮的底色保持与浅色一致，保证文字对比度。
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --app-bg: #0e131d;
+    --app-panel: #161c28;
+    --app-panel-muted: #1c2332;
+    --app-panel-sunken: #0b0f17;
+    --app-border: #273042;
+    --app-border-strong: #3b475d;
+    --app-text: #e6eaf2;
+    --app-text-secondary: #c4cbd7;
+    --app-muted: #939db0;
+    --app-faint: #6b7588;
+    --app-topbar-bg: rgba(22, 28, 40, 0.9);
+    --app-overlay-panel: rgba(22, 28, 40, 0.96);
+    --app-skeleton-a: #222a3a;
+    --app-skeleton-b: #2b3446;
+    --app-blue: #4b8df8;
+    --app-blue-strong: #8db8ff;
+    --app-blue-soft: rgba(75, 141, 248, 0.15);
+    --app-blue-line: rgba(75, 141, 248, 0.45);
+    --app-green-strong: #5fd3a6;
+    --app-green-soft: rgba(39, 176, 127, 0.16);
+    --app-amber: #e0a33a;
+    --app-amber-strong: #f3c26b;
+    --app-amber-soft: rgba(224, 163, 58, 0.14);
+    --app-amber-line: rgba(224, 163, 58, 0.45);
+    --app-highlight: #fb923c;
+    --app-red: #ef6363;
+    --app-red-strong: #ff958c;
+    --app-red-soft: rgba(239, 99, 99, 0.14);
+    --app-red-line: rgba(239, 99, 99, 0.45);
+    --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --app-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    --app-focus-ring: 3px solid rgba(110, 165, 255, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #0e131d;
+  --app-panel: #161c28;
+  --app-panel-muted: #1c2332;
+  --app-panel-sunken: #0b0f17;
+  --app-border: #273042;
+  --app-border-strong: #3b475d;
+  --app-text: #e6eaf2;
+  --app-text-secondary: #c4cbd7;
+  --app-muted: #939db0;
+  --app-faint: #6b7588;
+  --app-topbar-bg: rgba(22, 28, 40, 0.9);
+  --app-overlay-panel: rgba(22, 28, 40, 0.96);
+  --app-skeleton-a: #222a3a;
+  --app-skeleton-b: #2b3446;
+  --app-blue: #4b8df8;
+  --app-blue-strong: #8db8ff;
+  --app-blue-soft: rgba(75, 141, 248, 0.15);
+  --app-blue-line: rgba(75, 141, 248, 0.45);
+  --app-green-strong: #5fd3a6;
+  --app-green-soft: rgba(39, 176, 127, 0.16);
+  --app-amber: #e0a33a;
+  --app-amber-strong: #f3c26b;
+  --app-amber-soft: rgba(224, 163, 58, 0.14);
+  --app-amber-line: rgba(224, 163, 58, 0.45);
+  --app-highlight: #fb923c;
+  --app-red: #ef6363;
+  --app-red-strong: #ff958c;
+  --app-red-soft: rgba(239, 99, 99, 0.14);
+  --app-red-line: rgba(239, 99, 99, 0.45);
+  --app-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --app-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --app-focus-ring: 3px solid rgba(110, 165, 255, 0.5);
 }
 
 * {
@@ -112,11 +202,11 @@ textarea {
 }
 
 .n-select .n-base-selection--disabled :where(.n-base-selection-input, .n-base-selection-placeholder) {
-  color: #64748b;
+  color: var(--app-muted);
 }
 
 .n-select .n-base-selection--disabled .n-base-suffix__arrow {
-  color: #94a3b8;
+  color: var(--app-faint);
 }
 
 .num {
@@ -141,7 +231,7 @@ textarea {
   min-height: var(--app-topbar-height);
   padding: 0 var(--space-6);
   border-bottom: 1px solid var(--app-border);
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--app-topbar-bg);
   backdrop-filter: saturate(1.4) blur(12px);
 }
 
@@ -183,17 +273,17 @@ textarea {
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.03);
   opacity: 0;
   pointer-events: none;
-  will-change: transform, width;
+  transform-origin: 0 50%;
+  will-change: transform;
 }
 
 .nav-indicator.is-visible {
   opacity: 1;
 }
 
+/* 只过渡 transform：由合成线程播放，新页面渲染占用主线程时滑块也不停顿 */
 .nav-indicator.is-animated {
-  transition:
-    transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
-    width 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav a {
@@ -251,15 +341,131 @@ textarea {
 .account-chip {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   min-width: 0;
+  max-width: 240px;
+  white-space: nowrap;
   height: 30px;
-  padding: 0 12px;
+  padding: 0 10px 0 12px;
   border: 1px solid var(--app-border);
   border-radius: 999px;
   color: var(--app-text-secondary);
   background: var(--app-panel);
+  font: inherit;
   font-size: var(--font-sm);
   font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+/*
+ * 统一的展开/收起按钮（ExpandToggle.vue）：蓝色箭头 + 可选文字，展开后箭头翻转。
+ * 全站展开类控件都用它，避免各处箭头样式不一致。
+ */
+.expand-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--app-blue);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.expand-toggle.is-icon-only {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+}
+
+.expand-toggle:hover {
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
+}
+
+.expand-toggle:focus-visible {
+  outline: var(--app-focus-ring);
+  outline-offset: 2px;
+}
+
+.expand-toggle-icon {
+  flex: 0 0 auto;
+  transition: transform 0.2s ease;
+}
+
+.expand-toggle.is-expanded .expand-toggle-icon {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .expand-toggle,
+  .expand-toggle-icon {
+    transition: none;
+  }
+}
+
+/* 账号名过长时省略，不换成两行 */
+.account-chip-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-chip:hover {
+  border-color: var(--app-blue-line);
+  color: var(--app-text);
+}
+
+.account-chip:focus-visible {
+  outline: var(--app-focus-ring);
+  outline-offset: 2px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 主题切换：跟随系统 / 浅色 / 深色 */
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-panel);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--app-blue-line);
+  color: var(--app-text);
+}
+
+.theme-toggle:focus-visible {
+  outline: var(--app-focus-ring);
+  outline-offset: 2px;
+}
+
+.account-chip-chevron {
+  flex: 0 0 auto;
+  color: var(--app-muted);
 }
 
 .app-main {
@@ -342,18 +548,18 @@ textarea {
 }
 
 .ui-notice--info {
-  border-color: #bcd4fb;
-  background: #edf4ff;
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
 }
 
 .ui-notice--warning {
-  border-color: #f5d38b;
-  background: #fff8eb;
+  border-color: var(--app-amber-line);
+  background: var(--app-amber-soft);
 }
 
 .ui-notice--error {
-  border-color: #f5b5b0;
-  background: #fdecec;
+  border-color: var(--app-red-line);
+  background: var(--app-red-soft);
 }
 
 .section-band {
@@ -387,7 +593,7 @@ textarea {
   padding: 8px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-text);
   text-align: left;
   cursor: pointer;
@@ -428,7 +634,7 @@ textarea {
   height: var(--avatar-size, 42px);
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #eef2f7;
+  background: var(--app-panel-muted);
 }
 
 .avatar img {
@@ -580,7 +786,7 @@ textarea {
   margin-bottom: var(--space-4);
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--app-overlay-panel);
   box-shadow: var(--app-shadow);
 }
 
@@ -617,7 +823,7 @@ textarea {
   top: 0;
   z-index: 1;
   color: var(--app-muted);
-  background: #fff;
+  background: var(--app-panel);
   font-size: 12px;
   font-weight: 700;
 }
@@ -630,7 +836,7 @@ textarea {
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--app-border);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .calculation-modal.n-card {
@@ -644,6 +850,12 @@ textarea {
 .calculation-modal > .n-card-header,
 .calculation-modal > .n-card__footer {
   flex: 0 0 auto;
+}
+
+/* Buff 弹窗高度固定为可用高度（不设上限，高屏上队友卡片能完整显示），切换页签时不再忽高忽低 */
+.calculation-modal.buff-picker-modal.n-card {
+  height: calc(100vh - 32px);
+  height: calc(100dvh - 32px);
 }
 
 .calculation-modal > .n-card-header {

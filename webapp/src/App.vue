@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
-import { NAlert, NButton, NConfigProvider, NMessageProvider, type GlobalThemeOverrides } from "naive-ui"
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
+import { NAlert, NButton, NConfigProvider, NDropdown, NMessageProvider, type GlobalThemeOverrides } from "naive-ui"
 import { storageIssues, exportUnreadableData } from "@runtime/storage-guard.js"
-import { Calculator, Database, Download, HardDrive, Settings2, UserRound } from "lucide-vue-next"
-import { useRoute } from "vue-router"
+import { Calculator, Check, ChevronDown, Database, Download, HardDrive, Monitor, Moon, Settings2, Sun, UserRound } from "lucide-vue-next"
+import { useRoute, useRouter } from "vue-router"
 import { useAccountStore } from "@/stores/account"
 import { useAppConfigStore } from "@/stores/app-config"
 import PersonalBackupPanel from "@/components/PersonalBackupPanel.vue"
+import { useTheme } from "@/runtime/theme"
 
 const accountStore = useAccountStore()
 const appConfigStore = useAppConfigStore()
 const route = useRoute()
+const router = useRouter()
 const props = defineProps<{ startupError?: string }>()
 const maintenanceEnabled = computed(() => appConfigStore.config.maintenanceEnabled)
 const enkaImportEnabled = computed(() => appConfigStore.config.enkaImportEnabled)
@@ -23,32 +25,103 @@ const accountChipText = computed(() => {
   return "账号加载中"
 })
 
-// 主导航的滑块：量出当前链接的位置，用一个绝对定位的白色块滑过去
-const navRef = ref<HTMLElement | null>(null)
-const navIndicator = ref({ left: 0, width: 0, visible: false, animated: false })
-const navIndicatorStyle = computed(() => ({
-  width: `${navIndicator.value.width}px`,
-  transform: `translateX(${navIndicator.value.left}px)`,
-}))
-let navResizeObserver: ResizeObserver | null = null
+// 顶栏账号菜单：直接切换账号；失败时转到账号页，那里会显示具体错误
+const accountMenuOptions = computed(() => {
+  const ready = accountStore.loadState === "ready" && !accountStore.operation
+  const owners = (accountStore.owners ?? []).map((owner: any) => {
+    const current = owner.id === accountStore.currentOwnerId
+    return {
+      key: `owner:${owner.id}`,
+      label: owner.label || owner.id,
+      disabled: !ready || current,
+      icon: current ? () => h(Check, { size: 14 }) : undefined,
+    }
+  })
+  return [
+    ...owners,
+    ...(owners.length ? [{ type: "divider", key: "divider" }] : []),
+    { key: "manage", label: "管理账号…" },
+  ]
+})
 
-// animate 为 false 时瞬移：首次定位、窗口缩放、字体加载后的校准都不应播放滑动
-function measureNavIndicator(animate: boolean) {
-  const active = navRef.value?.querySelector<HTMLElement>("a.router-link-active")
-  if (!active) {
-    navIndicator.value = { ...navIndicator.value, visible: false }
+async function selectAccountMenu(key: string | number) {
+  const value = String(key)
+  if (value === "manage") {
+    void router.push("/accounts")
     return
   }
-  navIndicator.value = {
-    left: active.offsetLeft,
-    width: active.offsetWidth,
-    visible: true,
-    animated: animate && navIndicator.value.visible,
+  const ownerId = value.startsWith("owner:") ? value.slice("owner:".length) : ""
+  if (!ownerId || ownerId === accountStore.currentOwnerId || accountStore.operation) return
+  try {
+    await accountStore.switchTo(ownerId)
+  } catch {
+    void router.push("/accounts")
   }
 }
 
-watch(() => route.path, () => {
-  void nextTick(() => measureNavIndicator(true))
+// 主导航的滑块：一个绝对定位的白色块滑到当前链接下面。
+// 为了切页不卡：链接位置只在导航尺寸变化时量一次并缓存，切页时直接取缓存，不在新页面渲染时强制排版；
+// 滑动只用 transform（平移 + 横向缩放），交给合成线程播放，新页面挂载占用主线程时也不会停顿。
+const navRef = ref<HTMLElement | null>(null)
+const navIndicator = ref({ left: 0, width: 0, baseWidth: 0, visible: false, animated: false })
+const navIndicatorStyle = computed(() => {
+  const { left, width, baseWidth } = navIndicator.value
+  return {
+    width: `${baseWidth}px`,
+    transform: `translateX(${left}px) scaleX(${baseWidth > 0 ? width / baseWidth : 1})`,
+  }
+})
+let navResizeObserver: ResizeObserver | null = null
+let navLinkBoxes = new Map<string, { left: number; width: number }>()
+
+function cacheNavLinkBoxes() {
+  const links = [...(navRef.value?.querySelectorAll<HTMLAnchorElement>("a[href]") ?? [])]
+  navLinkBoxes = new Map(links.map(link => [link.getAttribute("href") ?? "", { left: link.offsetLeft, width: link.offsetWidth }]))
+}
+
+// animate 为 false 时瞬移：首次定位、窗口缩放、字体加载后的校准都不应播放滑动
+function moveNavIndicator(path: string, animate: boolean) {
+  const box = navLinkBoxes.get(path)
+  if (!box) {
+    navIndicator.value = { ...navIndicator.value, visible: false, animated: false }
+    return
+  }
+  const current = navIndicator.value
+  const animated = animate && current.visible
+  if (animated && current.left === box.left && current.width === box.width) return
+  navIndicator.value = {
+    left: box.left,
+    width: box.width,
+    // 动画期间保持原宽度、用缩放过渡；结束后再换成真实宽度
+    baseWidth: animated && current.baseWidth > 0 ? current.baseWidth : box.width,
+    visible: true,
+    animated,
+  }
+}
+
+function settleNavIndicator() {
+  const current = navIndicator.value
+  if (current.baseWidth !== current.width) navIndicator.value = { ...current, baseWidth: current.width, animated: false }
+}
+
+function measureNavIndicator(animate: boolean) {
+  cacheNavLinkBoxes()
+  moveNavIndicator(route.path, animate)
+}
+
+// 点击后先让滑块开始滑动，再挂载新页面；后台标签页没有动画帧，最多等 50ms
+const removeNavGuard = router.beforeEach(async to => {
+  if (to.path === route.path || !navLinkBoxes.has(to.path)) return
+  moveNavIndicator(to.path, true)
+  await Promise.race([
+    new Promise(resolve => requestAnimationFrame(() => resolve(null))),
+    new Promise(resolve => setTimeout(resolve, 50)),
+  ])
+})
+
+// 被重定向或取消的导航以最终路由为准
+watch(() => route.path, path => {
+  void nextTick(() => moveNavIndicator(path, true))
 })
 
 watch(() => [maintenanceEnabled.value, enkaImportEnabled.value], () => {
@@ -63,9 +136,20 @@ onMounted(() => {
   }
 })
 
-onBeforeUnmount(() => navResizeObserver?.disconnect())
+onBeforeUnmount(() => {
+  navResizeObserver?.disconnect()
+  removeNavGuard()
+})
 
-const themeOverrides: GlobalThemeOverrides = {
+// 主题：跟随系统 / 浅色 / 深色，顶栏按钮循环切换
+const { preference: themePreference, isDark, naiveTheme, cyclePreference: cycleTheme } = useTheme()
+const themeToggleLabel = computed(() => ({
+  system: "主题：跟随系统（点击切换为浅色）",
+  light: "主题：浅色（点击切换为深色）",
+  dark: "主题：深色（点击切换为跟随系统）",
+} as const)[themePreference.value])
+
+const lightThemeOverrides: GlobalThemeOverrides = {
   common: {
     primaryColor: "#2f7df6",
     primaryColorHover: "#1f6fe6",
@@ -140,10 +224,84 @@ const themeOverrides: GlobalThemeOverrides = {
     },
   },
 }
+
+// 深色配置与 tokens.css 里的深色变量取值一致；Naive UI 要对颜色做运算，这里只能写具体色值
+const darkThemeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: "#4b8df8",
+    primaryColorHover: "#6aa2fa",
+    primaryColorPressed: "#2f7df6",
+    primaryColorSuppl: "#4b8df8",
+    borderRadius: "6px",
+    bodyColor: "#0e131d",
+    cardColor: "#161c28",
+    modalColor: "#161c28",
+    popoverColor: "#1c2332",
+    tableColor: "#161c28",
+    inputColor: "#1c2332",
+    borderColor: "#273042",
+    dividerColor: "#273042",
+    textColorBase: "#e6eaf2",
+    textColor1: "#e6eaf2",
+    textColor2: "#c4cbd7",
+    textColor3: "#939db0",
+    fontFamily: "system-ui, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif",
+  },
+  Card: {
+    borderRadius: "8px",
+  },
+  Alert: {
+    borderRadius: "8px",
+    padding: "10px 12px",
+    titleFontWeight: "700",
+    colorInfo: "rgba(75, 141, 248, 0.12)",
+    borderInfo: "1px solid rgba(75, 141, 248, 0.4)",
+    colorSuccess: "rgba(39, 176, 127, 0.12)",
+    borderSuccess: "1px solid rgba(39, 176, 127, 0.4)",
+    colorWarning: "rgba(224, 163, 58, 0.12)",
+    borderWarning: "1px solid rgba(224, 163, 58, 0.4)",
+    colorError: "rgba(239, 99, 99, 0.12)",
+    borderError: "1px solid rgba(239, 99, 99, 0.4)",
+  },
+  Select: {
+    menuBoxShadow: "0 10px 30px rgba(0, 0, 0, 0.5)",
+    peers: {
+      InternalSelection: {
+        color: "#1c2332",
+        colorActive: "#1c2332",
+        colorDisabled: "#151a25",
+        textColor: "#e6eaf2",
+        textColorDisabled: "#6b7588",
+        border: "1px solid #3b475d",
+        borderHover: "1px solid #4b8df8",
+        borderActive: "1px solid #4b8df8",
+        borderFocus: "1px solid #4b8df8",
+        boxShadowHover: "none",
+        boxShadowActive: "0 0 0 3px rgba(75, 141, 248, 0.25)",
+        boxShadowFocus: "0 0 0 3px rgba(75, 141, 248, 0.25)",
+        arrowColor: "#939db0",
+        arrowColorDisabled: "#6b7588",
+        arrowSize: "16px",
+        paddingSingle: "0 34px 0 12px",
+        paddingMultiple: "3px 34px 0 12px",
+      },
+      InternalSelectMenu: {
+        color: "#1c2332",
+        optionColorPending: "#252e40",
+        optionColorActive: "rgba(75, 141, 248, 0.16)",
+        optionColorActivePending: "rgba(75, 141, 248, 0.24)",
+        optionTextColorActive: "#8db8ff",
+        optionCheckColor: "#8db8ff",
+      },
+    },
+  },
+}
+
+const themeOverrides = computed(() => isDark.value ? darkThemeOverrides : lightThemeOverrides)
 </script>
 
 <template>
-  <NConfigProvider :theme-overrides="themeOverrides">
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <NMessageProvider>
       <div class="app-shell">
         <header class="app-topbar">
@@ -157,6 +315,7 @@ const themeOverrides: GlobalThemeOverrides = {
               :class="{ 'is-visible': navIndicator.visible, 'is-animated': navIndicator.animated }"
               :style="navIndicatorStyle"
               aria-hidden="true"
+              @transitionend="settleNavIndicator"
             ></span>
             <RouterLink to="/">
               <Calculator :size="16" />
@@ -183,7 +342,25 @@ const themeOverrides: GlobalThemeOverrides = {
               <span>维护</span>
             </RouterLink>
           </nav>
-          <span class="account-chip" aria-live="polite">{{ accountChipText }}</span>
+          <div class="topbar-actions">
+            <button
+              type="button"
+              class="theme-toggle"
+              data-testid="theme-toggle"
+              :title="themeToggleLabel"
+              :aria-label="themeToggleLabel"
+              @click="cycleTheme"
+            >
+              <Monitor v-if="themePreference === 'system'" :size="16" aria-hidden="true" />
+              <Sun v-else-if="themePreference === 'light'" :size="16" aria-hidden="true" />
+              <Moon v-else :size="16" aria-hidden="true" />
+            </button>
+            <NDropdown trigger="click" placement="bottom-end" :options="accountMenuOptions" @select="selectAccountMenu">
+              <button type="button" class="account-chip" :title="accountChipText" aria-live="polite" aria-haspopup="menu" data-testid="account-switcher">
+                <span class="account-chip-label">{{ accountChipText }}</span><ChevronDown :size="14" aria-hidden="true" class="account-chip-chevron" />
+              </button>
+            </NDropdown>
+          </div>
         </header>
         <main class="app-main">
           <NAlert v-if="storageIssues.length" type="error" title="本地数据读取失败，原始内容已保留">

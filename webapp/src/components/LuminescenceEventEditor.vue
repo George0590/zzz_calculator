@@ -111,12 +111,12 @@ function formatNumber(value: unknown, digits = 3) {
   min-width: 0;
   gap: 5px;
   padding: 12px 14px;
-  border-left: 3px solid #0f766e;
-  background: #f0fdfa;
+  border-left: 3px solid var(--app-green-strong);
+  background: var(--app-green-soft);
 }
 
 .luminescence-result strong {
-  color: #0f4f49;
+  color: var(--app-text);
   font-size: 22px;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -124,13 +124,13 @@ function formatNumber(value: unknown, digits = 3) {
 
 .luminescence-result p {
   margin: 2px 0 0;
-  color: #52706d;
+  color: var(--app-muted);
   font-size: 12px;
   line-height: 1.55;
 }
 
 .luminescence-result .luminescence-error {
-  color: #b42318;
+  color: var(--app-red-strong);
 }
 
 @media (max-width: 560px) {

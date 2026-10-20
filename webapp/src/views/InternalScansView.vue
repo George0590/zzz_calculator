@@ -338,7 +338,7 @@ onMounted(() => void refresh(true))
 }
 
 .table-band :deep(.telemetry-row:hover td) {
-  background: #f4f8ff;
+  background: var(--app-blue-soft);
 }
 
 .table-band :deep(.n-pagination) {
@@ -385,7 +385,7 @@ onMounted(() => void refresh(true))
   padding: 12px;
   overflow: auto;
   border: 1px solid var(--app-border);
-  background: #f7f9fc;
+  background: var(--app-panel-muted);
   font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
   white-space: pre-wrap;
   word-break: break-word;

@@ -213,14 +213,14 @@ function eventSummary(event: any) {
 <style scoped>
 .calculation-master-grid { display: grid; height: 100%; min-height: 0; grid-template-columns: 340px minmax(0, 1fr); align-items: stretch; gap: 16px; margin-top: 0; }
 .calculation-master-sidebar { display: grid; height: 100%; min-width: 0; min-height: 0; grid-template-rows: max-content max-content; align-content: start; gap: 12px; overflow-y: auto; overscroll-behavior: contain; }
-.calculation-master-list-panel, .calculation-master-editor-panel { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: #fff; }
+.calculation-master-list-panel, .calculation-master-editor-panel { min-width: 0; min-height: 0; overflow: hidden; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-panel); }
 .calculation-master-list-panel { display: grid; grid-template-rows: auto auto auto; overflow: visible; }
 .calculation-master-editor-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); }
 .calculation-master-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; min-height: 56px; padding: 14px 16px; border-bottom: 1px solid var(--app-border); }
 .calculation-master-panel-head h4 { min-width: 0; margin: 0; overflow-wrap: anywhere; font-size: 15px; line-height: 1.45; }
 .calculation-event-list { display: grid; min-height: 0; align-content: start; gap: 8px; padding: 12px; overflow: visible; }
-.calculation-event-list-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 6px; padding: 8px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: #fff; }
-.calculation-event-list-item.active { border-color: var(--app-blue); background: #eff6ff; }
+.calculation-event-list-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 6px; padding: 8px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-panel); }
+.calculation-event-list-item.active { border-color: var(--app-blue); background: var(--app-blue-soft); }
 .calculation-event-select { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; width: 100%; min-width: 0; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .calculation-event-order { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; height: 26px; border-radius: 999px; background: var(--app-surface); color: var(--app-muted); font-size: 12px; font-weight: 700; }
 .calculation-event-copy { min-width: 0; }
