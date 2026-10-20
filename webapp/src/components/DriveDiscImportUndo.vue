@@ -35,7 +35,8 @@ async function confirm() {
 </script>
 
 <template>
-  <NButton :disabled="!available || busy" :loading="busy" @click="preview">撤销上次导入</NButton>
+  <!-- 只有最近一次导入可撤销时才出现，平时不占工具栏位置 -->
+  <NButton v-if="available || busy" :disabled="busy" :loading="busy" @click="preview">撤销上次导入</NButton>
   <NAlert v-if="error && !plan" type="error">{{ error }}</NAlert>
   <ConfirmDialog :show="Boolean(plan)" title="撤销上一次成功导入" :busy="busy" :error="error" danger
     :message="`将恢复本次导入前的 ${plan?.affected?.driveDiscIds?.length ?? 0} 张相关驱动盘、${plan?.affected?.loadoutIds?.length ?? 0} 个相关套装及配置。只可撤销最近一次 JSON／扫描导入；相关数据变化时会停止。`"

@@ -6,6 +6,7 @@ import DriveDiscSourceTags from "@/components/DriveDiscSourceTags.vue"
 import { driveDiscUsageStateForAgent } from "@core/inventory-model.js"
 import { fallbackIcon, thumbnailForDriveDiscSet } from "@/utils/assets"
 import { driveDiscAdditionalRollText } from "@/utils/driveDiscSubstats"
+import { contributionLabel, type DriveDiscContribution } from "@/utils/driveDiscContribution"
 import { formatStoredStatValue, labelOf, storedStatLabel } from "@/utils/format"
 
 const props = withDefaults(defineProps<{
@@ -27,6 +28,8 @@ const props = withDefaults(defineProps<{
   exclusionBusy?: boolean
   currentReservationPrefix?: string
   emptyHint?: string
+  /** 去掉这张盘后目标值的变化，由计算页在后台算出 */
+  contribution?: DriveDiscContribution | null
 }>(), {
   disc: null,
   driveDiscSets: () => [],
@@ -44,6 +47,7 @@ const props = withDefaults(defineProps<{
   exclusionBusy: false,
   currentReservationPrefix: "当前角色",
   emptyHint: "可在自选模式选择已有驱动盘",
+  contribution: null,
 })
 
 const emit = defineEmits<{
@@ -167,6 +171,7 @@ function isMinorSubStat(stat: any) {
 }
 
 const showAddPlaceholder = computed(() => !props.disc && !props.missingReference && props.interactive)
+const contributionBadge = computed(() => (props.disc ? contributionLabel(props.contribution) : null))
 
 function choose() {
   if (props.interactive) emit("select", props.slot)
@@ -279,6 +284,13 @@ function toggleExclusion() {
           <template #icon><Ban :size="17" /></template>
         </NButton>
       </div>
+      <span
+        v-if="contributionBadge"
+        class="disc-slot-card-contribution"
+        :class="`is-${contributionBadge.tone}`"
+        :title="contributionBadge.title"
+        data-testid="disc-contribution"
+      >{{ contributionBadge.text }}</span>
       <NTag v-if="disc" round>{{ rarityLevel }}</NTag>
       <NTag v-if="showReservation && disc" :type="usageTag.type" size="small" round>
         {{ usageTag.label }}
@@ -301,7 +313,7 @@ function toggleExclusion() {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .disc-slot-card {
@@ -338,9 +350,31 @@ function toggleExclusion() {
   color: var(--app-blue-strong, #1d5fd6);
 }
 
+.disc-slot-card-contribution {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.disc-slot-card-contribution.is-positive {
+  background: var(--app-green-soft, #e9f7f1);
+  color: var(--app-green-strong, #087a55);
+}
+
+.disc-slot-card-contribution.is-negative {
+  background: var(--app-red-soft);
+  color: var(--app-red-strong);
+}
+
 .disc-slot-card-sub-stat-minor dt,
 .disc-slot-card-sub-stat-minor dd {
-  color: #94a3b8;
+  color: var(--app-faint);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -352,8 +386,8 @@ function toggleExclusion() {
 
 .disc-slot-card-missing,
 .disc-slot-card-conflict {
-  border-color: #f0a020;
-  background: #fffaf0;
+  border-color: var(--app-amber-line);
+  background: var(--app-amber-soft);
 }
 
 .disc-slot-card-manual {
@@ -362,8 +396,8 @@ function toggleExclusion() {
 
 .disc-slot-card-manual:hover,
 .disc-slot-card-manual:focus-visible {
-  border-color: #93c5fd;
-  background: #f8fbff;
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
   outline: none;
 }
 
@@ -399,7 +433,7 @@ function toggleExclusion() {
 }
 
 .disc-reservation-button-public {
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-blue);
 }
 
@@ -409,7 +443,7 @@ function toggleExclusion() {
 
 .disc-reservation-button-other,
 .disc-reservation-button-unknown {
-  background: #fff7e6;
+  background: var(--app-amber-soft);
 }
 
 .disc-exclusion-button-excluded-explicit {
@@ -418,8 +452,8 @@ function toggleExclusion() {
 }
 
 .disc-exclusion-button-excluded-by-reservation {
-  color: #d97706;
-  background: #fff7e6;
+  color: var(--app-amber-strong);
+  background: var(--app-amber-soft);
 }
 
 .disc-slot-card-copy {
