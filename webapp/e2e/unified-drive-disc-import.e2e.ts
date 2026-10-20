@@ -136,7 +136,8 @@ async function expectUnifiedDisc(page: Page, expectedCanonicalId: string) {
 }
 
 async function openJsonImport(page: Page, payload: any = scannerPayload): Promise<Locator> {
-  await page.getByRole("button", { name: "批量导入", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "导入 JSON 文件", exact: true }).first().click()
   const modal = page.locator(".n-modal").filter({ hasText: "导入驱动盘 JSON" })
   await expect(modal).toBeVisible()
   await modal.getByLabel("驱动盘 JSON 内容").locator("textarea").fill(JSON.stringify(payload))

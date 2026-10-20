@@ -43,7 +43,8 @@ test("Helper 1.1.x is offered a takeover upgrade without receiving scanner comma
   })
 
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
 
   await expect(page.getByText("扫描助手版本过低")).toBeVisible()
   await expect(page.getByText("Helper 1.1.0 需要更新到 1.3.1。下载后运行安装器，它会自动接管当前旧 Helper。")).toBeVisible()
@@ -145,7 +146,8 @@ test("Helper 1.2.0 self-updates, reconnects, and resumes scanner preparation", a
   })
 
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
 
   await expect(page.getByRole("button", { name: "开始扫描", exact: true })).toBeVisible({ timeout: 15_000 })
   expect(commands.filter(command => command === "update_helper")).toHaveLength(1)

@@ -95,7 +95,8 @@ const elevatedCommands = (commands: ScannerCommand[]) => commands.filter(command
 test("administrator preparation returns to settings before a separately confirmed scan", async ({ page }) => {
   const commands = await mockScannerSession(page)
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   await page.getByLabel("以管理员权限启动", { exact: true }).check()
   await page.getByLabel("同步删除缺失", { exact: true }).check()
   await page.getByRole("button", { name: "开始扫描", exact: true }).click()
@@ -132,7 +133,8 @@ test("permission failure and cancelled UAC preserve editable settings for a late
     return false
   })
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   const limit = page.locator('[data-layout-surface="scanner-config"] .n-input-number input')
   await limit.fill("47")
   await limit.blur()
@@ -185,7 +187,8 @@ function nativeStartupFailure(code: "uac_cancelled" | "child_start_failed", mess
 
 async function configureRecoveryScan(page: Page) {
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   await page.locator('[aria-label="扫描客户端"]').click()
   await page.locator(".n-base-select-option:visible").filter({ hasText: "云绝区零" }).click()
   const limit = page.locator('[data-layout-surface="scanner-config"] .n-input-number input')
@@ -427,7 +430,8 @@ test("startup recovery ignores a closed session's late responses while a new adm
 
   await page.locator(".n-drawer .n-base-close").click()
   await expect(page.locator(".n-drawer:visible")).toHaveCount(0)
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   await expectRecoveryPrimary(page, "开始扫描")
   await expectRecoverySettings(page, true)
   await page.getByRole("button", { name: "开始扫描", exact: true }).click()
@@ -459,7 +463,8 @@ test("startup recovery ignores a closed session's late responses while a new adm
 test("reload restores reusable scan preferences but never deletion consent", async ({ page }) => {
   const commands = await mockScannerSession(page)
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   await page.locator('[aria-label="扫描客户端"]').click()
   await page.locator(".n-base-select-option:visible").filter({ hasText: "云绝区零" }).click()
   const limit = page.locator('[data-layout-surface="scanner-config"] .n-input-number input')
@@ -473,7 +478,8 @@ test("reload restores reusable scan preferences but never deletion consent", asy
   })
 
   await page.reload()
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   await expect(page.locator('[aria-label="扫描客户端"]')).toContainText("云绝区零")
   await expect(limit).toHaveValue("23")
   await expect(page.getByLabel("遇到非 15 级时停止", { exact: true })).not.toBeChecked()
@@ -491,7 +497,8 @@ test("Chrome-style loopback denial is shown as a browser permission problem", as
   })
 
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
 
   const alert = page.getByRole("alert")
   await expect(alert.getByText("浏览器已阻止连接本机扫描助手")).toBeVisible()
@@ -519,7 +526,8 @@ test("Helper token 403 is shown as an origin rejection instead of Helper missing
   })
 
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
 
   await expect(page.getByRole("heading", { name: "扫描助手拒绝了当前网页", exact: true })).toBeVisible()
   await expect(page.getByRole("button", { name: "下载最新版 Helper", exact: true })).toBeVisible()
@@ -543,7 +551,8 @@ test("a failed WebSocket after successful HTTP probe has its own recovery state"
   })
 
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
 
   await expect(page.getByText("浏览器未能建立扫描连接")).toBeVisible()
   await expect(page.getByText(/WebSocket/)).toBeVisible()
@@ -563,7 +572,8 @@ test("Helper auto-launch has a coded terminal state after 60 seconds", async ({ 
       return null
     }) as typeof window.open
   })
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   await expect(page.getByRole("heading", { name: "未检测到扫描助手", exact: true })).toBeVisible()
   await page.getByRole("button", { name: "下载扫描助手", exact: true }).click()
   await expect.poll(() => page.evaluate(() => (window as any).__openedHelperDownloadUrl)).toBe(
@@ -628,7 +638,8 @@ test("partial OCR completion automatically imports without destructive synchroni
   })
 
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   await page.getByLabel("同步删除缺失").check()
   await page.getByRole("button", { name: "开始扫描", exact: true }).click()
   await page.getByRole("button", { name: "继续扫描", exact: true }).click()
@@ -691,7 +702,8 @@ test("configured non-level-15 stop completes without a partial-failure card", as
   })
 
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
   await expect(page.getByLabel("遇到非 15 级时停止")).toBeChecked()
   await page.getByLabel("同步删除缺失").check()
   await page.getByRole("button", { name: "开始扫描", exact: true }).click()

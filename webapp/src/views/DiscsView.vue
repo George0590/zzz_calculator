@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, h, inject, onMounted, onActivated, onDeactivated, ref, watch } from "vue"
-import { routeLocationKey } from "vue-router"
+import { routeLocationKey, routerKey } from "vue-router"
 import { NAlert, NButton, NCheckbox, NDrawer, NDrawerContent, NDropdown, NInput, NInputNumber, NModal, NProgress, NSelect, NSpin, NTag, useMessage } from "naive-ui"
-import { Ban, ChevronDown, Download, FileText, LockKeyhole, Plus, Radar, RefreshCw, Upload, X } from "lucide-vue-next"
+import { Ban, ChevronDown, Download, LockKeyhole, Plus, RefreshCw, X } from "lucide-vue-next"
 import ConfirmDialog from "@/components/ConfirmDialog.vue"
 import DriveDiscConflictResolver from "@/components/DriveDiscConflictResolver.vue"
 import DriveDiscPickerModal from "@/components/DriveDiscPickerModal.vue"
@@ -13,6 +13,7 @@ import DriveDiscSlotCard from "@/components/DriveDiscSlotCard.vue"
 import ImageAvatar from "@/components/ImageAvatar.vue"
 import ScannerErrorState from "@/components/ScannerErrorState.vue"
 import DriveCapturePanel from "@/components/DriveCapturePanel.vue"
+import DriveImportEntry from "@/components/DriveImportEntry.vue"
 import DriveDiscImportUndo from "@/components/DriveDiscImportUndo.vue"
 import { formatNumber, statLabel, labelOf } from "@/utils/format"
 import { thumbnailForAgent, thumbnailForDriveDiscSet } from "@/utils/assets"
@@ -34,6 +35,7 @@ const accountStore = useAccountStore()
 defineOptions({ name: "DiscsView" })
 const pageActive = ref(true)
 const route = inject(routeLocationKey, null)
+const router = inject(routerKey, null)
 const message = useMessage()
 // 仓库每页数量可选（20 / 50 / 100），默认 20，并记住上次的选择
 // v2：默认改为每页 5 个，旧版记住的 20 不再沿用
@@ -115,6 +117,21 @@ const pendingDangerImport = ref<"paste" | "">("")
 
 const showScan = ref(false)
 const showCapture = ref(false)
+const showImportEntry = ref(false)
+const enkaImportEnabled = computed(() => Boolean(appConfigStore.config.enkaImportEnabled))
+
+// 统一导入入口的四个去向：抓包、扫描、JSON、Enka 展柜
+function openImportMethod(method: "capture" | "scan" | "json" | "enka") {
+  showImportEntry.value = false
+  if (method === "capture") showCapture.value = true
+  else if (method === "scan") showScan.value = true
+  else if (method === "json") showImport.value = true
+  else void router?.push("/import")
+}
+function switchCaptureToScanner() {
+  showCapture.value = false
+  showScan.value = true
+}
 
 async function loadWarehouse() {
   await Promise.all([catalogStore.load(), inventoryStore.ensureLoaded(accountStore.currentOwnerId)])
@@ -135,7 +152,7 @@ onDeactivated(() => {
   pageActive.value = false
   for (const visible of [showDiscEditor, confirmDelete, showDiscReservation,
     showReservationConflict, showDiscExclusions, showLoadoutEditor,
-    showLoadoutDiscPicker, showImport, confirmRemoveMissingImport, showScan, showCapture]) {
+    showLoadoutDiscPicker, showImport, confirmRemoveMissingImport, showScan, showCapture, showImportEntry]) {
     visible.value = false
   }
   deleteLoadoutId.value = ""
@@ -1082,10 +1099,9 @@ async function confirmScanImportReview() {
   }
 }
 
-// 工具栏“更多”：低频操作收进下拉，常用的新增、导入、扫描保持可见
+// 工具栏“更多”：低频操作收进下拉；导入方式统一由“导入驱动盘”入口选择
 const moreToolbarOptions = computed(() => [
   { key: "refresh", label: "刷新库存", icon: () => h(RefreshCw, { size: 16 }) },
-  { key: "capture", label: "抓包导入", icon: () => h(Radar, { size: 16 }) },
   {
     key: "export",
     label: inventoryStore.hasDriveDiscs ? "批量导出" : "批量导出（当前账号没有驱动盘）",
@@ -1096,7 +1112,6 @@ const moreToolbarOptions = computed(() => [
 
 function selectMoreToolbarAction(key: string | number) {
   if (key === "refresh") void inventoryStore.load()
-  else if (key === "capture") showCapture.value = true
   else if (key === "export") void exportDriveDiscs()
 }
 
@@ -1186,19 +1201,15 @@ function confirmDangerImport() {
             <template #icon><Plus :size="16" /></template>
             新增单个
           </NButton>
-          <NButton @click="showImport = true">
-            <template #icon><Upload :size="16" /></template>
-            批量导入
-          </NButton>
           <NDropdown trigger="click" :options="moreToolbarOptions" placement="bottom-end" @select="selectMoreToolbarAction">
             <NButton data-testid="drive-disc-more-actions" aria-haspopup="menu">
               更多
               <ChevronDown :size="14" aria-hidden="true" class="toolbar-more-chevron" />
             </NButton>
           </NDropdown>
-          <NButton type="primary" @click="showScan = true">
-            <template #icon><Radar :size="16" /></template>
-            扫描
+          <NButton type="primary" data-testid="open-drive-import-entry" @click="showImportEntry = true">
+            <template #icon><Download :size="16" /></template>
+            导入驱动盘
           </NButton>
         </div>
       </div>
@@ -1256,21 +1267,10 @@ function confirmDangerImport() {
           <button type="button" class="active-filter-clear" data-testid="clear-drive-disc-filters" @click="clearAllFilters">清除全部</button>
         </div>
         <div v-if="!inventoryStore.hasDriveDiscs" class="scan-empty-state">
-          <div class="scan-empty-icon">
-            <Radar :size="32" :stroke-width="1.6" />
-          </div>
           <h3 class="scan-empty-title">还没有驱动盘</h3>
-          <p class="scan-empty-subtext">使用扫描助手一键从游戏读取，或从 JSON 导入。</p>
-          <div class="scan-empty-actions">
-            <NButton type="primary" size="large" @click="showScan = true">
-              <template #icon><Radar :size="16" /></template>
-              立即扫描
-            </NButton>
-            <NButton size="large" @click="showImport = true">
-              <template #icon><FileText :size="16" /></template>
-              粘贴 JSON 导入
-            </NButton>
-          </div>
+          <p class="scan-empty-subtext">选择一种方式导入驱动盘。</p>
+          <DriveImportEntry class="scan-empty-entry" :enka-enabled="enkaImportEnabled" @capture="openImportMethod('capture')"
+            @scan="openImportMethod('scan')" @json="openImportMethod('json')" @enka="openImportMethod('enka')" />
         </div>
         <div v-else class="panel inventory-table-panel" style="max-height: 620px; overflow: auto;">
           <table class="data-table inventory-table">
@@ -1715,7 +1715,11 @@ function confirmDangerImport() {
     @clear="clearLoadoutDiscSlot"
   />
 
-  <DriveCapturePanel v-model:show="showCapture" />
+  <NModal v-model:show="showImportEntry" preset="card" title="导入驱动盘" style="width: min(760px, calc(100vw - 16px))">
+    <DriveImportEntry v-if="showImportEntry" :enka-enabled="enkaImportEnabled" @capture="openImportMethod('capture')"
+      @scan="openImportMethod('scan')" @json="openImportMethod('json')" @enka="openImportMethod('enka')" />
+  </NModal>
+  <DriveCapturePanel v-model:show="showCapture" @use-scanner="switchCaptureToScanner" />
   <NModal
     :show="showImport"
     preset="card"
@@ -2681,17 +2685,6 @@ function confirmDangerImport() {
   text-align: center;
 }
 
-.scan-empty-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 60px;
-  height: 60px;
-  border-radius: 999px;
-  background: var(--app-panel-muted);
-  color: var(--app-blue);
-  margin-bottom: 4px;
-}
 
 .scan-empty-title {
   margin: 0;
@@ -2708,12 +2701,11 @@ function confirmDangerImport() {
   line-height: 1.6;
 }
 
-.scan-empty-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
+.scan-empty-entry {
+  width: 100%;
+  max-width: 720px;
   margin-top: 8px;
+  text-align: left;
 }
 
 @media (max-width: 720px) {

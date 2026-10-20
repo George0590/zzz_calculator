@@ -214,6 +214,12 @@ async function mountView(reservationUiEnabled = false, exclusionUiEnabled = fals
   return wrapper
 }
 
+async function openScanner(wrapper: any) {
+  await button(wrapper, "导入驱动盘").trigger("click")
+  await flushPromises()
+  await button(wrapper, "使用扫描助手").trigger("click")
+}
+
 function button(wrapper: any, label: string) {
   const match = wrapper.findAll("button").find((item: any) => item.text().trim() === label)
   if (!match) {
@@ -401,23 +407,22 @@ describe("DiscsView", () => {
     expect(wrapper.text()).not.toContain("词条分析")
   })
 
-  it("keeps scan as the only primary command and moves low-frequency actions into the more menu", async () => {
+  it("keeps the import entry as the only primary command and moves low-frequency actions into the more menu", async () => {
     const wrapper = await mountView()
     const toolbar = wrapper.find('[data-layout-surface="drive-discs-page"] > .panel > .panel-header .toolbar')
     const visibleButtons = toolbar.findAll("button").filter(item => !item.element.closest(".dropdown-menu"))
 
     expect(visibleButtons.map(item => item.text().trim())).toEqual([
       "新增单个",
-      "批量导入",
       "更多",
-      "扫描",
+      "导入驱动盘",
     ])
     expect(visibleButtons
       .filter(item => item.attributes("data-button-type") === "primary")
-      .map(item => item.text().trim())).toEqual(["扫描"])
+      .map(item => item.text().trim())).toEqual(["导入驱动盘"])
 
     const menu = toolbar.findAll(".dropdown-option")
-    expect(menu.map(item => item.text().trim())).toEqual(["刷新库存", "抓包导入", "批量导出（当前账号没有驱动盘）"])
+    expect(menu.map(item => item.text().trim())).toEqual(["刷新库存", "批量导出（当前账号没有驱动盘）"])
     expect(toolbar.get('[data-dropdown-key="export"]').attributes("disabled")).toBeDefined()
     // 没有可撤销的导入时不显示撤销按钮
     expect(toolbar.text()).not.toContain("撤销上次导入")
@@ -608,7 +613,7 @@ describe("DiscsView", () => {
     inventoryStore.scanHelperVersion = "1.3.1"
     inventoryStore.scanScannerVersion = "1.0.43"
 
-    await button(wrapper, "扫描").trigger("click")
+    await openScanner(wrapper)
     await flushPromises()
 
     expect(wrapper.find(".scan-runtime-status").text()).toBe("Helper 1.3.1 · Scanner 1.0.43 · 后台运行")
@@ -626,7 +631,7 @@ describe("DiscsView", () => {
     const wrapper = await mountView()
     const inventoryStore = useInventoryStore()
     inventoryStore.$patch({ scanConnected: true, scanStatus: "ready", scanHelperVersion: "1.3.1", scanScannerVersion: "1.0.49" })
-    await button(wrapper, "扫描").trigger("click")
+    await openScanner(wrapper)
     await flushPromises()
     inventoryStore.updateScanPreferences({ runAsAdmin: true })
     inventoryStore.applyScannerFailure({ code, phase: "launch", message: "拒绝访问。", diagnosticId: "view-launch" })

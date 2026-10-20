@@ -5,7 +5,8 @@ test("public Helper 1.2.1 upgrades transactionally and resumes Scanner 1.0.49 pr
   test.setTimeout(180_000)
 
   await page.goto("/discs")
-  await page.getByRole("button", { name: "扫描", exact: true }).click()
+  await page.getByRole("button", { name: "导入驱动盘", exact: true }).click()
+  await page.getByRole("button", { name: "使用扫描助手", exact: true }).first().click()
 
   await expect(page.getByText("Helper 1.3.1 · Scanner 1.0.49 · 后台运行", { exact: true }))
     .toBeVisible({ timeout: 150_000 })
