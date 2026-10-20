@@ -102,12 +102,24 @@ for (const [id, name, rarity, atkBase, stat, value, effectName] of expected) {
 const agentIds = new Set(catalog.agents.map(item => item.id))
 assert.deepEqual(
     attackEngines.filter(item => item.relatedAgentId).map(item => [item.id, item.relatedAgentId]),
-    [["cloudcleave_radiance", "ye_shunguang"], ["zzz_wiki_223", "soldier_11"], ["zzz_wiki_225", "ellen_joe"], ["zzz_wiki_2031", "pyrois"], ["zzz_wiki_2162", "sigrid"]],
+    [
+        ["cloudcleave_radiance", "ye_shunguang"],
+        ["zzz_wiki_223", "soldier_11"],
+        ["zzz_wiki_224", "nekomata"],
+        ["zzz_wiki_225", "ellen_joe"],
+        ["zzz_wiki_991", "asaba_harumasa"],
+        ["zzz_wiki_1159", "evelyn_chevalier"],
+        ["zzz_wiki_2031", "pyrois"],
+        ["zzz_wiki_2162", "sigrid"],
+    ],
     "Maintained Attack agents should receive their signature W-Engine relationship",
 )
 assert.ok(agentIds.has("ye_shunguang"))
 assert.ok(agentIds.has("soldier_11"))
 assert.ok(agentIds.has("sigrid"))
+assert.ok(agentIds.has("nekomata"))
+assert.ok(agentIds.has("asaba_harumasa"))
+assert.ok(agentIds.has("evelyn_chevalier"))
 
 assert.equal(engine("zzz_wiki_117").effect.selfBuff, null, "Fixed Energy restoration should not be misrepresented as Energy Regen")
 assert.deepEqual(rules("zzz_wiki_221").map(rule => rule.stat), ["atkPct"], "Cannon Rotor proc damage should not be converted into a generic damage Buff")

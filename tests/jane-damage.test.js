@@ -204,7 +204,8 @@ const sheerDense = createInCombatPanelCalculator(sheerCatalog, sheerInput).compi
 approx(sheerDense.scoreDense([], []).finalDamage, sheerFull.damage.totalFinalDamage, "Sheer force includes converted ATK")
 
 const config = resolveDefaultCalculationConfig(agent.defaultCalculationConfig, 6, 6)
-assert.equal(config.name.zhCN, "单次物理异常")
+// 名称来自维护页保存的本地配置；计算目标仍是失衡状态下的一次普通物理强击
+assert.equal(config.name.zhCN, "单次强击（默认）")
 assert.equal(config.events.length, 1)
 assert.equal(config.events[0].anomalyEffect, "assault")
 assert.deepEqual(calculationSkillGroups(agent), [])

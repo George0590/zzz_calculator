@@ -111,7 +111,8 @@ describe("ScannerErrorState", () => {
     })
 
     expect(wrapper.text()).toContain("未找到绝区零窗口")
-    expect(wrapper.text()).toContain("云绝区零请在客户端选择器中切换")
+    // 2026-10-16 新增 Beta 客户端后提示改为列出全部客户端选项（见 docs/changelog.md）
+    expect(wrapper.text()).toContain("在客户端选择器中选择本地、云绝区零或绝区零Beta（私服）")
     const buttons = wrapper.findAll("button")
     expect(buttons).toHaveLength(1)
     expect(buttons[0]!.text()).toContain("重试连接")
