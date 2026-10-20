@@ -169,15 +169,16 @@ onBeforeUnmount(() => {
   overflow-wrap: anywhere;
 }
 
+/* 数值更新只轻微上移，不变淡，避免看起来像加载中或异常 */
 .summary-value--changed {
-  animation: summary-value-flash 0.6s ease-out;
+  animation: summary-value-nudge 0.25s ease-out;
 }
 
 .summary-value-skeleton {
   width: min(220px, 70%);
   height: 32px;
   border-radius: 6px;
-  background: linear-gradient(90deg, #e6ebf2 0%, #f3f6fa 50%, #e6ebf2 100%);
+  background: linear-gradient(90deg, var(--app-panel-sunken) 0%, var(--app-panel-muted) 50%, var(--app-panel-sunken) 100%);
   background-size: 200% 100%;
   animation: summary-skeleton 1.2s ease-in-out infinite;
 }
@@ -199,8 +200,8 @@ onBeforeUnmount(() => {
 }
 
 .summary-delta--down {
-  background: #fdecec;
-  color: #b42318;
+  background: var(--app-red-soft);
+  color: var(--app-red-strong);
 }
 
 .summary-delta-enter-active,
@@ -217,9 +218,9 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
-@keyframes summary-value-flash {
-  0% { opacity: 0.35; transform: translateY(3px); }
-  100% { opacity: 1; transform: none; }
+@keyframes summary-value-nudge {
+  0% { transform: translateY(2px); }
+  100% { transform: none; }
 }
 
 @keyframes summary-skeleton {

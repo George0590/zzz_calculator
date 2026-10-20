@@ -396,15 +396,15 @@ button.damage-whitebox-row-head:hover .damage-whitebox-row-label {
   overflow-wrap: anywhere;
 }
 
+/* 与全站展开按钮一致：蓝色箭头朝下，展开后翻转朝上 */
 .damage-whitebox-chevron {
   flex: 0 0 auto;
-  color: var(--app-muted);
-  transform: rotate(-90deg);
-  transition: transform 0.18s ease;
+  color: var(--app-blue);
+  transition: transform 0.2s ease;
 }
 
 .damage-whitebox-row.is-expanded .damage-whitebox-chevron {
-  transform: none;
+  transform: rotate(180deg);
 }
 
 .damage-whitebox-row-main {

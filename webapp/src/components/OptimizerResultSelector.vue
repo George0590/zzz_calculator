@@ -98,17 +98,16 @@ const resultCaptionText = computed(() => [
   showRank.value ? `第 ${currentRank.value} 套` : "",
   showPercentage.value ? `${showRank.value ? "相对第一套" : "相对优化第一套"} ${percentageText.value}` : "",
 ].filter(Boolean).join(" · "))
-const effectiveSubstatLines = computed(() => {
+// 有效副词条合成一个指标：大号数字为总数（穿透值重要时含穿透值），下方补充不含穿透值的数量
+const effectiveSubstatSummary = computed(() => {
   const counts = props.effectiveSubstatCounts
-  if (!counts) return []
+  if (!counts) return null
   const total = Math.max(0, Math.round(Number(counts.total) || 0))
   if (!counts.includesPenFlat) {
-    return [{ label: "有效副词条数量", count: total }]
+    return { total, withoutPenFlat: null as number | null, title: `有效副词条数量 ${total}` }
   }
-  return [
-    { label: "有效副词条数量（包含穿透值）", count: total },
-    { label: "有效副词条数量（不含穿透值）", count: Math.max(0, Math.round(Number(counts.withoutPenFlat) || 0)) },
-  ]
+  const withoutPenFlat = Math.max(0, Math.round(Number(counts.withoutPenFlat) || 0))
+  return { total, withoutPenFlat, title: `有效副词条数量（包含穿透值）${total}，不含穿透值 ${withoutPenFlat}` }
 })
 const ratioStyle = computed(() => ({
   "--optimizer-result-ratio": `${scorePercentage.value ?? 0}%`,
@@ -210,16 +209,17 @@ function rankTooltip(value: number) {
         <span v-if="resultCaptionText" class="optimizer-result-caption">{{ resultCaptionText }}</span>
       </div>
       <div
-        v-if="effectiveSubstatLines.length"
+        v-if="effectiveSubstatSummary"
         class="optimizer-result-effective-substats"
         role="group"
-        aria-label="有效副词条统计"
+        :aria-label="effectiveSubstatSummary.title"
+        :title="effectiveSubstatSummary.title"
       >
-        <span
-          v-for="line in effectiveSubstatLines"
-          :key="line.label"
-          class="optimizer-result-effective-substat-line"
-        ><span class="optimizer-result-metric-label">{{ line.label }}</span> <b class="num">{{ line.count }}</b></span>
+        <span class="optimizer-result-metric-label">有效副词条</span>
+        <b class="optimizer-result-effective-total num">{{ effectiveSubstatSummary.total }}</b>
+        <small v-if="effectiveSubstatSummary.withoutPenFlat !== null" class="optimizer-result-effective-note">
+          不含穿透值 <b class="num">{{ effectiveSubstatSummary.withoutPenFlat }}</b>
+        </small>
       </div>
     </div>
   </div>
@@ -232,6 +232,7 @@ function rankTooltip(value: number) {
   min-width: 0;
 }
 
+/* 第几套滑轨与右侧输入框，右侧还可插入“一键锁定”等操作 */
 .optimizer-result-control-row {
   display: grid;
   grid-template-columns: minmax(160px, 1fr) auto;
@@ -260,17 +261,17 @@ function rankTooltip(value: number) {
   max-width: 100%;
 }
 
-/* 评分区：左侧大号评分 + 比例条，右侧有效副词条小指标 */
+/* 评分区：左侧大号评分 + 比例条，右侧有效副词条 */
 .optimizer-result-metrics {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
   align-items: stretch;
   gap: 8px;
   min-width: 0;
 }
 
 .optimizer-result-score,
-.optimizer-result-effective-substat-line {
+.optimizer-result-effective-substats {
   display: grid;
   align-content: center;
   gap: 4px;
@@ -282,8 +283,8 @@ function rankTooltip(value: number) {
 }
 
 .optimizer-result-metrics.is-stale .optimizer-result-score {
-  border-color: #f59e0b;
-  background: #fffbeb;
+  border-color: var(--app-amber-line);
+  background: var(--app-amber-soft);
 }
 
 .optimizer-result-metric-label {
@@ -307,7 +308,7 @@ function rankTooltip(value: number) {
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: #dde6f5;
+  background: var(--app-panel-sunken);
 }
 
 .optimizer-result-ratio-fill {
@@ -330,24 +331,22 @@ function rankTooltip(value: number) {
   overflow-wrap: anywhere;
 }
 
-.optimizer-result-effective-substats {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(88px, max-content);
-  gap: 8px;
-  min-width: 0;
-}
-
-.optimizer-result-effective-substat-line {
-  align-content: space-between;
-  max-width: 140px;
-}
-
-.optimizer-result-effective-substat-line b {
+.optimizer-result-effective-total {
   color: var(--app-text);
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1.15;
+}
+
+.optimizer-result-effective-note {
+  color: var(--app-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.optimizer-result-effective-note b {
+  color: var(--app-text);
+  font-weight: 800;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -356,29 +355,9 @@ function rankTooltip(value: number) {
   }
 }
 
-@container ui-layout (max-width: 680px) {
-  .optimizer-result-control-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-
-  .optimizer-result-rank-controls {
-    justify-self: end;
-  }
-}
-
-@container ui-layout (max-width: 460px) {
+@container ui-layout (max-width: 420px) {
   .optimizer-result-metrics {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .optimizer-result-effective-substats {
-    grid-auto-flow: row;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  }
-
-  .optimizer-result-effective-substat-line {
-    max-width: none;
   }
 }
 </style>

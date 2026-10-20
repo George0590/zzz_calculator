@@ -1,6 +1,7 @@
 import { defineStore } from "pinia"
 import { toRaw } from "vue"
-import { driveDiscOptimizationInventoryFingerprint } from "@core/inventory-model.js"
+import { driveDiscContentFingerprint, driveDiscOptimizationInventoryFingerprint } from "@core/inventory-model.js"
+import { toCalculatorDriveDisc } from "@core/drive-disc-core.js"
 import { readSafeJson } from "@runtime/storage-guard.js"
 
 type OptimizerStatus = "idle" | "estimating" | "preparing" | "running" | "cancelling" | "cancelled" | "done" | "error"
@@ -82,6 +83,41 @@ function runId() {
 
 function readSettings() {
   return readSafeJson(SETTINGS_KEY, null)
+}
+
+// 上次优化结果：按“账号 + 角色”保存方案里的驱动盘快照，刷新或切回角色后可直接查看。
+// 只保留最近几组，避免占满本地存储；读取失败时当作没有保存，不影响优化设置。
+const RESULTS_KEY = "zzz-calculator.webapp.optimizer-results.v1"
+const RESULTS_VERSION = 1
+const MAX_SAVED_RESULT_SETS = 6
+
+function savedResultsKey(ownerId: string, agentId: string) {
+  return `${ownerId}::${agentId}`
+}
+
+function readSavedResults(): Record<string, any> {
+  try {
+    const raw = localStorage.getItem(RESULTS_KEY)
+    const value = raw ? JSON.parse(raw) : null
+    return value?.version === RESULTS_VERSION && value.entries && typeof value.entries === "object" ? value.entries : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeSavedResults(entries: Record<string, any>) {
+  const kept = Object.entries(entries)
+    .sort(([, left], [, right]) => String(right?.savedAt ?? "").localeCompare(String(left?.savedAt ?? "")))
+    .slice(0, MAX_SAVED_RESULT_SETS)
+  try {
+    localStorage.setItem(RESULTS_KEY, JSON.stringify({ version: RESULTS_VERSION, entries: Object.fromEntries(kept) }))
+  } catch {
+    // 存储已满或不可用时放弃保存上次结果，本次结果仍在内存中可用
+  }
+}
+
+function discContent(disc: any) {
+  return driveDiscContentFingerprint(toCalculatorDriveDisc(disc))
 }
 
 function writeSettings(value: any) {
@@ -552,6 +588,8 @@ export const useOptimizerStore = defineStore("optimizer", {
     completedSettingsFingerprint: "",
     completedInventoryFingerprint: "",
     completedCalculationInputFingerprint: "",
+    /** 当前结果来自本地保存的上次优化时为保存时间（ISO），本次运行得到的结果为空串 */
+    restoredResultsSavedAt: "",
     error: "",
     cancelRequested: false,
   }),
@@ -733,8 +771,48 @@ export const useOptimizerStore = defineStore("optimizer", {
       this.completedSettingsFingerprint = ""
       this.completedInventoryFingerprint = ""
       this.completedCalculationInputFingerprint = ""
+      this.restoredResultsSavedAt = ""
       this.error = ""
       this.cancelRequested = false
+    },
+    saveCompletedResults(ownerId: string, agentId: string) {
+      if (!ownerId || !agentId || !this.resultSchemes.length || this.resultsAreProvisional) return
+      const entries = readSavedResults()
+      entries[savedResultsKey(ownerId, agentId)] = {
+        savedAt: new Date().toISOString(),
+        resultSchemes: cloneWorkerPayload(this.resultSchemes),
+        completedSettings: cloneWorkerPayload(this.completedSettings),
+        completedSettingsFingerprint: this.completedSettingsFingerprint,
+        completedInventoryFingerprint: this.completedInventoryFingerprint,
+        completedCalculationInputFingerprint: this.completedCalculationInputFingerprint,
+      }
+      writeSavedResults(entries)
+    },
+    /**
+     * 恢复该账号、角色上次保存的优化结果。方案中任一驱动盘已删除或词条已变化时丢弃该方案；
+     * 正在优化或已有结果时不覆盖。返回是否恢复到了至少一套方案。
+     */
+    restoreSavedResults(ownerId: string, agentId: string, inventoryDiscs: any[] = []) {
+      if (this.isBusy || this.resultSchemes.length || !ownerId || !agentId) return false
+      const entry = readSavedResults()[savedResultsKey(ownerId, agentId)]
+      if (!entry || !Array.isArray(entry.resultSchemes)) return false
+      const liveContent = new Map<string, string>(inventoryDiscs.map((disc: any) => [String(disc?.id ?? ""), discContent(disc)]))
+      const schemes = entry.resultSchemes.filter((scheme: any) => {
+        const discs = Array.isArray(scheme?.driveDiscs) ? scheme.driveDiscs : []
+        return discs.length > 0 && discs.every((disc: any) => liveContent.get(String(disc?.id ?? "")) === discContent(disc))
+      })
+      if (!schemes.length) return false
+      this.resultSchemes = schemes
+      this.results = []
+      this.resultsAreProvisional = false
+      this.completedSettings = entry.completedSettings ?? null
+      this.completedSettingsFingerprint = String(entry.completedSettingsFingerprint ?? "")
+      this.completedInventoryFingerprint = String(entry.completedInventoryFingerprint ?? "")
+      this.completedCalculationInputFingerprint = String(entry.completedCalculationInputFingerprint ?? "")
+      this.restoredResultsSavedAt = String(entry.savedAt ?? "")
+      this.status = "idle"
+      this.error = ""
+      return true
     },
     disposeRuntime() {
       disposeWorker()
@@ -850,6 +928,7 @@ export const useOptimizerStore = defineStore("optimizer", {
       }
       this.status = "preparing"
       this.resultsAreProvisional = false
+      this.restoredResultsSavedAt = ""
       this.error = ""
       this.results = []
       this.resultSchemes = []
@@ -990,6 +1069,7 @@ export const useOptimizerStore = defineStore("optimizer", {
             if (hasResults) {
               this.status = "done"
               this.error = ""
+              this.saveCompletedResults(String(workerInput.ownerId ?? ""), String(workerInput.agentId ?? ""))
             } else {
               this.status = "error"
               this.error = resultReason(result)

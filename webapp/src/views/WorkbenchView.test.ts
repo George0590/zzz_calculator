@@ -1,11 +1,20 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 
-const viewPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "WorkbenchView.vue")
-const source = readFileSync(viewPath, "utf8").replace(/\r\n/g, "\n")
-const componentDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../components")
+const viewDir = path.dirname(fileURLToPath(import.meta.url))
+const componentDir = path.resolve(viewDir, "../components")
+const workbenchComponentDir = path.join(componentDir, "workbench")
+const read = (file: string) => readFileSync(file, "utf8").replace(/\r\n/g, "\n")
+// 计算页拆分后，这里把页面本身、拆出的子组件和共用区块样式拼在一起检查，
+// 这样结构类断言不依赖代码具体落在哪个文件里
+const viewSource = read(path.join(viewDir, "WorkbenchView.vue"))
+const source = [
+  viewSource,
+  ...readdirSync(workbenchComponentDir).filter(file => file.endsWith(".vue")).sort().map(file => read(path.join(workbenchComponentDir, file))),
+  read(path.resolve(viewDir, "../styles/workbench.css")),
+].join("\n")
 const slotCardSource = readFileSync(path.join(componentDir, "DriveDiscSlotCard.vue"), "utf8")
 const pickerSource = readFileSync(path.join(componentDir, "DriveDiscPickerModal.vue"), "utf8")
 
@@ -161,7 +170,7 @@ describe("WorkbenchView optimizer progress", () => {
     expect(source).toContain('v-if="!activeLuminescenceEvent" class="metric calculation-event-summary"')
     expect(source).toContain('class="calculation-event-summary-heading"')
     expect(source).toContain('class="calculation-event-count"')
-    expect(source).toContain(':disabled="optimizerStore.isBusy" @click="showCalculationConfig = true"')
+    expect(source).toContain(':disabled="optimizerStore.isBusy" @click="openCalculationConfig"')
     expect(source).toContain(':disabled="optimizerStore.isBusy"')
     expect(source).toContain("&& luminescenceParametersValid.value")
     expect(source).toContain("请先填写有效的队友初始攻击力和耀变伤害占比。")
@@ -178,6 +187,22 @@ describe("WorkbenchView optimizer progress", () => {
     expect(source).toContain("activeBuffIdsForPanel")
     expect(source).not.toContain(".slice(0, 8).map(id =>")
     expect(source).toContain("v-if=\"!activeBuffIdsForPanel.length\"")
+  })
+
+  it("keeps the in-combat Buff section collapsed by default and persists the toggle", () => {
+    expect(source).toContain('const BUFF_SECTION_STORAGE_KEY = "zzz-workbench-buff-expanded"')
+    expect(source).toContain("const buffSectionExpanded = ref(false)")
+    expect(source).toContain("data-testid=\"toggle-workbench-buff\"")
+    expect(source).toContain(':expanded="buffSectionExpanded"')
+    expect(source).toContain('aria-controls="workbench-buff-content"')
+    expect(source).toContain("localStorage.getItem(BUFF_SECTION_STORAGE_KEY)")
+    expect(source).toContain("localStorage.setItem(BUFF_SECTION_STORAGE_KEY, String(expanded))")
+    expect(source).toContain(':hidden="!buffSectionExpanded && !buffContextError"')
+  })
+
+  it("removes calculation presets from the workbench without removing calculation data", () => {
+    expect(source).not.toContain("CalculationPresets")
+    expect(source).not.toContain("计算方案")
   })
 
   it("wires teammate w-engine refinement labels while counting only true custom buffs", () => {
@@ -233,64 +258,48 @@ describe("WorkbenchView optimizer progress", () => {
     expect(summaryStart).toBeGreaterThan(-1)
     expect(panelStart).toBeGreaterThan(summaryStart)
     expect(whiteBoxStart).toBeGreaterThan(panelStart)
-    expect(source).toContain(".workbench-section + .workbench-summary-section,")
   })
 
-  it("keeps configuration and results in view while the drive-disc column scrolls", () => {
-    const stickyRule = source.slice(source.indexOf(".workbench-left,\n.workbench-right-sticky {"))
-    expect(stickyRule).toMatch(/^[^}]*position: sticky;[^}]*overflow-y: auto;/)
-    expect(source).toContain("--workbench-sticky-height")
-    expect(source).toMatch(/\.workbench-summary-section \{\n  position: sticky;\n  top: 0;/)
-    const mediumLayout = source.slice(source.indexOf("@media (max-width: 1280px)"), source.indexOf("@media (max-width: 980px)"))
-    expect(mediumLayout).toContain(".workbench-right,\n  .workbench-right-sticky {\n    display: contents;")
-    expect(mediumLayout).toContain("order: -1;")
+  it("computes per-disc contributions off the main calculation and passes them to slot cards", () => {
+    const logic = source.slice(source.indexOf("function updateDriveDiscContributions()"), source.indexOf("onBeforeUnmount(() => clearTimeout(driveDiscContributionTimer))"))
+    expect(logic).toContain("activeDriveDisc4pcRuntimeInputs(catalog, remaining, optimizerStore.settings)")
+    expect(logic).toContain("calculateInCombatPanel(catalog, buildStore.buildInput(catalog, meta, remaining, { runtimeInputs }))")
+    expect(logic).toContain("setTimeout(updateDriveDiscContributions, DRIVE_DISC_CONTRIBUTION_DELAY_MS)")
+    expect(source).toContain(':contribution="row.disc ? driveDiscContributions[String(row.disc.id)] ?? null : null"')
+  })
+
+  it("restores saved optimizer results and leaves an expired optimized mode for manual", () => {
+    const restore = source.slice(source.indexOf("function restoreOptimizerResults()"), source.indexOf("const restoredResultsTimeText"))
+    expect(restore).toContain("optimizerStore.restoreSavedResults(ownerId, buildStore.agentId, inventoryStore.driveDiscs)")
+    expect(restore).toContain('if (buildStore.discMode === "optimized") {')
+    expect(restore).toContain('buildStore.setDiscMode("manual")')
+    expect(restore).toContain("optimizedResultsExpired.value = true")
+    // 加载时角色从空值初始化不算切换
+    expect(restore).toContain("if (previousAgentId && previousAgentId !== agentId) optimizedResultsExpired.value = false")
+    expect(source).toContain("    recalculate()\n    restoreOptimizerResults()\n")
+    expect(source).toContain('data-testid="optimizer-results-expired-notice"')
+    expect(source).toContain('data-testid="optimizer-restored-results-note"')
   })
 
   it("prevents long Miyabi calculation labels from widening the left workbench column", () => {
     expect(source).toContain('class="workbench-section-body metric-grid calculation-summary-grid"')
     expect(source).toContain('class="metric calculation-event-summary"')
-    expect(source).toContain('class="chip-row calculation-event-summary-tags"')
-    expect(source).toContain(".workbench-left .section-band {")
-    expect(source).toContain("grid-template-columns: minmax(0, 1fr);")
-    expect(source).toContain(".workbench-left > *,")
-    expect(source).toContain(".calculation-event-summary-tags :deep(.n-tag__content)")
-    expect(source).toContain("overflow-wrap: anywhere;")
-    expect(source).toContain("white-space: normal;")
+    expect(source).toContain('class="workbench-inset-list calculation-event-summary-tags"')
   })
 
-  it("uses compact spacing and shared label typography in the calculation summary", () => {
-    expect(source).toContain(`.calculation-summary-grid > .metric {
-  margin: 0;
-}`)
-    expect(source).toContain(`.calculation-event-summary-heading .metric-title {
-  min-width: 0;
-  margin: 0;
-  color: var(--app-muted);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 1.6;
-}`)
-  })
-
-  it("keeps extra calculation events behind an accessible inline toggle", () => {
+  it("keeps all calculation events collapsed by default behind an accessible toggle", () => {
     expect(source).toContain("const showAllDamageEvents = ref(false)")
-    expect(source).toContain("const visibleDamageEventSummary = computed")
-    expect(source).toContain("damageEventSummary.value.slice(0, 2)")
-    expect(source).toContain("const hiddenDamageEventCount = computed")
+    // 默认全部收起，展开后显示全部事件
+    expect(source).toContain("const visibleDamageEventSummary = computed(() => showAllDamageEvents.value ? damageEventSummary.value : [])")
     expect(source).toContain('data-testid="calculation-event-summary-toggle"')
-    expect(source).toContain(':aria-expanded="showAllDamageEvents"')
+    expect(source).toContain(':expanded="showAllDamageEvents"')
     expect(source).toContain('aria-controls="calculation-event-summary-list"')
-    expect(source).toContain('showAllDamageEvents ? "收起其余" : `其余 ${hiddenDamageEventCount} 项`')
-    expect(source).toContain("<ChevronDown")
-    expect(source).toContain("<ChevronUp")
-    expect(source.match(/class="calculation-event-summary-toggle-row"/g)).toHaveLength(2)
-    expect(source.match(/<ChevronUp v-if="showAllDamageEvents" :size="16"/g)).toHaveLength(2)
-    expect(source.match(/<ChevronDown v-else :size="16"/g)).toHaveLength(2)
-    expect(source).toContain(".calculation-event-summary-toggle-row {")
-    expect(source).toContain("flex: 0 0 100%;")
-    expect(source).toContain("font-size: 14px;")
+    expect(source.match(/label="展开"\n\s*expanded-label="收起"/g)).toHaveLength(2)
+    expect(source).toContain('<ol v-show="showAllDamageEvents" id="calculation-event-summary-list"')
+    // 开关在“事件摘要”这一行，展开后不用滚到列表底部再收起
+    const heading = source.slice(source.indexOf('<div class="calculation-event-summary-heading">'), source.indexOf('id="calculation-event-summary-list" class="workbench-inset-list'))
+    expect(heading).toContain('data-testid="calculation-event-summary-toggle"')
     expect(source).toContain("watch(damageEventSummarySignature")
-    expect(source).toContain(".calculation-event-summary-toggle:focus-visible")
   })
 
   it("passes the rupture sheer-force flag to the panel comparison table", () => {
@@ -301,7 +310,8 @@ describe("WorkbenchView optimizer progress", () => {
     expect(source).toContain("showCalculationConfig")
     expect(source).toContain("showOptimizerConfig")
     expect(source).toContain("OptimizerConfigModal")
-    expect(source).toContain("showOptimizerConfig = true")
+    expect(source).toContain("openLazyDialog(optimizerConfigDialog, showOptimizerConfig)")
+    expect(source).toContain('@click="openOptimizerConfig"')
     expect(source).toContain("计算配置")
     expect(source).toContain("@save=\"saveCalculationConfig\"")
     expect(source).toContain("@save=\"saveOptimizerConfig\"")
@@ -323,30 +333,11 @@ describe("WorkbenchView optimizer progress", () => {
     expect(source).toContain('<NButton class="prominent-config-button workbench-action-button workbench-action-button--optimizer" size="medium" data-testid="open-optimizer-config"')
     expect(source.match(/class="prominent-config-button(?:\s|"|')/g)).toHaveLength(3)
     expect(source).toContain("选择 Buff")
-    expect(source).toContain("background: var(--app-blue-soft);")
-    expect(source).toContain(".prominent-config-button:focus-visible")
-    // All three entrypoints share one fill, so they must share one rule.
-    expect(source).toContain(".workbench-action-button--buff,\n.workbench-action-button--calculation,\n.workbench-action-button--optimizer {")
-    expect(source).not.toContain("linear-gradient(135deg, #3b82f6")
   })
 
   it("separates optimizer execution styling from configuration actions", () => {
     expect(source).toContain('<NButton v-if="!optimizerStore.isBusy" class="optimizer-action-button optimizer-action-button--start" type="primary" :disabled="!canRunOptimization" @click="runOptimization">')
     expect(source).toContain('<NButton v-else class="optimizer-action-button optimizer-action-button--cancel" type="warning" @click="optimizerStore.cancel">取消优化</NButton>')
-    expect(source).toContain("background: var(--app-green);")
-    expect(source).toContain("rgba(8, 122, 85, 0.32)")
-    expect(source).toContain("min-width: 128px;")
-    expect(source).toContain("height: 40px;")
-    expect(source).toContain("@media (prefers-reduced-motion: reduce)")
-  })
-
-  it("suppresses naive-ui border overlays on custom action buttons", () => {
-    for (const family of [".optimizer-action-button", ".workbench-action-button"]) {
-      for (const overlay of ["border", "state-border"]) {
-        const selector = `${family.replace(".", "\\.")} :deep\\(\\.n-button__${overlay}\\)`
-        expect(source).toMatch(new RegExp(`${selector}[^{}]*\\{[^}]*display: none;`))
-      }
-    }
   })
 
   it("uses one rich selector for each selected agent and w-engine", () => {
@@ -362,20 +353,12 @@ describe("WorkbenchView optimizer progress", () => {
 
   it("packs the agent selector and level controls into a denser three-column section", () => {
     expect(source).toContain("workbench-agent-header")
-    expect(source).toContain(".workbench-left .build-profile-grid,")
-    expect(source).toContain("grid-template-columns: repeat(3, minmax(0, 1fr));")
-    expect(source).toContain(".workbench-left .build-profile-grid .compact-field-wide")
-    expect(source).toContain(".workbench-agent-section .build-skill-grid")
-    expect(source).toContain("min-height: 30px;")
-    // 左栏配置入口与其他配置入口同尺寸，不再单独放大
-    expect(source).not.toContain("\n.workbench-left .prominent-config-button {")
+    expect(source).toContain('data-layout-surface="agent-profile-fields"')
+    expect(source).toContain('data-layout-surface="skill-level-fields"')
   })
 
   it("keeps workbench borders scoped to one surface per column", () => {
-    expect(source).toContain(".workbench-surface {")
-    expect(source).toContain(".workbench-section + .workbench-section")
-    expect(source).toContain(".workbench-surface :deep(.metric:not(.layer-metric))")
-    expect(source).toContain(".workbench-summary-section")
+    expect(source.match(/class="[^"]*workbench-surface/g)).toHaveLength(3)
     expect(source).not.toContain('class="panel optimizer-constraint-panel"')
     expect(source).not.toContain('class="panel drive-disc-workbench-panel"')
   })
@@ -444,12 +427,13 @@ describe("WorkbenchView optimizer progress", () => {
   })
 
   it("keeps two-piece and four-piece limits in drafts until explicitly applied", () => {
-    expect(source).toContain("draftFourPieceSetIds.value = optimizerStore.fourPieceSetIds.length")
-    expect(source).toContain("optimizerStore.setFourPieceSets(draftFourPieceSetIds.value)")
-    expect(source).toContain("draftTwoPieceSetIds.value = [...optimizerStore.twoPieceSetIds]")
-    expect(source).toContain("optimizerStore.setTwoPieceSetIds(draftTwoPieceSetIds.value)")
-    expect(source).toContain('@click="showFourPieceSetModal = false">取消')
-    expect(source).toContain('@click="showTwoPieceSetModal = false">取消')
+    // 草稿由 OptimizerSetChoiceModal 管理（见组件测试），这里只检查打开时的初始值和提交路径
+    expect(source).toContain("fourPieceSetModalInitialIds.value = optimizerStore.fourPieceSetIds.length")
+    expect(source).toContain("optimizerStore.setFourPieceSets(ids)")
+    expect(source).toContain("twoPieceSetModalInitialIds.value = [...optimizerStore.twoPieceSetIds]")
+    expect(source).toContain("optimizerStore.setTwoPieceSetIds(ids)")
+    expect(source).toContain('@apply="applyFourPieceSetModalSelection"')
+    expect(source).toContain('@apply="applyTwoPieceSetModalSelection"')
   })
 })
 
@@ -546,12 +530,15 @@ describe("WorkbenchView optimizer result details", () => {
     expect(pickerSource).toContain("excluded-explicit")
   })
 
-  it("uses a modal picker and current-scheme save for manual drive discs", () => {
+  it("uses the shared modal picker and current-scheme save for manual drive discs", () => {
+    // 无论是否开启使用限制，自选都使用同一个 DriveDiscPickerModal，不再保留重复的旧弹窗
     expect(source).toContain("showManualDiscPicker")
-    expect(source).toContain("manual-disc-option-list")
-    expect(source).toContain("manualDiscSetFilterOptions")
-    expect(source).toContain("manualDiscMainStatFilterOptions")
-    expect(source).toContain("manualDiscSearch")
+    expect(source).toContain('<DriveDiscPickerModal\n    v-model:show="showManualDiscPicker"')
+    expect(source).toContain(':show-reservation="reservationUiEnabled"')
+    expect(source).not.toContain('<NModal v-else v-model:show="showManualDiscPicker"')
+    expect(pickerSource).toContain("manual-disc-option-list")
+    expect(pickerSource).toContain("mainStatOptions")
+    expect(pickerSource).toContain('aria-label="搜索驱动盘"')
     expect(source).toContain("clearManualDriveDiscSlot")
     expect(source).toContain("showSaveLoadoutModal")
     expect(source).toContain("openSaveCurrentLoadout")
@@ -605,21 +592,23 @@ describe("WorkbenchView optimizer result details", () => {
   })
 
   it("uses an icon-rich multi-select for manual drive disc sets", () => {
-    expect(source).toContain("const manualDiscSetFilterIds = ref<string[]>([])")
-    expect(source).toContain("for (const disc of inventoryStore.driveDiscs)")
-    expect(source).toContain(':render-label="renderManualDiscSetLabel"')
-    expect(source).toContain('max-tag-count="responsive"')
-    expect(source).toContain("multiple")
-    expect(source).toContain('placeholder="全部套装"')
-    expect(source).toContain("thumbnailForDriveDiscSet(set)")
-    expect(source).not.toContain('{ label: "全部套装", value: "" }')
+    expect(pickerSource).toContain("const setFilterIds = ref<string[]>([])")
+    expect(pickerSource).toContain("for (const disc of props.discs)")
+    expect(pickerSource).toContain(':render-label="renderSetLabel"')
+    expect(pickerSource).toContain('max-tag-count="responsive"')
+    expect(pickerSource).toContain("multiple")
+    expect(pickerSource).toContain('placeholder="全部套装"')
+    expect(pickerSource).toContain("thumbnailForDriveDiscSet(set)")
+    expect(pickerSource).not.toContain('{ label: "全部套装", value: "" }')
+    expect(source).toContain(':discs="inventoryStore.driveDiscs"')
   })
 
   it("shares set filters across slots while resetting slot-specific filters", () => {
-    expect(source).toContain("!setIds.length || setIds.includes(discSetId)")
-    expect(source).toContain("manualDiscSetFilterIds.value.filter(id => availableSetIds.has(id))")
-    expect(source).not.toMatch(/manualDiscSetFilterIds\.value = \[\]\s+manualDiscMainStatFilter\.value = ""/)
-    expect(source).toMatch(/activeManualDiscSlot\.value = Number\(slot\)\s+manualDiscMainStatFilter\.value = ""\s+manualDiscSearch\.value = ""/)
+    // 弹窗实例常驻：套装筛选跨号位保留，每次打开只重置主词条与搜索
+    expect(pickerSource).toContain("!setFilterIds.value.length || setFilterIds.value.includes(discSetId)")
+    expect(pickerSource).toContain("setFilterIds.value = setFilterIds.value.filter(id => validIds.has(id))")
+    expect(pickerSource).toMatch(/watch\(\(\) => props\.show, visible => \{\s+if \(!visible\) return\s+mainStatFilter\.value = ""\s+search\.value = ""/)
+    expect(source).toMatch(/activeManualDiscSlot\.value = Number\(slot\)\s+showManualDiscPicker\.value = true/)
   })
 
   it("formats stored drive disc stats through the shared combat formatter", () => {
@@ -651,10 +640,11 @@ describe("WorkbenchView drive disc scheme source", () => {
     expect(source).toContain("const driveDiscModeOptions = [")
     expect(source).toContain('class="drive-disc-source-row"')
     expect(source).toContain('class="drive-disc-source-label"')
-    expect(source).toContain("<NRadioGroup")
-    expect(source).toContain("<NRadioButton")
-    expect(source).toContain(':value="buildStore.discMode"')
-    expect(source).toContain("@update:value=\"buildStore.setDiscMode(String($event) as any)\"")
+    expect(source).toContain("<WorkbenchSegmentedControl")
+    expect(source).toContain(':model-value="buildStore.discMode"')
+    expect(source).toContain("role=\"radiogroup\"")
+    expect(source).toContain("role=\"radio\"")
+    expect(source).toContain("@update:model-value=\"value => buildStore.setDiscMode(value as any)\"")
     expect(source).not.toContain("drive-disc-mode-toolbar")
     expect(source).not.toContain("drive-disc-mode-row")
   })

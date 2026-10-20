@@ -1,30 +1,25 @@
 <script setup lang="ts">
-import { computed, h, nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue"
-import { NAlert, NButton, NInput, NInputNumber, NModal, NRadioButton, NRadioGroup, NSelect, NTag, useMessage } from "naive-ui"
-import { Ban, CheckSquare, ChevronDown, ChevronUp, LineChart, LockKeyhole, UnlockKeyhole, RefreshCcw, Save, SlidersHorizontal, Sparkles, X } from "lucide-vue-next"
-import BuffPickerModal from "@/components/BuffPickerModal.vue"
-import CalculationConfigModal from "@/components/CalculationConfigModal.vue"
-import DamageSummaryBar from "@/components/DamageSummaryBar.vue"
-import DamageWhiteBox from "@/components/DamageWhiteBox.vue"
-import DriveDiscAnalysisModal from "@/components/DriveDiscAnalysisModal.vue"
+import { computed, h, nextTick, onMounted, onBeforeUnmount, ref, watch, type Ref } from "vue"
+import { NAlert, NButton, NInput, NInputNumber, NModal, NSelect, NTag, useMessage } from "naive-ui"
+import { Ban, CheckSquare, LineChart, LockKeyhole, UnlockKeyhole, Save, SlidersHorizontal, Sparkles, X } from "lucide-vue-next"
 import DriveDiscPickerModal from "@/components/DriveDiscPickerModal.vue"
-import DriveDiscPagination from "@/components/DriveDiscPagination.vue"
-import { useDriveDiscPagination } from "@/utils/driveDiscPagination"
+import ExpandToggle from "@/components/ExpandToggle.vue"
 import DriveDiscSlotCard from "@/components/DriveDiscSlotCard.vue"
 import EnemyTargetConfigPanel from "@/components/EnemyTargetConfigPanel.vue"
 import AgentSelect from "@/components/AgentSelect.vue"
-import ImageAvatar from "@/components/ImageAvatar.vue"
 import LuminescenceParameterFields from "@/components/LuminescenceParameterFields.vue"
-import OptimizerConfigModal from "@/components/OptimizerConfigModal.vue"
 import OptimizerResultSelector from "@/components/OptimizerResultSelector.vue"
-import PanelStatTable from "@/components/PanelStatTable.vue"
 import WEngineSelect from "@/components/WEngineSelect.vue"
-import { fallbackIcon, thumbnailForDriveDiscSet } from "@/utils/assets"
+import { LAZY_DIALOG_LOAD_ERROR, prefetchWhenIdle, useLazyDialog } from "@/composables/useLazyDialog"
+import { thumbnailForDriveDiscSet } from "@/utils/assets"
 import { buffLabelForId, teammateBuffCandidates } from "@/utils/combatBuffs"
+import { groupActiveBuffs } from "@/utils/activeBuffGroups"
 import { inferBuffPickerState, selectedTeammateOwnerIds } from '@/utils/teammateBuffPicker'
 import { sameTeammateValue, syncEnkaTeammates, type TeammateSources } from '@/utils/enkaTeammates'
 import { readTeammateSources } from '@runtime/enka-teammate-sources'
 import { countEffectiveDriveDiscSubstats } from "@/utils/driveDiscSubstats"
+import { computeDriveDiscContributions, objectiveValueOf, type DriveDiscContribution } from "@/utils/driveDiscContribution"
+import { calculateInCombatPanel } from "@core/calculator-core.js"
 import {
   buffEffectLines,
   damageEventSummaryTitle,
@@ -53,7 +48,9 @@ import { resolveDefaultCalculationConfig } from "@core/defaultCalculationConfig.
 import { driveDiscUsageStateForAgent } from "@core/inventory-model.js"
 import { isLuminescenceSettlement } from "@core/luminescence.js"
 import { resolveLuminescenceParameters } from "@/utils/luminescenceParameters"
-import CalculationPresets from "@/components/CalculationPresets.vue"
+import OptimizerSetChoiceModal from "@/components/workbench/OptimizerSetChoiceModal.vue"
+import WorkbenchSegmentedControl from "@/components/workbench/WorkbenchSegmentedControl.vue"
+import WorkbenchResultColumn from "@/components/workbench/WorkbenchResultColumn.vue"
 
 const catalogStore = useCatalogStore()
 const accountStore = useAccountStore()
@@ -70,6 +67,22 @@ const openingBuffPicker = ref(false)
 const buffContextReady = ref(false)
 const buffContextError = ref('')
 const buffPickerResetNotice = ref("")
+const BUFF_SECTION_STORAGE_KEY = "zzz-workbench-buff-expanded"
+const buffSectionExpanded = ref(false)
+function restoreBuffSectionState() {
+  try {
+    buffSectionExpanded.value = window.localStorage.getItem(BUFF_SECTION_STORAGE_KEY) === "true"
+  } catch {
+    buffSectionExpanded.value = false
+  }
+}
+watch(buffSectionExpanded, expanded => {
+  try {
+    window.localStorage.setItem(BUFF_SECTION_STORAGE_KEY, String(expanded))
+  } catch {
+    // 隐私模式或禁用存储时保持当前会话状态即可。
+  }
+})
 const teammateSources = ref<TeammateSources>()
 let buffSession: { context: Awaited<ReturnType<typeof readTeammateSources>>, state: string, agentId: string } | null = null
 let disposed = false
@@ -128,6 +141,32 @@ const showCalculationConfig = ref(false)
 const showAllDamageEvents = ref(false)
 const showOptimizerConfig = ref(false)
 const showDriveDiscAnalysis = ref(false)
+// 四个大弹窗按需加载，不进入计算页首屏；空闲时预取，第一次打开不必等待下载
+const buffPickerDialog = useLazyDialog(() => import("@/components/BuffPickerModal.vue"))
+const calculationConfigDialog = useLazyDialog(() => import("@/components/CalculationConfigModal.vue"))
+const optimizerConfigDialog = useLazyDialog(() => import("@/components/OptimizerConfigModal.vue"))
+const driveDiscAnalysisDialog = useLazyDialog(() => import("@/components/DriveDiscAnalysisModal.vue"))
+const BuffPickerModal = buffPickerDialog.component
+const CalculationConfigModal = calculationConfigDialog.component
+const OptimizerConfigModal = optimizerConfigDialog.component
+const DriveDiscAnalysisModal = driveDiscAnalysisDialog.component
+async function openLazyDialog(dialog: ReturnType<typeof useLazyDialog>, show: Ref<boolean>) {
+  try {
+    await dialog.open(show)
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : LAZY_DIALOG_LOAD_ERROR)
+  }
+}
+const openCalculationConfig = () => openLazyDialog(calculationConfigDialog, showCalculationConfig)
+const openOptimizerConfig = () => openLazyDialog(optimizerConfigDialog, showOptimizerConfig)
+const openDriveDiscAnalysis = () => openLazyDialog(driveDiscAnalysisDialog, showDriveDiscAnalysis)
+const cancelDialogPrefetch = prefetchWhenIdle([
+  buffPickerDialog.load,
+  calculationConfigDialog.load,
+  optimizerConfigDialog.load,
+  driveDiscAnalysisDialog.load,
+])
+onBeforeUnmount(cancelDialogPrefetch)
 const showFourPieceSetModal = ref(false)
 const showTwoPieceSetModal = ref(false)
 const showManualDiscPicker = ref(false)
@@ -136,12 +175,10 @@ const showSchemeReservationConflict = ref(false)
 const schemeReservationConflicts = ref<any[]>([])
 const pendingSchemeReservation = ref<any | null>(null)
 const schemeReservationBusy = ref(false)
-const draftFourPieceSetIds = ref<string[]>([])
-const draftTwoPieceSetIds = ref<string[]>([])
+// 套装选择弹窗打开时的草稿初始值；草稿本身由弹窗组件管理
+const fourPieceSetModalInitialIds = ref<string[]>([])
+const twoPieceSetModalInitialIds = ref<string[]>([])
 const activeManualDiscSlot = ref(0)
-const manualDiscSetFilterIds = ref<string[]>([])
-const manualDiscMainStatFilter = ref("")
-const manualDiscSearch = ref("")
 const loadoutNameDraft = ref("")
 type SaveLoadoutDraft = {
   id: string
@@ -170,7 +207,8 @@ async function loadWorkbench(initial = false) {
   buffContextError.value = ''
   try {
     await catalogStore.load()
-    await inventoryStore.load()
+    // 库存没有写入过就直接用内存里的，避免每次进入计算页都重新读取并整理全部驱动盘
+    await inventoryStore.ensureLoaded(ownerId)
     if (disposed || sequence !== loadSequence || ownerId !== accountStore.currentOwnerId) return
     if (!catalogStore.catalog || !catalogStore.meta) throw new Error('目录加载失败，请重试。')
     buildStore.initialize(catalogStore.catalog, catalogStore.meta)
@@ -183,6 +221,7 @@ async function loadWorkbench(initial = false) {
       optimizerStore.setFourPieceSets([catalogStore.displayDriveDiscSets[0]?.id ?? ""].filter(Boolean))
     }
     recalculate()
+    restoreOptimizerResults()
     await refreshAutomaticTeammates()
     await nextTick()
     if (disposed || sequence !== loadSequence || ownerId !== accountStore.currentOwnerId) return
@@ -193,7 +232,36 @@ async function loadWorkbench(initial = false) {
   }
 }
 onMounted(() => loadWorkbench(true))
+onMounted(restoreBuffSectionState)
 watch(() => accountStore.currentOwnerId, () => loadWorkbench())
+
+// 优化结果只在内存里，刷新或切换角色后会丢失；这里从本地恢复该角色上次的结果。
+// 恢复不到却仍停在“优化结果”时，回到“自选”并提示，避免显示一个空方案。
+const optimizedResultsExpired = ref(false)
+function restoreOptimizerResults() {
+  if (!catalogStore.catalog || !inventoryStore.store || optimizerStore.isBusy) return
+  const ownerId = String(inventoryStore.store?.currentOwnerId ?? accountStore.currentOwnerId ?? "default")
+  const restored = optimizerStore.restoreSavedResults(ownerId, buildStore.agentId, inventoryStore.driveDiscs)
+  if (restored || optimizerStore.resultSchemes.length) {
+    optimizedResultsExpired.value = false
+    return
+  }
+  if (buildStore.discMode === "optimized") {
+    buildStore.setDiscMode("manual")
+    optimizedResultsExpired.value = true
+  }
+}
+watch(() => buildStore.agentId, (agentId, previousAgentId) => {
+  // 加载时角色从空值初始化不算切换，不能清掉刚出现的“已失效”提示
+  if (previousAgentId && previousAgentId !== agentId) optimizedResultsExpired.value = false
+  void nextTick(restoreOptimizerResults)
+})
+const restoredResultsTimeText = computed(() => {
+  const savedAt = optimizerStore.restoredResultsSavedAt
+  const date = savedAt ? new Date(savedAt) : null
+  if (!date || Number.isNaN(date.getTime())) return ""
+  return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date)
+})
 
 const selectedAgent = computed(() => catalogStore.displayAgents.find((item: any) => item.id === buildStore.agentId))
 const selectedWEngine = computed(() => catalogStore.displayWEngines.find((item: any) => item.id === buildStore.wEngineId))
@@ -286,11 +354,6 @@ const optimizedResultSetIsUserPinned = computed(() => {
   const id = selectedOptimizedScheme.value?.fourPieceSetId
   return !!id && optimizerStore.fourPieceSetIds.includes(id)
 })
-const draftFourPieceSets = computed(() => draftFourPieceSetIds.value
-  .map(id => catalogStore.displayDriveDiscSets.find((set: any) => set.id === id))
-  .filter(Boolean))
-const fourPieceDraftUnchanged = computed(() => [...draftFourPieceSetIds.value].sort().join("|")
-  === [...optimizerStore.fourPieceSetIds].sort().join("|"))
 const selectedTwoPieceSets = computed(() => optimizerStore.twoPieceSetIds
   .map(id => catalogStore.displayDriveDiscSets.find((set: any) => set.id === id))
   .filter(Boolean))
@@ -325,11 +388,6 @@ const mainStatOptionsBySlot = computed(() => {
     return [String(slot), pool.map((stat: string) => ({ label: statLabel(stat, catalogStore.meta), value: stat }))]
   }))
 })
-const draftTwoPieceSetSummary = computed(() => {
-  const count = draftTwoPieceSetIds.value.length
-  return count ? `已选择 ${count} 个额外 2 件套` : "自动匹配任意 2 件套"
-})
-const twoPieceDraftUnchanged = computed(() => [...draftTwoPieceSetIds.value].sort().join("|") === [...optimizerStore.twoPieceSetIds].sort().join("|"))
 const topOptimizedResultSchemes = computed(() => optimizerStore.resultSchemes.slice(0, OPTIMIZED_RESULT_LIMIT))
 const isLuminescenceScore = computed(() => ["luminescenceTeamScore", "luminescenceScore"]
   .includes(String(buildStore.result?.damage?.objectiveKind ?? "")))
@@ -406,83 +464,6 @@ const calculationModeLabel = computed(() => {
   }
   return /^默认循环[（(]/u.test(name) ? name : `默认循环（${name}）`
 })
-const activeManualDiscSlotDiscs = computed(() => inventoryStore.discOptionsForSlot(activeManualDiscSlot.value))
-const manualDiscPickerTitle = computed(() => activeManualDiscSlot.value ? `选择 ${activeManualDiscSlot.value} 号位驱动盘` : "选择驱动盘")
-const manualDiscSetFilterOptions = computed(() => {
-  const sets = new Map<string, { label: string, value: string, set: any, searchText: string }>()
-  for (const disc of inventoryStore.driveDiscs) {
-    const set = driveDiscSetForDisc(disc)
-    const id = String(set?.id || disc?.setId || "")
-    if (id) {
-      const label = driveDiscSetName(disc)
-      sets.set(id, {
-        label,
-        value: id,
-        set,
-        searchText: `${label} ${id}`,
-      })
-    }
-  }
-  return [...sets.values()]
-    .sort((left, right) => left.label.localeCompare(right.label, "zh-CN"))
-})
-watch(manualDiscSetFilterOptions, options => {
-  const availableSetIds = new Set(options.map(option => option.value))
-  const validSetIds = manualDiscSetFilterIds.value.filter(id => availableSetIds.has(id))
-  if (validSetIds.length !== manualDiscSetFilterIds.value.length) {
-    manualDiscSetFilterIds.value = validSetIds
-  }
-})
-const manualDiscMainStatFilterOptions = computed(() => {
-  const stats = Array.from(new Set<string>(activeManualDiscSlotDiscs.value
-    .map((disc: any) => String(disc.mainStat?.stat ?? ""))
-    .filter(Boolean)))
-    .sort((left: string, right: string) => statLabel(left, catalogStore.meta).localeCompare(statLabel(right, catalogStore.meta), "zh-CN"))
-  return [
-    { label: "全部主词条", value: "" },
-    ...stats.map((stat: string) => ({ label: statLabel(stat, catalogStore.meta), value: stat })),
-  ]
-})
-const filteredManualDiscOptions = computed(() => {
-  const slot = Number(activeManualDiscSlot.value)
-  const setIds = manualDiscSetFilterIds.value
-  const mainStat = manualDiscMainStatFilter.value
-  const search = manualDiscSearch.value.trim().toLowerCase()
-  const selectedId = buildStore.manualDriveDiscIdsBySlot[String(slot)] ?? ""
-  return inventoryStore.driveDiscs
-    .filter((disc: any) => {
-      const set = driveDiscSetForDisc(disc)
-      const discSetId = String(set?.id || disc?.setId || "")
-      const haystack = [
-        disc.id,
-        disc.setId,
-        disc.setName,
-        driveDiscSetName(disc),
-        disc.source?.sequence,
-        storedStatLabel(disc.mainStat?.stat, disc.mainStat?.mode, catalogStore.meta),
-        disc.mainStat?.label,
-        ...(disc.subStats ?? []).flatMap((stat: any) => [
-          storedStatLabel(stat.stat, stat.mode, catalogStore.meta),
-          stat.label,
-        ]),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-      return Number(disc.partition) === slot
-        && (!setIds.length || setIds.includes(discSetId))
-        && (!mainStat || disc.mainStat?.stat === mainStat)
-        && (!search || haystack.includes(search))
-    })
-    .sort((left: any, right: any) => {
-      const leftSelected = left.id === selectedId ? 0 : 1
-      const rightSelected = right.id === selectedId ? 0 : 1
-      return leftSelected - rightSelected
-        || driveDiscSetName(left).localeCompare(driveDiscSetName(right), "zh-CN")
-        || Number(left.source?.sequence ?? 999999) - Number(right.source?.sequence ?? 999999)
-    })
-})
-const { page: manualDiscPage, pageSize: manualDiscPageSize, pagedItems: pagedManualDiscOptions } = useDriveDiscPagination(filteredManualDiscOptions)
 const saveLoadoutIdsBySlot = computed(() => saveLoadoutDraft.value?.driveDiscIdsBySlot ?? {})
 const saveLoadoutDiscCount = computed(() => Object.keys(saveLoadoutIdsBySlot.value).length)
 const saveLoadoutMissingSlots = computed(() => OPTIMIZER_RESULT_SLOTS.filter(slot => !saveLoadoutIdsBySlot.value[String(slot)]))
@@ -580,16 +561,18 @@ function applySkillLevelPreset(target: number | "max") {
   }
   buildStore.updateSkillLevels(levels)
 }
+// 事件摘要拆成“名称 + 次数”两列显示；标题文字末尾的“×N”就是次数。默认全部收起，只显示总数
 const damageEventSummary = computed(() => (buildStore.damageConfig.events ?? []).map((event: any) => {
+  const label = damageEventSummaryTitle(event, catalogStore.meta, selectedSkillCatalog.value)
+  const match = /^(.*?)\s*×\s*([\d.]+)$/.exec(label)
   return {
     id: event.id,
-    label: damageEventSummaryTitle(event, catalogStore.meta, selectedSkillCatalog.value),
+    label,
+    name: match ? match[1] : label,
+    count: match ? match[2] : "",
   }
 }))
-const visibleDamageEventSummary = computed(() => showAllDamageEvents.value
-  ? damageEventSummary.value
-  : damageEventSummary.value.slice(0, 2))
-const hiddenDamageEventCount = computed(() => Math.max(0, damageEventSummary.value.length - 2))
+const visibleDamageEventSummary = computed(() => showAllDamageEvents.value ? damageEventSummary.value : [])
 const damageEventSummarySignature = computed(() => [
   buildStore.agentId,
   buildStore.damageConfig.mode,
@@ -644,6 +627,7 @@ const activeBuffBadges = computed(() => activeBuffIdsForPanel.value.map(id => ({
     addedBuffs: buildStore.addedBuffs,
   }),
 })))
+const activeBuffGroups = computed(() => groupActiveBuffs(activeBuffBadges.value))
 const customAddedBuffCount = computed(() => buildStore.addedBuffs
   .filter((buff: any) => buff?.sourceKind === "custom").length)
 const optimizerProgress = computed(() => optimizerStore.progress ?? null)
@@ -811,30 +795,37 @@ function recalculate() {
   buildStore.calculate(catalogStore.catalog, catalogStore.meta, selectedDriveDiscs.value, selectedBuildOptions.value)
 }
 
-function filterSelectOption(pattern: string, option: any) {
-  const needle = pattern.trim().toLowerCase()
-  if (!needle) {
-    return true
+// 单盘贡献：结果稳定约 0.2 秒后，逐张去掉驱动盘重算一次（含 4 件套是否成立），不阻塞主计算
+const driveDiscContributions = ref<Record<string, DriveDiscContribution>>({})
+const DRIVE_DISC_CONTRIBUTION_DELAY_MS = 200
+let driveDiscContributionTimer: ReturnType<typeof setTimeout> | undefined
+function updateDriveDiscContributions() {
+  const catalog = catalogStore.catalog
+  const meta = catalogStore.meta
+  const discs = selectedDriveDiscs.value
+  const baseValue = objectiveValueOf(buildStore.result)
+  if (!catalog || !meta || !discs.length || baseValue === null || baseValue <= 0 || buildStore.error) {
+    driveDiscContributions.value = {}
+    return
   }
-  return String(option?.searchText ?? option?.label ?? option?.value ?? "").toLowerCase().includes(needle)
+  driveDiscContributions.value = computeDriveDiscContributions({
+    baseValue,
+    discs,
+    evaluate: remaining => {
+      try {
+        const runtimeInputs = activeDriveDisc4pcRuntimeInputs(catalog, remaining, optimizerStore.settings)
+        return objectiveValueOf(calculateInCombatPanel(catalog, buildStore.buildInput(catalog, meta, remaining, { runtimeInputs })))
+      } catch {
+        return null
+      }
+    },
+  })
 }
-
-function renderManualDiscSetLabel(option: any) {
-  const set = option?.set ?? catalogStore.driveDiscSets.find((item: any) => item.id === option?.value)
-  const label = labelOf(set) || String(option?.label ?? option?.value ?? "未知套装")
-  return h("span", { class: "manual-disc-set-select-label" }, [
-    h(ImageAvatar, {
-      src: thumbnailForDriveDiscSet(set),
-      name: label,
-      size: 20,
-    }),
-    h("span", { class: "manual-disc-set-select-name", title: label }, label),
-  ])
-}
-
-function updateManualDiscSetFilter(value: Array<string | number> | null) {
-  manualDiscSetFilterIds.value = Array.isArray(value) ? value.map(String) : []
-}
+watch(() => buildStore.result, () => {
+  clearTimeout(driveDiscContributionTimer)
+  driveDiscContributionTimer = setTimeout(updateDriveDiscContributions, DRIVE_DISC_CONTRIBUTION_DELAY_MS)
+})
+onBeforeUnmount(() => clearTimeout(driveDiscContributionTimer))
 
 async function openBuffPicker() {
   if (openingBuffPicker.value || !buffContextReady.value) return
@@ -843,6 +834,8 @@ async function openBuffPicker() {
   openingBuffPicker.value = true
   buffPickerResetNotice.value = ""
   try {
+    // 先开始下载弹窗代码，与准备草稿并行；失败时由下面的 open 重试并提示
+    void buffPickerDialog.load().catch(() => {})
     const reset = await buildStore.prepareBuffPicker(catalogStore.meta)
     // Flush calculation watchers and queued writes before capturing the draft baseline.
     await nextTick()
@@ -856,7 +849,7 @@ async function openBuffPicker() {
     buffPickerResetNotice.value = reset
       ? "旧配置包含超过两名队友，已保留自身及自身音擎 Buff，其余已重置"
       : ""
-    showBuffPicker.value = true
+    await buffPickerDialog.open(showBuffPicker)
   } catch (error) {
     message.error(error instanceof Error ? error.message : "Buff 配置保存失败，请重试。")
   } finally {
@@ -914,6 +907,7 @@ function optimizerInput(ownerId = inventoryStore.store?.currentOwnerId ?? accoun
 }
 
 async function runOptimization() {
+  optimizedResultsExpired.value = false
   const request = ++optimizationRequest
   const requestedOwnerId = accountStore.currentOwnerId
   const requestedAgentId = buildStore.agentId
@@ -1273,8 +1267,6 @@ function openManualDiscPicker(slot: number) {
     return
   }
   activeManualDiscSlot.value = Number(slot)
-  manualDiscMainStatFilter.value = ""
-  manualDiscSearch.value = ""
   showManualDiscPicker.value = true
 }
 
@@ -1317,10 +1309,6 @@ function driveDiscSetName(disc: any) {
   return disc?.setName || labelOf(driveDiscSetForDisc(disc)) || disc?.setId || "未知套装"
 }
 
-function driveDiscSetIcon(disc: any) {
-  return thumbnailForDriveDiscSet(driveDiscSetForDisc(disc))
-}
-
 function driveDiscStatText(stat: any) {
   if (!stat?.stat) {
     return "-"
@@ -1329,66 +1317,29 @@ function driveDiscStatText(stat: any) {
   return `${storedStatLabel(String(stat.stat), mode, catalogStore.meta)} ${formatStoredStatValue(String(stat.stat), stat.value, mode)}`
 }
 
-function driveDiscSubStatText(disc: any) {
-  return (disc?.subStats ?? [])
-    .map((stat: any) => driveDiscStatText(stat))
-    .join(" / ") || "-"
-}
-
-function driveDiscRarityLevelText(disc: any) {
-  const rarity = disc?.rarity ? String(disc.rarity) : "-"
-  const level = Number(disc?.level)
-  return `${rarity}${Number.isFinite(level) ? ` +${level}` : ""}`
-}
-
 function twoPieceSetEffectText(set: any) {
   return buffEffectLines(set?.twoPiece, undefined, catalogStore.meta).join("；") || "2件套效果未录入"
 }
 
 function openFourPieceSetModal() {
-  draftFourPieceSetIds.value = optimizerStore.fourPieceSetIds.length
+  fourPieceSetModalInitialIds.value = optimizerStore.fourPieceSetIds.length
     ? [...optimizerStore.fourPieceSetIds]
     : [optimizerSetChoices.value[0]?.id].filter(Boolean)
   showFourPieceSetModal.value = true
 }
 
-function applyFourPieceSetModalSelection() {
-  optimizerStore.setFourPieceSets(draftFourPieceSetIds.value)
+function applyFourPieceSetModalSelection(ids: string[]) {
+  optimizerStore.setFourPieceSets(ids)
   showFourPieceSetModal.value = false
 }
 
-function draftHasFourPieceSet(id: string) {
-  return draftFourPieceSetIds.value.includes(id)
-}
-
-function toggleDraftFourPieceSet(id: string) {
-  const selected = new Set(draftFourPieceSetIds.value)
-  if (selected.has(id)) selected.delete(id)
-  else selected.add(id)
-  draftFourPieceSetIds.value = [...selected]
-}
-
 function openTwoPieceSetModal() {
-  draftTwoPieceSetIds.value = [...optimizerStore.twoPieceSetIds]
+  twoPieceSetModalInitialIds.value = [...optimizerStore.twoPieceSetIds]
   showTwoPieceSetModal.value = true
 }
 
-function draftHasTwoPieceSet(id: string) {
-  return draftTwoPieceSetIds.value.includes(id)
-}
-
-function toggleDraftTwoPieceSet(id: string) {
-  const selected = new Set(draftTwoPieceSetIds.value)
-  if (selected.has(id)) {
-    selected.delete(id)
-  } else {
-    selected.add(id)
-  }
-  draftTwoPieceSetIds.value = [...selected]
-}
-
-function applyTwoPieceSetModalSelection() {
-  optimizerStore.setTwoPieceSetIds(draftTwoPieceSetIds.value)
+function applyTwoPieceSetModalSelection(ids: string[]) {
+  optimizerStore.setTwoPieceSetIds(ids)
   showTwoPieceSetModal.value = false
 }
 
@@ -1426,7 +1377,6 @@ function formatPercentValue(value: any) {
 <template>
   <section class="workbench-grid workbench-merged-grid ui-layout-scope" data-layout-surface="workbench">
     <aside class="workbench-left workbench-surface">
-      <CalculationPresets :discs="selectedDriveDiscs" :options="selectedBuildOptions" :disabled="!buffContextReady || Boolean(buildStore.error) || (buildStore.discMode === 'optimized' && optimizerStore.resultsAreProvisional)" />
       <section class="workbench-section workbench-agent-section">
         <div class="panel-header workbench-section-header workbench-agent-header">
           <h1 class="panel-title">角色</h1>
@@ -1533,29 +1483,47 @@ function formatPercentValue(value: any) {
 
       <section class="workbench-section workbench-buff-section">
         <div class="panel-header workbench-section-header">
-          <h2 class="panel-title">局内 Buff</h2>
+          <div class="workbench-buff-title">
+            <h2 class="panel-title">局内 Buff</h2>
+            <!-- 已启用数量用小徽标显示，窄栏里不会被截断 -->
+            <span class="workbench-count-badge" :class="{ 'is-empty': !activeBuffIdsForPanel.length }" data-testid="workbench-buff-count" :title="`已启用 ${activeBuffIdsForPanel.length} 个 Buff`">{{ activeBuffIdsForPanel.length }}</span>
+            <ExpandToggle
+              class="workbench-collapse-button"
+              data-testid="toggle-workbench-buff"
+              :expanded="buffSectionExpanded"
+              aria-controls="workbench-buff-content"
+              :aria-label="buffSectionExpanded ? '收起局内 Buff' : '展开局内 Buff'"
+              @toggle="buffSectionExpanded = !buffSectionExpanded"
+            />
+          </div>
           <NButton class="prominent-config-button workbench-action-button workbench-action-button--buff" size="small" data-testid="open-buff-picker" :loading="openingBuffPicker" :disabled="openingBuffPicker || !buffContextReady" @click="openBuffPicker">
             <template #icon><SlidersHorizontal :size="16" /></template>
             选择 Buff
           </NButton>
         </div>
-        <div class="workbench-section-body section-band">
+        <div id="workbench-buff-content" class="workbench-section-body section-band" :hidden="!buffSectionExpanded && !buffContextError">
           <p v-if="buffContextError" role="alert">
             {{ buffContextError }}
             <NButton size="small" @click="loadWorkbench()">重新加载队友资料</NButton>
           </p>
-          <div class="chip-row workbench-buff-tags">
-            <NTag v-for="item in activeBuffBadges" :key="item.id" size="small" round>{{ item.label }}</NTag>
-            <NTag v-if="!activeBuffIdsForPanel.length" size="small" round>未启用 Buff</NTag>
+          <!-- 按来源分组：同一位代理人的 Buff 放一组，组内只写“核心被动 / 影画一…” -->
+          <div v-if="buffSectionExpanded" class="workbench-buff-groups workbench-buff-tags">
+            <div v-for="group in activeBuffGroups" :key="group.key" class="workbench-buff-group">
+              <span class="workbench-buff-group-title">{{ group.title }}</span>
+              <div class="workbench-buff-group-items">
+                <span v-for="item in group.items" :key="item.id" class="workbench-buff-chip" :title="item.title">{{ item.label }}</span>
+              </div>
+            </div>
+            <p v-if="!activeBuffIdsForPanel.length" class="workbench-buff-empty">未启用 Buff</p>
           </div>
-          <NTag v-if="customAddedBuffCount" type="info" size="small" round>自定义 {{ customAddedBuffCount }} 条</NTag>
+          <NTag v-if="buffSectionExpanded && customAddedBuffCount" type="info" size="small" round>自定义 {{ customAddedBuffCount }} 条</NTag>
         </div>
       </section>
 
       <section class="workbench-section workbench-calculation-section">
         <div class="panel-header workbench-section-header">
           <h2 class="panel-title">计算设置</h2>
-          <NButton class="prominent-config-button workbench-action-button workbench-action-button--calculation" size="small" data-testid="open-calculation-config" :disabled="optimizerStore.isBusy" @click="showCalculationConfig = true">
+          <NButton class="prominent-config-button workbench-action-button workbench-action-button--calculation" size="small" data-testid="open-calculation-config" :disabled="optimizerStore.isBusy" @click="openCalculationConfig">
             <template #icon><CheckSquare :size="16" /></template>
             编辑事件
           </NButton>
@@ -1579,57 +1547,40 @@ function formatPercentValue(value: any) {
           </section>
           <div v-if="activeLuminescenceEvent" id="calculation-event-summary-list" class="calculation-luminescence-summary" data-layout-field>
             <strong>事件 {{ buildStore.damageConfig.events?.length ?? 1 }} 项</strong>
-            <span aria-hidden="true">·</span>
+            <ExpandToggle
+              v-if="damageEventSummary.length"
+              class="calculation-event-summary-toggle"
+              data-testid="calculation-event-summary-toggle"
+              :expanded="showAllDamageEvents"
+              aria-controls="calculation-event-summary-list"
+              label="展开"
+              expanded-label="收起"
+              @toggle="showAllDamageEvents = !showAllDamageEvents"
+            />
             <NTag v-for="event in visibleDamageEventSummary" :key="event.id" round>{{ event.label }}</NTag>
-            <div
-              v-if="hiddenDamageEventCount > 0"
-              class="calculation-event-summary-toggle-row"
-            >
-              <NButton
-                class="calculation-event-summary-toggle"
-                text
-                size="small"
-                data-testid="calculation-event-summary-toggle"
-                :aria-expanded="showAllDamageEvents"
-                aria-controls="calculation-event-summary-list"
-                @click="showAllDamageEvents = !showAllDamageEvents"
-              >
-                <template #icon>
-                  <ChevronUp v-if="showAllDamageEvents" :size="16" aria-hidden="true" />
-                  <ChevronDown v-else :size="16" aria-hidden="true" />
-                </template>
-                {{ showAllDamageEvents ? "收起其余" : `其余 ${hiddenDamageEventCount} 项` }}
-              </NButton>
-            </div>
           </div>
           <div v-if="!activeLuminescenceEvent" class="metric calculation-event-summary" data-layout-field>
             <div class="calculation-event-summary-heading">
               <span class="metric-title">事件摘要</span>
               <strong class="calculation-event-count">{{ buildStore.damageConfig.events?.length ?? 1 }} 项</strong>
+              <!-- 默认全部收起；开关在这一行，展开后位置不变 -->
+              <ExpandToggle
+                v-if="damageEventSummary.length"
+                class="calculation-event-summary-toggle"
+                data-testid="calculation-event-summary-toggle"
+                :expanded="showAllDamageEvents"
+                aria-controls="calculation-event-summary-list"
+                label="展开"
+                expanded-label="收起"
+                @toggle="showAllDamageEvents = !showAllDamageEvents"
+              />
             </div>
-            <div id="calculation-event-summary-list" class="chip-row calculation-event-summary-tags">
-              <NTag v-for="event in visibleDamageEventSummary" :key="event.id" round>{{ event.label }}</NTag>
-              <div
-                v-if="hiddenDamageEventCount > 0"
-                class="calculation-event-summary-toggle-row"
-              >
-                <NButton
-                  class="calculation-event-summary-toggle"
-                  text
-                  size="small"
-                  data-testid="calculation-event-summary-toggle"
-                  :aria-expanded="showAllDamageEvents"
-                  aria-controls="calculation-event-summary-list"
-                  @click="showAllDamageEvents = !showAllDamageEvents"
-                >
-                  <template #icon>
-                    <ChevronUp v-if="showAllDamageEvents" :size="16" aria-hidden="true" />
-                    <ChevronDown v-else :size="16" aria-hidden="true" />
-                  </template>
-                  {{ showAllDamageEvents ? "收起其余" : `其余 ${hiddenDamageEventCount} 项` }}
-                </NButton>
-              </div>
-            </div>
+            <ol v-show="showAllDamageEvents" id="calculation-event-summary-list" class="workbench-inset-list calculation-event-summary-tags">
+              <li v-for="event in visibleDamageEventSummary" :key="event.id" class="workbench-inset-row calculation-event-row">
+                <span class="workbench-inset-name" :title="event.label">{{ event.name }}</span>
+                <span v-if="event.count" class="workbench-inset-value num">×{{ event.count }}</span>
+              </li>
+            </ol>
           </div>
         </div>
       </section>
@@ -1651,7 +1602,7 @@ function formatPercentValue(value: any) {
             <p class="panel-subtitle">外部只保留套装限制，高级项在计算配置中调整</p>
           </div>
           <div class="toolbar optimizer-config-actions">
-            <NButton class="prominent-config-button workbench-action-button workbench-action-button--optimizer" size="medium" data-testid="open-optimizer-config" @click="showOptimizerConfig = true">
+            <NButton class="prominent-config-button workbench-action-button workbench-action-button--optimizer" size="medium" data-testid="open-optimizer-config" @click="openOptimizerConfig">
               <template #icon><SlidersHorizontal :size="18" /></template>
               计算配置
             </NButton>
@@ -1757,7 +1708,7 @@ function formatPercentValue(value: any) {
               <template #icon><Save :size="16" /></template>
               存为套装
             </NButton>
-            <NButton type="primary" size="small" data-testid="open-drive-disc-analysis" :disabled="!selectedDriveDiscs.length" @click="showDriveDiscAnalysis = true">
+            <NButton type="primary" size="small" data-testid="open-drive-disc-analysis" :disabled="!selectedDriveDiscs.length" @click="openDriveDiscAnalysis">
               <template #icon><LineChart :size="16" /></template>
               词条分析
             </NButton>
@@ -1766,23 +1717,32 @@ function formatPercentValue(value: any) {
         <div class="workbench-section-body section-band">
           <div class="drive-disc-source-row" role="group" aria-label="驱动盘方案来源">
             <span class="drive-disc-source-label">方案来源</span>
-            <NRadioGroup
+            <WorkbenchSegmentedControl
               class="drive-disc-source-options"
-              :value="buildStore.discMode"
+              :model-value="buildStore.discMode"
+              :options="driveDiscModeOptions.map(option => ({ ...option, disabled: option.value === 'optimized' && !optimizerStore.resultSchemes.length }))"
               aria-label="驱动盘方案来源"
-              @update:value="buildStore.setDiscMode(String($event) as any)"
-            >
-              <NRadioButton
-                v-for="option in driveDiscModeOptions"
-                :key="option.value"
-                :value="option.value"
-                :disabled="option.value === 'optimized' && !optimizerStore.resultSchemes.length"
-              >
-                {{ option.label }}
-              </NRadioButton>
-            </NRadioGroup>
+              @update:model-value="value => buildStore.setDiscMode(value as any)"
+            />
           </div>
 
+          <NAlert
+            v-if="optimizedResultsExpired"
+            type="info"
+            :show-icon="false"
+            closable
+            data-testid="optimizer-results-expired-notice"
+            @close="optimizedResultsExpired = false"
+          >
+            上次的优化结果已失效（驱动盘有变化或尚未保存），已切换到“自选”。重新优化即可得到新方案。
+          </NAlert>
+          <p
+            v-if="buildStore.discMode === 'optimized' && restoredResultsTimeText"
+            class="restored-results-note"
+            data-testid="optimizer-restored-results-note"
+          >
+            正在查看 {{ restoredResultsTimeText }} 的上次优化结果，可直接使用，也可重新优化。
+          </p>
           <NAlert v-if="optimizerStore.resultsAreProvisional" type="info" :show-icon="false" data-testid="optimizer-provisional-notice">
             {{ optimizerStore.isBusy ? '搜索仍在进行' : '搜索未完成' }}，以下为当前已找到的方案，尚未确认最终最优。完整结果出来后可保存或锁定。
             <NButton v-if="buildStore.discMode !== 'optimized'" text type="primary" @click="buildStore.selectOptimizedRank(1)">
@@ -1871,6 +1831,7 @@ function formatPercentValue(value: any) {
               :target-agent-id="buildStore.agentId"
               :interactive="buildStore.discMode === 'manual'"
               :empty-hint="buildStore.discMode === 'manual' ? '点击选择这个号位的驱动盘' : '切换到“自选”后可选择已有驱动盘'"
+              :contribution="row.disc ? driveDiscContributions[String(row.disc.id)] ?? null : null"
               :show-reservation="reservationUiEnabled"
               :reservation-action="reservationUiEnabled"
               :reservation-busy="schemeReservationBusy"
@@ -1901,53 +1862,16 @@ function formatPercentValue(value: any) {
       </section>
     </main>
 
-    <aside class="workbench-right">
-      <div class="workbench-right-sticky workbench-surface">
-        <DamageSummaryBar class="workbench-summary-section" :result="buildStore.result" :error="buildStore.error" :loading="catalogStore.loading" :context-key="summaryContextKey" />
-        <section class="workbench-section damage-panel-card">
-          <div class="panel-header workbench-section-header">
-            <div>
-              <h2 class="panel-title">面板</h2>
-              <p class="panel-subtitle">局外与局内对照，绿色为局内 Buff 带来的提升</p>
-            </div>
-          </div>
-          <div class="workbench-section-body damage-panel-compare">
-            <PanelStatTable
-              :panel="buildStore.outOfCombat?.panel"
-              :in-combat-panel="buildStore.result?.inCombat?.panel ?? null"
-              :meta="catalogStore.meta"
-              :include-sheer-force="selectedAgent?.specialty === 'rupture'"
-              :important-stats="selectedAgent?.importantPanelStats"
-            />
-          </div>
-        </section>
-        <section class="workbench-section workbench-whitebox-section">
-          <div class="panel-header workbench-section-header">
-            <div>
-              <h2 class="panel-title">{{ isLuminescenceScore ? "队伍异常评分白盒" : "伤害白盒" }}</h2>
-              <p class="panel-subtitle">随当前驱动盘方案实时刷新</p>
-            </div>
-            <NButton size="small" @click="recalculate">
-              <template #icon><RefreshCcw :size="16" /></template>
-              刷新
-            </NButton>
-          </div>
-          <div class="workbench-section-body">
-            <div v-if="buildStore.error" class="empty-state">{{ buildStore.error }}</div>
-            <DamageWhiteBox
-              v-else
-              :damage="buildStore.result?.damage"
-              :meta="catalogStore.meta"
-              :skill-catalog="selectedSkillCatalog"
-            />
-          </div>
-        </section>
-      </div>
-    </aside>
+    <WorkbenchResultColumn
+      :summary-context-key="summaryContextKey"
+      :is-luminescence-score="isLuminescenceScore"
+      :selected-agent="selectedAgent"
+      :selected-skill-catalog="selectedSkillCatalog"
+      @refresh="recalculate"
+    />
   </section>
 
   <DriveDiscPickerModal
-    v-if="reservationUiEnabled"
     v-model:show="showManualDiscPicker"
     :slot="activeManualDiscSlot"
     :discs="inventoryStore.driveDiscs"
@@ -1956,96 +1880,11 @@ function formatPercentValue(value: any) {
     :meta="catalogStore.meta"
     :agents="catalogStore.displayAgents"
     :target-agent-id="buildStore.agentId"
-    show-reservation
+    :show-reservation="reservationUiEnabled"
     :show-exclusion="exclusionUiEnabled"
     @select="selectManualDriveDisc"
     @clear="clearManualDriveDiscSlot"
   />
-  <NModal v-else v-model:show="showManualDiscPicker" preset="card" :title="manualDiscPickerTitle" style="width: min(980px, calc(100vw - 16px)); max-width: 980px">
-    <div class="section-band manual-disc-picker ui-layout-scope" data-layout-surface="manual-drive-disc-picker">
-      <div class="manual-disc-picker-head">
-        <span>只显示当前号位的已有驱动盘</span>
-        <NTag round>{{ filteredManualDiscOptions.length }} 件可选</NTag>
-      </div>
-      <div class="manual-disc-filter-row ui-field-grid ui-field-grid--comfortable" data-layout-surface="manual-drive-disc-filters">
-        <div class="metric" data-layout-field>
-          <dt>套装</dt>
-          <dd>
-            <NSelect
-              class="manual-disc-set-select"
-              :value="manualDiscSetFilterIds"
-              :options="manualDiscSetFilterOptions"
-              :filter="filterSelectOption"
-              :render-label="renderManualDiscSetLabel"
-              max-tag-count="responsive"
-              multiple
-              filterable
-              clearable
-              placeholder="全部套装"
-              @update:value="updateManualDiscSetFilter"
-            />
-          </dd>
-        </div>
-        <div class="metric" data-layout-field>
-          <dt>主词条</dt>
-          <dd>
-            <NSelect
-              :value="manualDiscMainStatFilter"
-              :options="manualDiscMainStatFilterOptions"
-              clearable
-              @update:value="manualDiscMainStatFilter = String($event ?? '')"
-            />
-          </dd>
-        </div>
-        <div class="metric" data-layout-field>
-          <dt>搜索</dt>
-          <dd><NInput v-model:value="manualDiscSearch" clearable placeholder="套装、属性、序号" /></dd>
-        </div>
-      </div>
-
-      <div v-if="filteredManualDiscOptions.length" class="manual-disc-option-list">
-        <button
-          v-for="disc in pagedManualDiscOptions"
-          :key="disc.id"
-          type="button"
-          class="manual-disc-option"
-          :class="{ active: buildStore.manualDriveDiscIdsBySlot[String(activeManualDiscSlot)] === disc.id }"
-          @click="selectManualDriveDisc(disc)"
-        >
-          <img :src="driveDiscSetIcon(disc)" alt="" loading="lazy" decoding="async">
-          <span class="manual-disc-option-main">
-            <strong>{{ driveDiscSetName(disc) }}</strong>
-            <span>{{ disc.partition }}号位 · {{ driveDiscRarityLevelText(disc) }}{{ disc.source?.sequence ? ` · #${disc.source.sequence}` : "" }}</span>
-          </span>
-          <span class="manual-disc-option-stat">
-            <strong>{{ driveDiscStatText(disc.mainStat) }}</strong>
-            <span>{{ driveDiscSubStatText(disc) }}</span>
-          </span>
-        </button>
-      </div>
-      <div v-else class="empty-state manual-disc-empty">
-        <img :src="fallbackIcon" alt="">
-        <strong>暂无驱动盘</strong>
-        <span>暂无符合筛选条件的驱动盘</span>
-      </div>
-      <DriveDiscPagination v-model:page="manualDiscPage" :total="filteredManualDiscOptions.length" :page-size="manualDiscPageSize" />
-    </div>
-    <template #footer>
-      <div class="drawer-footer">
-        <span class="modal-summary">{{ activeManualDiscSlot ? `${activeManualDiscSlot} 号位` : "未选择槽位" }}</span>
-        <span class="toolbar">
-          <NButton
-            type="error"
-            :disabled="!buildStore.manualDriveDiscIdsBySlot[String(activeManualDiscSlot)]"
-            @click="clearManualDriveDiscSlot"
-          >
-            卸下此槽位
-          </NButton>
-          <NButton @click="showManualDiscPicker = false">关闭</NButton>
-        </span>
-      </div>
-    </template>
-  </NModal>
 
   <NModal
     v-if="reservationUiEnabled"
@@ -2129,68 +1968,33 @@ function formatPercentValue(value: any) {
     </template>
   </NModal>
 
-  <NModal v-model:show="showFourPieceSetModal" preset="card" title="选择限定 4 件套（可多选）" style="max-width: 920px">
-    <div class="set-choice-list">
-      <label
-        v-for="set in optimizerSetChoices"
-        :key="set.id"
-        class="set-choice"
-        :class="{ active: draftHasFourPieceSet(set.id) }"
-      >
-        <input
-          type="checkbox"
-          :checked="draftHasFourPieceSet(set.id)"
-          @change="toggleDraftFourPieceSet(set.id)"
-        >
-        <img :src="thumbnailForDriveDiscSet(set)" alt="" loading="lazy" decoding="async">
-        <span class="set-choice-text">
-          <strong>{{ labelOf(set) }}</strong>
-        </span>
-      </label>
-    </div>
-    <template #footer>
-      <div class="drawer-footer set-modal-footer">
-        <span class="modal-summary">{{ draftFourPieceSets.length ? `已选择 ${draftFourPieceSets.length} 套` : "至少选择一套 4 件套" }}</span>
-        <span class="toolbar">
-          <NButton @click="showFourPieceSetModal = false">取消</NButton>
-          <NButton type="primary" :disabled="!draftFourPieceSetIds.length || fourPieceDraftUnchanged" @click="applyFourPieceSetModalSelection">应用限制</NButton>
-        </span>
-      </div>
-    </template>
-  </NModal>
+  <OptimizerSetChoiceModal
+    v-model:show="showFourPieceSetModal"
+    title="选择限定 4 件套（可多选）"
+    :sets="optimizerSetChoices"
+    :initial-ids="fourPieceSetModalInitialIds"
+    :committed-ids="optimizerStore.fourPieceSetIds"
+    require-selection
+    empty-summary="至少选择一套 4 件套"
+    :selected-summary="count => `已选择 ${count} 套`"
+    @apply="applyFourPieceSetModalSelection"
+  />
 
-  <NModal v-model:show="showTwoPieceSetModal" preset="card" title="选择额外 2 件套" style="max-width: 920px">
-    <div class="set-choice-list">
-      <label
-        v-for="set in optimizerSetChoices"
-        :key="set.id"
-        class="set-choice"
-        :class="{ active: draftHasTwoPieceSet(set.id) }"
-      >
-        <input
-          type="checkbox"
-          :checked="draftHasTwoPieceSet(set.id)"
-          @change="toggleDraftTwoPieceSet(set.id)"
-        >
-        <img :src="thumbnailForDriveDiscSet(set)" alt="" loading="lazy" decoding="async">
-        <span class="set-choice-text">
-          <strong>{{ labelOf(set) }}</strong>
-          <span>{{ twoPieceSetEffectText(set) }}</span>
-        </span>
-      </label>
-    </div>
-    <template #footer>
-      <div class="drawer-footer set-modal-footer">
-        <span class="modal-summary">{{ draftTwoPieceSetSummary }}</span>
-        <span class="toolbar">
-          <NButton @click="showTwoPieceSetModal = false">取消</NButton>
-          <NButton type="primary" :disabled="twoPieceDraftUnchanged" @click="applyTwoPieceSetModalSelection">应用限制</NButton>
-        </span>
-      </div>
-    </template>
-  </NModal>
+  <OptimizerSetChoiceModal
+    v-model:show="showTwoPieceSetModal"
+    title="选择额外 2 件套"
+    :sets="optimizerSetChoices"
+    :initial-ids="twoPieceSetModalInitialIds"
+    :committed-ids="optimizerStore.twoPieceSetIds"
+    :describe="twoPieceSetEffectText"
+    empty-summary="自动匹配任意 2 件套"
+    :selected-summary="count => `已选择 ${count} 个额外 2 件套`"
+    @apply="applyTwoPieceSetModalSelection"
+  />
 
-  <BuffPickerModal
+  <component
+    :is="BuffPickerModal"
+    v-if="BuffPickerModal"
     v-model:show="showBuffPicker"
     :buffs="catalogStore.combatBuffs"
     :selected-ids="buildStore.activeBuffIds(catalogStore.meta)"
@@ -2213,7 +2017,9 @@ function formatPercentValue(value: any) {
     :out-of-combat-panel="buildStore.result?.outOfCombat?.panel"
   />
 
-  <CalculationConfigModal
+  <component
+    :is="CalculationConfigModal"
+    v-if="CalculationConfigModal"
     v-model:show="showCalculationConfig"
     :damage-config="buildStore.damageConfig"
     :skill-catalog="selectedSkillCatalog"
@@ -2228,7 +2034,9 @@ function formatPercentValue(value: any) {
     @save="saveCalculationConfig"
   />
 
-  <OptimizerConfigModal
+  <component
+    :is="OptimizerConfigModal"
+    v-if="OptimizerConfigModal"
     v-model:show="showOptimizerConfig"
     :optimizer-config="optimizerStore.settings"
     :optimizer-algorithm-options="optimizerAlgorithmOptions"
@@ -2238,7 +2046,9 @@ function formatPercentValue(value: any) {
     @save="saveOptimizerConfig"
   />
 
-  <DriveDiscAnalysisModal
+  <component
+    :is="DriveDiscAnalysisModal"
+    v-if="DriveDiscAnalysisModal"
     v-model:show="showDriveDiscAnalysis"
     :catalog="catalogStore.catalog"
     :meta="catalogStore.meta"
@@ -2249,11 +2059,12 @@ function formatPercentValue(value: any) {
 <style scoped>
 /*
  * 工作台三栏：左侧输入、中间驱动盘、右侧结果。
- * 宽屏时左右两栏各自吸顶并独立滚动，滚动中间驱动盘时配置和结果始终可见。
+ * 宽屏时三栏各自吸顶并独立滚动，底边对齐，整页不再纵向滚动。
  */
 .workbench-merged-grid {
-  /* 吸顶栏不能超出网格底部，否则滚到页底时会被页脚顶上去、压到顶栏下面；留出主区底部留白和页脚高度 */
-  --app-bottom-clearance: 84px;
+  /* 三栏高度 = 视口减去顶栏、主区顶部留白（比吸顶间距多 4px）、主区底部留白和页脚高度（含小数像素余量），
+     这样宽屏下整页刚好不出现纵向滚动条 */
+  --app-bottom-clearance: 88px;
   --workbench-sticky-top: calc(var(--app-topbar-height) + var(--app-sticky-gap));
   --workbench-sticky-height: calc(100vh - var(--app-topbar-height) - var(--app-sticky-gap) - var(--app-bottom-clearance));
   grid-template-columns: minmax(268px, 312px) minmax(480px, 1fr) minmax(340px, 420px);
@@ -2264,113 +2075,6 @@ function formatPercentValue(value: any) {
   .workbench-merged-grid {
     --workbench-sticky-height: calc(100dvh - var(--app-topbar-height) - var(--app-sticky-gap) - var(--app-bottom-clearance));
   }
-}
-
-.workbench-surface {
-  display: grid;
-  align-self: start;
-  min-width: 0;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius);
-  background: var(--app-panel);
-  box-shadow: var(--app-shadow-sm);
-}
-
-.workbench-left,
-.workbench-right-sticky {
-  position: sticky;
-  top: var(--workbench-sticky-top);
-  max-height: var(--workbench-sticky-height);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--app-border-strong) transparent;
-}
-
-.workbench-section {
-  min-width: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.workbench-section + .workbench-section,
-.workbench-section + .workbench-summary-section,
-.workbench-summary-section + .workbench-section {
-  border-top: 1px solid var(--app-border);
-}
-
-.workbench-section-header {
-  min-height: 0;
-  padding: 12px 14px 8px;
-  border-bottom: 0;
-}
-
-.workbench-section-header .panel-title {
-  font-size: 15px;
-}
-
-.workbench-section-body {
-  min-width: 0;
-  padding: 6px 14px 14px;
-}
-
-.workbench-surface :deep(.metric:not(.layer-metric)) {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.workbench-surface :deep(.metric dt) {
-  margin-bottom: 4px;
-}
-
-.workbench-surface .selected-set-summary {
-  min-height: 32px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-/* 结果数字是工作台最重要的输出：放在右栏顶部，并在右栏滚动时吸附在顶端 */
-.workbench-summary-section {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  margin: 0;
-  padding: 14px;
-  border: 0;
-  border-radius: 0;
-  background: linear-gradient(180deg, #f5f9ff 0%, #ffffff 100%);
-  box-shadow: inset 0 -1px 0 var(--app-border);
-}
-
-.workbench-summary-section :deep(.muted) {
-  color: var(--app-text-secondary);
-  font-size: var(--font-sm);
-  font-weight: 650;
-}
-
-.workbench-section + .workbench-summary-section,
-.workbench-summary-section + .workbench-section {
-  border-top-color: transparent;
-}
-
-.workbench-left,
-.workbench-center,
-.workbench-right {
-  min-width: 0;
-}
-
-/* 右栏吸顶块的包含块是这个 aside：拉满整行，吸顶块才有滑动空间 */
-.workbench-right {
-  align-self: stretch;
 }
 
 .workbench-left {
@@ -2480,10 +2184,6 @@ function formatPercentValue(value: any) {
   outline-offset: 2px;
 }
 
-.workbench-left .workbench-buff-tags {
-  gap: 4px 6px;
-}
-
 .workbench-enemy-section :deep(.enemy-target-config-header) {
   padding: 12px 14px 8px;
   border-bottom: 0;
@@ -2524,17 +2224,44 @@ function formatPercentValue(value: any) {
   margin: 0;
 }
 
+/* 计算设置：左列标签、右列内容对齐，像一张小表 */
+.calculation-summary-grid {
+  --calculation-summary-label-width: 60px;
+  gap: 8px;
+}
+
+.calculation-summary-grid > dl.metric:not(.calculation-mode-summary--luminescence) {
+  display: grid;
+  grid-template-columns: var(--calculation-summary-label-width) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.calculation-summary-grid > dl.metric:not(.calculation-mode-summary--luminescence) dt {
+  margin: 0;
+}
+
+.calculation-summary-grid > dl.metric:not(.calculation-mode-summary--luminescence) dd {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
 .calculation-event-summary {
   grid-column: 1 / -1;
 }
 
 .calculation-event-summary-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px 10px;
+  display: grid;
+  grid-template-columns: var(--calculation-summary-label-width) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
   min-width: 0;
-  margin-bottom: 4px;
+  min-height: 28px;
+}
+
+.calculation-event-summary-tags {
+  margin-top: 6px;
 }
 
 .calculation-event-summary-heading .metric-title {
@@ -2546,10 +2273,15 @@ function formatPercentValue(value: any) {
   line-height: 1.6;
 }
 
+/* 展开开关靠右，与“N 项”同一行 */
+.calculation-event-summary-heading .calculation-event-summary-toggle {
+  justify-self: end;
+}
+
 .calculation-event-count {
-  flex: 0 0 auto;
   color: var(--app-text);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .calculation-mode-summary--luminescence,
@@ -2590,69 +2322,6 @@ function formatPercentValue(value: any) {
   font-size: 13px;
 }
 
-.calculation-event-summary-tags :deep(.n-tag) {
-  max-width: 100%;
-  height: auto;
-  min-height: 28px;
-  white-space: normal;
-}
-
-.calculation-event-summary-tags :deep(.n-tag__content) {
-  min-width: 0;
-  line-height: 1.35;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.calculation-event-summary-toggle-row {
-  display: flex;
-  flex: 0 0 100%;
-  align-items: center;
-  justify-content: flex-start;
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.calculation-event-summary-toggle {
-  flex: 0 0 auto;
-  min-height: 30px;
-  max-width: 100%;
-  padding: 0 6px;
-  border-radius: 4px;
-  color: var(--app-blue);
-  font-size: 14px;
-  font-weight: 750;
-  white-space: nowrap;
-}
-
-.calculation-event-summary-toggle:not(.n-button--disabled):hover {
-  background: #eef5ff;
-  color: #124b9c;
-}
-
-.calculation-event-summary-toggle:not(.n-button--disabled):active {
-  background: #dbeafe;
-  color: #0f438c;
-}
-
-.calculation-event-summary-toggle:focus-visible {
-  outline: 3px solid rgba(47, 125, 246, 0.28);
-  outline-offset: 2px;
-}
-
-.calculation-event-summary-toggle :deep(.n-button__content) {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.panel-subtitle {
-  margin: 4px 0 0;
-  color: var(--app-muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-
 /*
  * 按钮层级：
  * - “开始优化”是中栏唯一的实心主按钮；
@@ -2679,13 +2348,13 @@ function formatPercentValue(value: any) {
 
 .prominent-config-button:not(.n-button--disabled):hover {
   border-color: var(--app-blue);
-  background: #e0ecff;
-  color: #174ea6;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
 }
 
 .prominent-config-button:not(.n-button--disabled):active {
-  background: #d3e3ff;
-  color: #123f87;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
 }
 
 .prominent-config-button:focus-visible {
@@ -2837,22 +2506,15 @@ function formatPercentValue(value: any) {
 }
 
 .drive-disc-source-options {
-  display: flex;
   width: 100%;
   min-width: 0;
 }
 
-.drive-disc-source-options :deep(.n-radio-button) {
-  flex: 1 1 0;
-  min-width: 0;
-  text-align: center;
-}
-
-.drive-disc-source-options :deep(.n-radio-button__label) {
-  width: 100%;
-  min-width: 0;
-  text-align: center;
-  white-space: normal;
+.restored-results-note {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: var(--font-xs);
+  line-height: 1.5;
 }
 
 .drive-disc-action-toolbar {
@@ -2933,19 +2595,19 @@ function formatPercentValue(value: any) {
   height: 30px;
   border: 1px solid;
   border-radius: 50%;
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .restriction-hint-button-lock {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #2f7df6;
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
+  color: var(--app-blue);
 }
 
 .restriction-hint-button-exclusion {
-  border-color: #fecaca;
-  background: #fff1f2;
-  color: #d14343;
+  border-color: var(--app-red-line);
+  background: var(--app-red-soft);
+  color: var(--app-red-strong);
 }
 
 .optimizer-stale-alert {
@@ -2962,7 +2624,7 @@ function formatPercentValue(value: any) {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .disc-slot-card-empty {
@@ -2974,8 +2636,8 @@ function formatPercentValue(value: any) {
 }
 
 .disc-slot-card-manual:hover {
-  border-color: #93c5fd;
-  background: #f8fbff;
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
 }
 
 .disc-slot-card img {
@@ -3021,131 +2683,6 @@ function formatPercentValue(value: any) {
   gap: 6px;
 }
 
-.manual-disc-picker {
-  gap: 12px;
-}
-
-.manual-disc-picker-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--app-muted);
-  font-size: 12px;
-}
-
-.manual-disc-filter-row {
-  --ui-field-min: 180px;
-  gap: 10px;
-}
-
-.manual-disc-set-select-label {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  min-width: 0;
-  gap: 6px;
-  vertical-align: middle;
-}
-
-.manual-disc-set-select-label :deep(.avatar) {
-  flex: 0 0 auto;
-}
-
-.manual-disc-set-select-label :deep(.avatar img) {
-  object-fit: contain;
-}
-
-.manual-disc-set-select-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.manual-disc-set-select :deep(.n-base-selection-tags) {
-  min-width: 0;
-}
-
-.manual-disc-set-select :deep(.n-tag__content) {
-  min-width: 0;
-  max-width: 100%;
-}
-
-.manual-disc-option-list {
-  display: grid;
-  gap: 8px;
-  max-height: min(560px, calc(100vh - 300px));
-  overflow: auto;
-}
-
-.manual-disc-option {
-  display: grid;
-  grid-template-columns: 54px minmax(160px, 0.78fr) minmax(220px, 1.22fr);
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 72px;
-  padding: 10px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  background: #fff;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.manual-disc-option:hover,
-.manual-disc-option.active {
-  border-color: #2563eb;
-  background: #f8fbff;
-}
-
-.manual-disc-option.active {
-  box-shadow: inset 4px 0 0 #facc15;
-}
-
-.manual-disc-option img {
-  width: 48px;
-  height: 48px;
-  object-fit: contain;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-panel-muted);
-}
-
-.manual-disc-option-main,
-.manual-disc-option-stat {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.manual-disc-option-main strong,
-.manual-disc-option-stat strong,
-.manual-disc-option-main span,
-.manual-disc-option-stat span {
-  min-width: 0;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.manual-disc-option-main strong,
-.manual-disc-option-stat strong {
-  color: var(--app-text);
-  font-size: 13px;
-}
-
-.manual-disc-option-main span,
-.manual-disc-option-stat span {
-  color: var(--app-muted);
-  font-size: 12px;
-}
-
-.manual-disc-empty {
-  min-height: 260px;
-}
-
 .save-loadout-summary {
   margin-top: 10px;
 }
@@ -3181,22 +2718,6 @@ function formatPercentValue(value: any) {
   color: var(--app-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-
-/* 面板对照表：属性 | 局外 | 局内（含增量） */
-.damage-panel-compare {
-  min-width: 0;
-  padding-top: 2px;
-}
-
-.damage-panel-card :deep(.data-table) {
-  table-layout: fixed;
-}
-
-.damage-panel-card :deep(.data-table th),
-.damage-panel-card :deep(.data-table td) {
-  padding: 6px 8px;
-  line-height: 1.25;
 }
 
 .damage-panel-card :deep(.data-table th) {
@@ -3320,36 +2841,36 @@ function formatPercentValue(value: any) {
   min-width: 48px;
   height: 32px;
   padding: 0 10px;
-  color: #334155;
-  background: #fff;
+  color: var(--app-text-secondary);
+  background: var(--app-panel);
   font-weight: 650;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
 }
 
 .optimizer-set-select-button :deep(.n-button__border),
 .optimizer-set-select-button :deep(.n-button__state-border) {
-  border: 1px solid #94a3b8;
+  border: 1px solid var(--app-border-strong);
 }
 
 .optimizer-set-select-button:not(.n-button--disabled):hover {
-  color: #1f2937;
-  background: #f1f5f9;
+  color: var(--app-text);
+  background: var(--app-panel-muted);
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1);
 }
 
 .optimizer-set-select-button:not(.n-button--disabled):hover :deep(.n-button__border),
 .optimizer-set-select-button:not(.n-button--disabled):hover :deep(.n-button__state-border) {
-  border-color: #64748b;
+  border-color: var(--app-border-strong);
 }
 
 .optimizer-set-select-button:not(.n-button--disabled):active {
-  background: #e2e8f0;
+  background: var(--app-panel-sunken);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
 }
 
 .optimizer-set-select-button:not(.n-button--disabled):active :deep(.n-button__border),
 .optimizer-set-select-button:not(.n-button--disabled):active :deep(.n-button__state-border) {
-  border-color: #475569;
+  border-color: var(--app-border-strong);
 }
 
 .optimizer-set-select-button:focus-visible {
@@ -3366,7 +2887,7 @@ function formatPercentValue(value: any) {
   padding: 5px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .selected-set-empty {
@@ -3383,10 +2904,10 @@ function formatPercentValue(value: any) {
   min-height: 26px;
   gap: 6px;
   padding: 3px 4px 3px 9px;
-  border: 1px solid #cfe1ff;
+  border: 1px solid var(--app-blue-line);
   border-radius: 999px;
-  background: #f2f7ff;
-  color: #285da8;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
   font-size: 12px;
   font-weight: 800;
 }
@@ -3416,7 +2937,7 @@ function formatPercentValue(value: any) {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #285da8;
+  color: var(--app-blue-strong);
   cursor: pointer;
 }
 
@@ -3446,7 +2967,7 @@ function formatPercentValue(value: any) {
   padding: 7px 9px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-muted);
   font-size: 12px;
   font-weight: 800;
@@ -3457,7 +2978,7 @@ function formatPercentValue(value: any) {
 .main-stat-choice:hover,
 .main-stat-choice.active {
   border-color: var(--app-blue);
-  background: #eef5ff;
+  background: var(--app-blue-soft);
   color: var(--app-blue);
 }
 
@@ -3472,73 +2993,6 @@ function formatPercentValue(value: any) {
 .main-stat-choice span {
   min-width: 0;
   overflow-wrap: anywhere;
-}
-
-.set-choice-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 10px;
-}
-
-.set-choice {
-  display: grid;
-  grid-template-columns: 18px 46px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  min-height: 64px;
-  padding: 10px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius);
-  background: #fff;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-
-.set-choice:hover,
-.set-choice.active {
-  border-color: var(--app-blue);
-  background: #eef5ff;
-}
-
-.set-choice input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--app-blue);
-}
-
-.set-choice img {
-  width: 42px;
-  height: 42px;
-  object-fit: contain;
-  border-radius: var(--app-radius-sm);
-  background: var(--app-panel-muted);
-}
-
-.set-choice-text {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.set-choice-text strong {
-  color: var(--app-text);
-  font-size: 13px;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-
-.set-choice-text span {
-  color: var(--app-muted);
-  font-size: 12px;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.set-modal-footer {
-  align-items: center;
-  justify-content: space-between;
 }
 
 .optimizer-result-detail-shell {
@@ -3559,7 +3013,7 @@ function formatPercentValue(value: any) {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .optimizer-result-disc-row-empty {
@@ -3627,13 +3081,13 @@ function formatPercentValue(value: any) {
   overflow: hidden;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #f8fbff;
+  background: var(--app-blue-soft);
 }
 
 .optimizer-progress-card[data-status="complete"],
 .optimizer-progress-card[data-status="done"] {
-  border-color: #bbdfd1;
-  background: #f5fbf8;
+  border-color: var(--app-green-soft);
+  background: var(--app-green-soft);
 }
 
 .optimizer-progress-card[data-status="cancelled"] {
@@ -3663,7 +3117,7 @@ function formatPercentValue(value: any) {
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: #dde6f5;
+  background: var(--app-panel-sunken);
 }
 
 .optimizer-progress-fill {
@@ -3740,63 +3194,13 @@ function formatPercentValue(value: any) {
     grid-template-columns: minmax(248px, 300px) minmax(0, 1fr);
   }
 
-  .workbench-right,
-  .workbench-right-sticky {
-    display: contents;
-  }
-
-  .workbench-summary-section {
-    grid-column: 1 / -1;
-    order: -1;
-    top: var(--workbench-sticky-top);
-    z-index: 6;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    min-height: var(--workbench-summary-height);
-    padding: 10px 16px;
-    border: 1px solid var(--app-border);
-    border-radius: var(--app-radius);
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: var(--app-shadow);
-    backdrop-filter: blur(8px);
-  }
-
-  .workbench-summary-section :deep(.summary-copy) {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 4px 12px;
-    min-width: 0;
-  }
-
-  .workbench-summary-section :deep(.summary-value) {
-    font-size: 26px;
-  }
-
   .workbench-left {
     top: calc(var(--workbench-sticky-top) + var(--workbench-summary-height) + var(--app-sticky-gap));
     max-height: calc(var(--workbench-sticky-height) - var(--workbench-summary-height) - var(--app-sticky-gap));
   }
-
-  .damage-panel-card,
-  .workbench-whitebox-section {
-    order: 2;
-    align-self: start;
-    min-width: 0;
-    overflow: hidden;
-    border: 1px solid var(--app-border);
-    border-radius: var(--app-radius);
-    background: var(--app-panel);
-    box-shadow: var(--app-shadow-sm);
-  }
-
-  .workbench-section.damage-panel-card + .workbench-section.workbench-whitebox-section {
-    border-top: 1px solid var(--app-border);
-  }
 }
 
+/* 单栏：结果条 → 驱动盘 → 左侧配置 → 面板与白盒。窄窗口里驱动盘最常用，排在配置前面 */
 @media (max-width: 980px) {
   .workbench-merged-grid {
     --workbench-summary-height: 56px;
@@ -3805,13 +3209,13 @@ function formatPercentValue(value: any) {
 
   .workbench-left {
     position: static;
-    order: 0;
+    order: 1;
     max-height: none;
     overflow-y: visible;
   }
 
   .workbench-center {
-    order: 1;
+    order: 0;
   }
 
   .workbench-left :deep(.n-input),
@@ -3821,8 +3225,7 @@ function formatPercentValue(value: any) {
     min-height: 36px;
   }
 
-  .optimizer-run-row,
-  .manual-disc-filter-row {
+  .optimizer-run-row {
     grid-template-columns: 1fr;
   }
 
@@ -3869,27 +3272,6 @@ function formatPercentValue(value: any) {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .set-choice-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .manual-disc-option {
-    grid-template-columns: 48px minmax(0, 1fr);
-  }
-
-  .manual-disc-option-stat {
-    grid-column: 2;
-  }
-
-  .manual-disc-option img {
-    width: 42px;
-    height: 42px;
-  }
-
-  .set-modal-footer {
-    align-items: stretch;
-    flex-direction: column;
-  }
 }
 
 </style>
