@@ -3,6 +3,7 @@ import { shallowRef } from "vue"
 // Keep the original value in place. A failed read must never become an empty
 // document that an autosave can overwrite.
 export const storageIssues = shallowRef([])
+export const LOCAL_DATA_PARSE_ERROR = "LOCAL_DATA_PARSE_ERROR"
 
 /** @param {string} key @param {any} fallback @returns {any} */
 export function readSafeJson(key, fallback = null) {
@@ -14,7 +15,7 @@ export function readSafeJson(key, fallback = null) {
         return value
     } catch {
         const error = new Error(`本地数据无法解析，已保留原始内容并阻止相关保存：${key}。请先导出原始内容，再从备份恢复。`)
-        error.code = "LOCAL_DATA_PARSE_ERROR"
+        error.code = LOCAL_DATA_PARSE_ERROR
         error.storageKey = key
         storageIssues.value = [...storageIssues.value.filter(issue => issue.key !== key), { key, raw }]
         throw error

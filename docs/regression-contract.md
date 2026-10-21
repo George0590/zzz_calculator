@@ -322,7 +322,7 @@
 
 验证入口：[存储兼容](../webapp/src/stores/local-store-indexeddb-compat.test.ts)、[导入事务](../tests/drive-disc-import-transaction.test.js)、[配装保存锁](../webapp/e2e/drive-disc-loadout-save-lock.e2e.ts)。
 
-- JSON 解析失败必须保留原始内容并阻止相关保存；键不存在时才使用默认值。页面提供原始内容导出入口，不能自动猜测或修补损坏内容。
+- 库存 localStorage fallback、构筑选择、账号选择和优化设置的 JSON 解析失败必须保留原始内容并阻止相关保存；键不存在时才使用默认值。页面提供原始内容导出入口，不能自动猜测或修补损坏内容。扫描器偏好和维护草稿沿用各自的读取与恢复边界，不属于本保护条款。
 
 - 账号、当前账号、驱动盘、导入记录和套装预设继续使用既有 IndexedDB `zzz-calculator-user-store` 与 localStorage fallback `zzz-calculator.userStore.v1`，不迁移存储结构或键名。
 

@@ -7,6 +7,7 @@ import { useAppConfigStore } from "@/stores/app-config"
 import { recoverAllPendingDriveDiscImports } from "@runtime/drive-disc-import-transaction"
 import { recoverPendingEnkaImport } from "@runtime/enka-import-transaction"
 import { loadUserDriveDiscStoreFresh } from "@runtime/local-store.js"
+import { formatStartupError } from "@runtime/startup-errors"
 import "@/styles/tokens.css"
 
 const STARTUP_RECOVERY_LOCK_TIMEOUT_MS = 5_000
@@ -31,7 +32,7 @@ async function bootstrap() {
       await recoverPendingEnkaImport(ownerId, recoveryLockOptions)
     }
   } catch (error) {
-    startupError = `本地数据读取或事务恢复失败，已停止修改。请先导出原始内容：${error instanceof Error ? error.message : String(error)}`
+    startupError = formatStartupError(error)
   }
   if (!startupError) {
     try {
