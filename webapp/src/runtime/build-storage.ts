@@ -2,15 +2,12 @@ import {
   HOME_SELECTION_STORAGE_KEY,
   loadHomeSelection,
 } from "@runtime/selection-storage.js"
+import { readSafeJson } from "@runtime/storage-guard.js"
 
 export const WEBAPP_BUILD_STORAGE_KEY = "zzz-calculator.webapp.build.v1"
 
 function readJson(key: string): any {
-  try {
-    return JSON.parse(localStorage.getItem(key) || "null")
-  } catch {
-    return null
-  }
+  return readSafeJson(key, null)
 }
 
 function sameDocument(left: any, right: any): boolean {
