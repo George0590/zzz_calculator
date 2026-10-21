@@ -10,6 +10,8 @@ import {
 } from "./skillTargets.js"
 import {
     ANOMALY_SETTLEMENT_TYPE_VALUES,
+    anomalySettlementTypes,
+    COMMON_ANOMALY_TARGET_STAT_VALUES,
     ELEMENT_CRIT_DMG_STATS,
     ELEMENT_DEF_IGNORE_STATS,
     ELEMENT_SHARP_DMG_STATS,
@@ -830,24 +832,30 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             }
         }
     } else if (targetKind === "anomaly") {
-        const settlementType = target.settlementType
-        requireEnum(errors, settlementType, ANOMALY_SETTLEMENT_TYPE_VALUES, `${path}.target.settlementType`)
+        const settlementTypes = anomalySettlementTypes(target)
+        if (Array.isArray(target.settlementTypes)) {
+            if (!target.settlementTypes.length) add(errors, `${path}.target.settlementTypes`, "结算类型至少需要一项。")
+            target.settlementTypes.forEach((type, index) => requireEnum(errors, type, ANOMALY_SETTLEMENT_TYPE_VALUES, `${path}.target.settlementTypes[${index}]`))
+            if (new Set(target.settlementTypes).size !== target.settlementTypes.length) add(errors, `${path}.target.settlementTypes`, "结算类型不能重复。")
+        } else {
+            requireEnum(errors, target.settlementType, ANOMALY_SETTLEMENT_TYPE_VALUES, `${path}.target.settlementType`)
+        }
         if (target.anomalyEffects !== undefined && !Array.isArray(target.anomalyEffects)) {
             add(errors, `${path}.target.anomalyEffects`, "具体异常必须是数组。")
-        } else if (settlementType === "luminescence" && target.anomalyEffects?.length) {
+        } else if (settlementTypes.includes("luminescence") && target.anomalyEffects?.length) {
             add(errors, `${path}.target.anomalyEffects`, "耀变结算只能配置为整类目标，不能指定具体异常。")
         } else if (Array.isArray(target.anomalyEffects)) {
-            const validEffects = calculationAnomalyIds(context, settlementType === "disorder" ? "disorder" : "anomaly")
+            const validEffects = new Set(settlementTypes.flatMap(type => [...calculationAnomalyIds(context, type === "disorder" ? "disorder" : "anomaly")]))
             target.anomalyEffects.forEach((effectId, index) => {
                 if (!validEffects.has(effectId)) {
                     add(errors, `${path}.target.anomalyEffects[${index}]`, "异常效果不存在或不属于所选结算类型。")
                 }
             })
         }
-        if (settlementType === "luminescence" && Array.isArray(target.anomalyVariants) && target.anomalyVariants.length) {
+        if (settlementTypes.includes("luminescence") && Array.isArray(target.anomalyVariants) && target.anomalyVariants.length) {
             add(errors, `${path}.target.anomalyVariants`, "耀变结算只能配置为整类目标，不能指定异常形态。")
-        } else if (target.anomalyVariants !== undefined && settlementType !== "attribute") {
-            add(errors, `${path}.target.anomalyVariants`, "只有属性异常结算可以配置异常形态。")
+        } else if (target.anomalyVariants !== undefined && (settlementTypes.length !== 1 || settlementTypes[0] !== "attribute")) {
+            add(errors, `${path}.target.anomalyVariants`, "只有纯属性异常结算可以配置异常形态。")
         } else if (target.anomalyVariants !== undefined) {
             if (!Array.isArray(target.anomalyVariants) || !target.anomalyVariants.length) {
                 add(errors, `${path}.target.anomalyVariants`, "异常形态至少需要选择一个。")
@@ -860,6 +868,14 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
         if (!ANOMALY_TARGET_STAT_VALUES.has(rule.stat)) {
             add(errors, `${path}.stat`, "异常增幅对象不支持该增幅类型。")
         }
+        if (settlementTypes.length > 1) {
+            if (!settlementTypes.every(type => ["attribute", "turbulence", "release"].includes(type))) {
+                add(errors, `${path}.target.settlementTypes`, "多结算异常规则只能选择属性异常、乱流和异放。")
+            }
+            if (!COMMON_ANOMALY_TARGET_STAT_VALUES.has(rule.stat)) {
+                add(errors, `${path}.stat`, "该增幅类型不能同时作用于多种异常结算。")
+            }
+        }
         if (effectiveScope !== "inCombat") {
             add(errors, `${path}.target.kind`, "异常增幅对象只能用于局内 Buff。")
         }
@@ -870,11 +886,11 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
         add(errors, `${path}.stat`, "异常持续时间延长必须指定异常效果。")
     }
     if (rule.stat === "anomalyCritRatePerInitialMasteryAbove100"
-        && (targetKind !== "anomaly" || target.settlementType !== "release")) {
+        && (targetKind !== "anomaly" || JSON.stringify(anomalySettlementTypes(target)) !== JSON.stringify(["release"]))) {
         add(errors, `${path}.stat`, "初始异常掌控转异常暴击率只能用于异放结算。")
     }
     if (rule.stat === "releaseProficiencyYieldBonus"
-        && (targetKind !== "anomaly" || target.settlementType !== "release")) {
+        && (targetKind !== "anomaly" || JSON.stringify(anomalySettlementTypes(target)) !== JSON.stringify(["release"]))) {
         add(errors, `${path}.stat`, "异放精通收益提升只能用于异放结算。")
     }
     if (DEFAULT_EVENT_MODIFIER_STAT_VALUES.has(rule.stat) && effectiveScope !== "inCombat") {
@@ -969,7 +985,7 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             requireEnum(errors, source.unit, FORMULA_VALUE_UNIT_VALUES, `${path}.source.unit`)
             const anomalyCritFormulaTarget = rule.stat === "anomalyCritRate"
                 && targetKind === "anomaly"
-                && ["attribute", "release"].includes(rule.target?.settlementType)
+                && anomalySettlementTypes(rule.target).every(type => ["attribute", "turbulence", "release"].includes(type))
                 && source.stat === "anomalyMastery"
                 && rule.formula?.valueUnit === "storedPercent"
             if (targetKind !== "default" && !anomalyCritFormulaTarget) {

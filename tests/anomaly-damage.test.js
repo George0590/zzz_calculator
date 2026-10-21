@@ -395,6 +395,21 @@ approx(wildcardDisorder.damage.multipliers.disorderDamage, 1.2,
 const releaseWildcardModifier = {
     appliesTo: { damageKinds: ["anomaly"], settlementTypes: ["release"] },
 }
+const commonAssaultModifier = {
+    appliesTo: {
+        damageKinds: ["anomaly"],
+        settlementTypes: ["attribute", "turbulence", "release"],
+        anomalyEffects: ["assault"],
+    },
+}
+for (const settlementType of ["attribute", "turbulence", "release"]) {
+    assert.equal(damageModifierAppliesTo(commonAssaultModifier, {
+        kind: "anomaly", settlementType, anomalyEffect: "assault",
+    }), true, `Common Assault modifier should match ${settlementType}`)
+}
+assert.equal(damageModifierAppliesTo(commonAssaultModifier, {
+    kind: "anomaly", settlementType: "disorder", anomalyEffect: "assault",
+}), false, "Common anomaly modifier should not match Disorder")
 assert.equal(damageModifierAppliesTo(releaseWildcardModifier, {
     kind: "anomaly",
     settlementType: "release",

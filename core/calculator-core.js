@@ -30,6 +30,7 @@ import {
 } from "./damageWhiteBox.js"
 import {
     ANOMALY_SETTLEMENT_TYPE_VALUES,
+    anomalySettlementTypes,
     ELEMENT_CRIT_DMG_STAT_BY_ELEMENT,
     ELEMENT_CRIT_DMG_STATS,
     ELEMENT_DEF_IGNORE_STAT_BY_ELEMENT,
@@ -1118,12 +1119,11 @@ function normalizedRuleTarget(rule = {}) {
         }
     }
     if (target.kind === "anomaly") {
-        const settlementType = ANOMALY_SETTLEMENT_TYPE_VALUES.has(target.settlementType)
-            ? target.settlementType
-            : "attribute"
+        const settlementTypes = anomalySettlementTypes(target)
         return {
             kind: "anomaly",
-            settlementType,
+            settlementTypes,
+            settlementType: settlementTypes.length === 1 ? settlementTypes[0] : null,
             anomalyEffects: Array.isArray(target.anomalyEffects) ? target.anomalyEffects : [],
             anomalyVariants: Array.isArray(target.anomalyVariants) ? target.anomalyVariants : [],
         }
@@ -1411,10 +1411,12 @@ function resolveEffectDamageModifiers(effect, runtimeInput = {}, modifierContext
                 : target.kind === "anomaly"
                     ? {
                         ...(rule.appliesTo ?? {}),
-                        damageKinds: [target.settlementType === "disorder"
-                            ? "disorder"
-                            : target.settlementType === "turbulence" ? "turbulence" : "anomaly"],
-                        settlementTypes: [target.settlementType],
+                        damageKinds: [
+                            ...(target.settlementTypes.includes("disorder") ? ["disorder"] : []),
+                            ...(target.settlementTypes.some(type => type !== "disorder") ? ["anomaly"] : []),
+                            ...(target.settlementTypes.includes("turbulence") ? ["turbulence"] : []),
+                        ],
+                        settlementTypes: target.settlementTypes,
                         ...(target.anomalyEffects.length ? { anomalyEffects: target.anomalyEffects } : {}),
                         ...(target.anomalyVariants.length ? { anomalyVariants: target.anomalyVariants } : {}),
                     }
@@ -2735,10 +2737,12 @@ function dynamicFormulaTargetAppliesTo(rule = {}) {
     if (target.kind === "anomaly") {
         return {
             ...(rule.appliesTo ?? {}),
-            damageKinds: [target.settlementType === "disorder"
-                ? "disorder"
-                : target.settlementType === "turbulence" ? "turbulence" : "anomaly"],
-            settlementTypes: [target.settlementType],
+            damageKinds: [
+                ...(target.settlementTypes.includes("disorder") ? ["disorder"] : []),
+                ...(target.settlementTypes.some(type => type !== "disorder") ? ["anomaly"] : []),
+                ...(target.settlementTypes.includes("turbulence") ? ["turbulence"] : []),
+            ],
+            settlementTypes: target.settlementTypes,
             ...(target.anomalyEffects.length ? { anomalyEffects: target.anomalyEffects } : {}),
             ...(target.anomalyVariants.length ? { anomalyVariants: target.anomalyVariants } : {}),
         }
@@ -4373,7 +4377,7 @@ export function resolveAnomalyCritForEvent(event, bonusTotals = {}, panel = {}, 
     const critDmg = Math.max(
         0,
         sumDamageModifiers(bonusTotals, event, "anomalyCritDmg")
-            + Number(event.releaseAnomalyCritDmgBonus ?? 0),
+            + releaseAnomalyCritDmgBonusForEvent(event),
     )
     return {
         baseCritRate,
@@ -4382,6 +4386,10 @@ export function resolveAnomalyCritForEvent(event, bonusTotals = {}, panel = {}, 
         initialAnomalyMastery,
         ...resolveAnomalyCritState({ critRate, critDmg, critMode: event.critMode }),
     }
+}
+
+function releaseAnomalyCritDmgBonusForEvent(event = {}) {
+    return isReleaseSettlement(event) ? Number(event.releaseAnomalyCritDmgBonus ?? 0) : 0
 }
 
 function effectiveAttributeAnomalyDamageEvent(event, bonusTotals) {
@@ -5594,6 +5602,10 @@ function releaseOnlyBonusTotals(bonusTotals = {}) {
 }
 
 function isReleaseSourceModifier(modifier) {
+    const settlementTypes = modifier?.appliesTo?.settlementTypes
+    if (Array.isArray(settlementTypes) && settlementTypes.length && settlementTypes.includes("release")) {
+        return false
+    }
     return modifier?.id !== "velina-c6-wind-corrosion-recast-damage"
         && (
             modifier?.kind !== "anomalyDamageBonus"
@@ -6530,7 +6542,7 @@ function compileDamageScoreEvent(event = {}) {
         releaseProfile: event.releaseProfile ?? null,
         releaseCoreScalingRow: event.releaseCoreScalingRow ?? null,
         releaseSkillMultiplier: Number(event.releaseSkillMultiplier ?? 0),
-        releaseAnomalyCritDmgBonus: Number(event.releaseAnomalyCritDmgBonus ?? 0),
+        releaseAnomalyCritDmgBonus: releaseAnomalyCritDmgBonusForEvent(event),
         triggerActorRef: event.triggerActorRef ?? null,
         anomalySource: event.anomalySource ?? null,
         fixedMultiplier: Number(event.fixedMultiplier ?? 0),
@@ -6944,7 +6956,7 @@ function denseAnomalyCritMultiplier(compiledEvent, sums, panel = {}, outOfCombat
             ? releaseCritRateBonusForEvent(compiledEvent, panel, outOfCombatPanel)
             : 0
     const critRate = clampNumber(baseCritRate + convertedCritRate, 0, 1)
-    const critDmg = Math.max(0, denseModifierSum(sums, "anomalyCritDmg") + Number(compiledEvent.releaseAnomalyCritDmgBonus ?? 0))
+    const critDmg = Math.max(0, denseModifierSum(sums, "anomalyCritDmg") + releaseAnomalyCritDmgBonusForEvent(compiledEvent))
     return anomalyCritMultiplierForMode(critRate, critDmg, compiledEvent.critMode)
 }
 
@@ -9491,7 +9503,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                         1 + (event.isTurbulence ? 0 : denseModifierSum(sums, "alienationCoefficientBonus")),
                     ),
                     anomalyCritRate: denseModifierSum(sums, "anomalyCritRate"),
-                    anomalyCritDmg: Math.max(0, denseModifierSum(sums, "anomalyCritDmg") + Number(event.releaseAnomalyCritDmgBonus ?? 0)),
+                    anomalyCritDmg: Math.max(0, denseModifierSum(sums, "anomalyCritDmg") + releaseAnomalyCritDmgBonusForEvent(event)),
                     anomalyCritRatePerInitialMasteryAbove100: denseModifierSum(
                         sums,
                         "anomalyCritRatePerInitialMasteryAbove100",

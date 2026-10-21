@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import {
     ANOMALY_SETTLEMENT_TYPES,
+    anomalySettlementTypes,
     hasLegacyEffectAppliesTo,
     normalizeLegacyEffectAppliesToInValue,
 } from "../core/effectRuleTargets.js"
@@ -10,6 +11,8 @@ function clone(value) {
 }
 
 assert.deepEqual(ANOMALY_SETTLEMENT_TYPES, ["attribute", "turbulence", "disorder", "release", "luminescence"])
+assert.deepEqual(anomalySettlementTypes({ settlementTypes: ["attribute", "turbulence", "release"] }), ["attribute", "turbulence", "release"])
+assert.deepEqual(anomalySettlementTypes({ settlementType: "release" }), ["release"])
 
 const migrated = normalizeLegacyEffectAppliesToInValue(clone({
     effects: [
@@ -74,6 +77,26 @@ assert.deepEqual(
 assert.equal(migrated.effects.find(rule => rule.id === "electric-ignore")?.stat, "electricDefIgnore")
 assert.equal(migrated.effects.find(rule => rule.id === "redundant-element")?.appliesTo, undefined)
 assert.equal(hasLegacyEffectAppliesTo(migrated), false)
+
+const commonSettlementMigration = normalizeLegacyEffectAppliesToInValue(clone({
+    effects: [{
+        id: "legacy-common-assault",
+        type: "fixed",
+        stat: "anomalyCritDmg",
+        mode: "flat",
+        value: 50,
+        appliesTo: {
+            settlementTypes: ["attribute", "turbulence", "release"],
+            anomalyEffects: ["assault"],
+        },
+    }],
+}))
+assert.deepEqual(commonSettlementMigration.effects[0].target, {
+    kind: "anomaly",
+    settlementTypes: ["attribute", "turbulence", "release"],
+    anomalyEffects: ["assault"],
+})
+assert.equal(commonSettlementMigration.effects[0].appliesTo, undefined)
 
 const skillTargetMigration = normalizeLegacyEffectAppliesToInValue(clone({
     effects: [{

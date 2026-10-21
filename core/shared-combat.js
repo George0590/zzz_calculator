@@ -9,6 +9,7 @@ import {
     unknownLegacySkillTargetPrefixes,
 } from "./skillTargets.js"
 import {
+    anomalySettlementTypes,
     ELEMENT_CRIT_DMG_STATS,
     ELEMENT_DEF_IGNORE_STATS,
     ELEMENT_SHARP_DMG_STATS,
@@ -1302,15 +1303,14 @@ function ruleTargetText(rule = {}, meta) {
         return targets.length ? `（技能：${skillTargetLabels(targets, meta).join("；")}）` : "（技能：未选择）"
     }
     if (target.kind === "anomaly") {
-        const settlementLabel = target.settlementType === "disorder"
-            ? "紊乱"
-            : target.settlementType === "turbulence"
-                ? "乱流"
-            : target.settlementType === "release"
-                ? "异放"
-                : target.settlementType === "luminescence"
-                    ? "耀变"
-                    : "属性异常"
+        const settlementLabels = {
+            attribute: "属性异常",
+            turbulence: "乱流",
+            disorder: "紊乱",
+            release: "异放",
+            luminescence: "耀变",
+        }
+        const settlementLabel = anomalySettlementTypes(target).map(type => settlementLabels[type] ?? type).join("、")
         const effects = Array.isArray(target.anomalyEffects) ? target.anomalyEffects : []
         const labels = effects.map(effect => ANOMALY_EFFECT_LABELS[effect] ?? effect)
         return labels.length

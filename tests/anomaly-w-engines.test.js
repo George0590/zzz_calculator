@@ -89,6 +89,29 @@ function parity(context, request) {
     approx(calculateInCombatPanel(context, clone(request)).damage.totalFinalDamage, calculateInCombatPanel(context, request).damage.totalFinalDamage, "Persisted runtime inputs preserve the result")
 }
 
+const nirvana = engine("zzz_wiki_2259")
+assert.equal(nirvana.relatedAgentId, "fioni")
+assert.equal(nirvana.attribute, "fire")
+assert.deepEqual(nirvana.effect.selfBuff.effects.map(rule => rule.modificationValues.value), [
+    [90, 99, 108, 117, 126],
+    [40, 44, 48, 52, 56],
+])
+assert.equal(nirvana.effect.selfBuff.effects[0].condition, undefined)
+assert.equal(nirvana.effect.selfBuff.effects[1].condition, "队伍中任意角色对敌人造成的属性异常伤害产生暴击时触发，重复触发刷新持续时间")
+assert.equal(nirvana.effect.selfBuff.effects[1].durationSeconds, 20)
+const fireCatalog = clone(catalog)
+delete fireCatalog.agentsMap
+delete fireCatalog.wEnginesMap
+delete fireCatalog.driveDiscSetsMap
+fireCatalog.agents.find(agent => agent.id === "aria").attribute = "fire"
+const fireEngine = run("zzz_wiki_2259", { level: 5 }, fireCatalog)
+approx(fireEngine.inCombat.buffTotals.anomalyProficiencyFlat, 126, "Nirvana anomaly proficiency")
+approx(fireEngine.inCombat.buffTotals.fireDmg, 0.56, "Nirvana fire damage bonus")
+fireCatalog.agents.find(agent => agent.id === "aria").attribute = "ice"
+const nonFireEngine = run("zzz_wiki_2259", { level: 5 }, fireCatalog)
+approx(nonFireEngine.inCombat.buffTotals.anomalyProficiencyFlat, 126, "Nirvana proficiency is not attribute-gated")
+approx(nonFireEngine.inCombat.buffTotals.fireDmg, 0, "Nirvana fire damage is attribute-gated")
+
 for (const id of ["zzz_wiki_1964", "zzz_wiki_841", "zzz_wiki_154"]) {
     const groups = runtimeStackGroups(engine(id).effect.selfBuff)
     assert.equal(groups.length, 1, `${id} must expose one stack control`)

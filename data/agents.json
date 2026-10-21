@@ -8312,7 +8312,7 @@
               },
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": ["attribute", "turbulence", "release"],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8333,7 +8333,7 @@
               "allowExtendedPanelFormula": true,
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": ["attribute", "turbulence", "release"],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8375,7 +8375,7 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": ["attribute", "turbulence", "release"],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8416,7 +8416,7 @@
               },
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": ["attribute", "turbulence", "release"],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8499,7 +8499,7 @@
                 "mode": "flat",
                 "target": {
                   "kind": "anomaly",
-                  "settlementType": "attribute",
+                  "settlementTypes": ["attribute", "turbulence", "release"],
                   "anomalyEffects": [
                     "assault"
                   ]
@@ -8519,7 +8519,7 @@
                 "mode": "flat",
                 "target": {
                   "kind": "anomaly",
-                  "settlementType": "attribute",
+                  "settlementTypes": ["attribute", "turbulence", "release"],
                   "anomalyEffects": [
                     "assault"
                   ]
@@ -11196,7 +11196,7 @@
             "zhCN": "核心被动：涅槃"
           },
           "description": {
-            "zhCN": "核心被动：涅槃\n菲欧妮的异常精通提升43点；\n队伍中任意角色对敌人造成属性异常伤害时，会使其陷入[灼蚀]状态，持续20秒，重复触发刷新持续时间；[灼蚀]状态下的敌人受到属性异常伤害时有概率触发暴击，基础暴击率为30%，暴击伤害为12.5%，若菲欧妮的初始异常掌控大于155点，每点超过的异常掌控会使得该效果的暴击率额外提升0.7%；\n当菲欧妮的初始异常掌控达到255点时，[灼蚀]状态下的敌人受到属性异常伤害的暴击率达到最大值；\n[灼蚀]状态下的敌人每8秒受到菲欧妮25%攻击力的火属性伤害，该伤害视为[强化特殊技]伤害；\n[燃烧攻击]发动期间，抗打断等级提升，造成伤害时，会回复[燔焰]，菲欧妮最多拥有120点[燔焰]；\n[燃烧攻击]发动后，点按可跳过[特殊技：掠火]以及[强化特殊技：燎斩]的后撤动作，直接衔接上挑攻击；\n菲欧妮受到致命伤害时不会战败退场，可触发[重明]效果，下一次普通换入、快速支援、招架支援换入前场时会回复50%最大生命值，在勘域模式中此效果1200秒内最多触发一次；\n菲欧妮触发完美格挡效果时，获得5点[燔焰]，10秒内最多触发一次；\n菲欧妮发动[强化特殊技]时，进入[枯荣]状态，持续20秒，[燃烧攻击]命中敌人或重复施加时刷新持续时间；\n[枯荣]状态下，发动[强化特殊技：眩焰]后，下次发动[强化特殊技：眩焰]会替换为发动[强化特殊技：坠阳]。\n（此处数据为初始数据）\n\n\n建模：初始/A-F异常精通43/50/57/64/71/78/85；灼蚀异常暴伤12.5%→25%，周期火伤25%→50%，中间档按线性精度。灼蚀作为自身Buff，默认条件已满足；只影响自身属性异常和异放。"
+            "zhCN": "核心被动：涅槃\n菲欧妮的异常精通提升43点；\n队伍中任意角色对敌人造成属性异常伤害时，会使其陷入[灼蚀]状态，持续20秒，重复触发刷新持续时间；[灼蚀]状态下的敌人受到属性异常伤害时有概率触发暴击，基础暴击率为30%，暴击伤害为12.5%，若菲欧妮的初始异常掌控大于155点，每点超过的异常掌控会使得该效果的暴击率额外提升0.7%；\n当菲欧妮的初始异常掌控达到255点时，[灼蚀]状态下的敌人受到属性异常伤害的暴击率达到最大值；\n[灼蚀]状态下的敌人每8秒受到菲欧妮25%攻击力的火属性伤害，该伤害视为[强化特殊技]伤害；\n建模：初始/A-F异常精通43/50/57/64/71/78/85；灼蚀异常暴伤12.5%→25%，周期火伤25%→50%，中间档按线性精度。灼蚀作为自身Buff，默认条件已满足；只影响自身属性异常和异放。"
           },
           "effects": [
             {
@@ -11221,7 +11221,7 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute"
+                "settlementTypes": ["attribute", "turbulence", "release"]
               },
               "source": {
                 "kind": "outOfCombatStat",
@@ -11236,31 +11236,7 @@
                 "expression": "clamp(30 + max(x - 155, 0) * 0.7, 0, 100)",
                 "valueUnit": "storedPercent"
               }
-            },
-            {
-              "id": "fioni-sear-crit-rate-release",
-              "type": "formula",
-              "scope": "inCombat",
-              "stat": "anomalyCritRate",
-              "mode": "flat",
-              "target": {
-                "kind": "anomaly",
-                "settlementType": "release"
-              },
-              "source": {
-                "kind": "outOfCombatStat",
-                "stat": "anomalyMastery",
-                "unit": "storedValue",
-                "label": {
-                  "zhCN": "初始异常掌控"
-                },
-                "variable": "x"
-              },
-              "formula": {
-                "expression": "clamp(30 + max(x - 155, 0) * 0.7, 0, 100)",
-                "valueUnit": "storedPercent"
-              }
-            },
+          },
             {
               "id": "fioni-sear-crit-dmg-attribute",
               "type": "fixed",
@@ -11269,22 +11245,7 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute"
-              },
-              "valueSource": {
-                "kind": "corePassiveScaling",
-                "field": "searAnomalyCritDmgPct"
-              }
-            },
-            {
-              "id": "fioni-sear-crit-dmg-release",
-              "type": "fixed",
-              "stat": "anomalyCritDmg",
-              "value": 12.5,
-              "mode": "flat",
-              "target": {
-                "kind": "anomaly",
-                "settlementType": "release"
+                "settlementTypes": ["attribute", "turbulence", "release"]
               },
               "valueSource": {
                 "kind": "corePassiveScaling",
@@ -11312,18 +11273,7 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute"
-              }
-            },
-            {
-              "id": "fioni-additional-sear-crit-dmg-release",
-              "type": "fixed",
-              "stat": "anomalyCritDmg",
-              "value": 15,
-              "mode": "flat",
-              "target": {
-                "kind": "anomaly",
-                "settlementType": "release"
+                "settlementTypes": ["attribute", "turbulence", "release"]
               }
             }
           ],
@@ -11353,18 +11303,7 @@
                 "mode": "flat",
                 "target": {
                   "kind": "anomaly",
-                  "settlementType": "attribute"
-                }
-              },
-              {
-                "id": "fioni-c1-sear-crit-dmg-release",
-                "type": "fixed",
-                "stat": "anomalyCritDmg",
-                "value": 25,
-                "mode": "flat",
-                "target": {
-                  "kind": "anomaly",
-                  "settlementType": "release"
+                  "settlementTypes": ["attribute", "turbulence", "release"]
                 }
               }
             ],
@@ -11748,7 +11687,8 @@
             }
           ],
           "defaultLevelAtCoreSkill": "F"
-        }
+        },
+        "sources": []
       },
       "anomalyReleaseProfiles": [
         {
@@ -11840,6 +11780,12 @@
         }
       ],
       "preferredDriveDiscs": {
+        "defaultSetIds": [
+          "freedom_blues"
+        ],
+        "defaultTwoPieceSetIds": [
+          "phaethons_melody"
+        ],
         "mainStatLimits": {
           "4": [
             "anomalyProficiency",
@@ -11854,27 +11800,13 @@
             "anomalyMastery",
             "atkPct"
           ]
-        },
-        "defaultSetIds": [
-          "phaethons_melody"
-        ],
-        "defaultTwoPieceSetIds": [
-          "chaos_jazz",
-          "hormone_punk"
-        ]
+        }
       },
       "defaultCalculationConfig": {
         "mode": "anomaly",
         "cinemaLevel": 0,
         "name": {
           "zhCN": "单次焚罪异放"
-        },
-        "skillLevelsByCategory": {
-          "basic": 12,
-          "dodge": 12,
-          "assist": 12,
-          "special": 12,
-          "chain": 12
         },
         "events": [
           {
@@ -11885,15 +11817,15 @@
             "critMode": "expected",
             "settlementType": "release",
             "anomalyEffect": "burn",
+            "triggerActorRef": {
+              "agentId": "fioni",
+              "profileId": "fioni_purifying_flame_release"
+            },
             "releaseSkillRef": {
               "agentSkillId": "fioni",
               "categoryId": "basic",
               "moveId": "basic_purifying_flame",
               "rowId": "release"
-            },
-            "triggerActorRef": {
-              "agentId": "fioni",
-              "profileId": "fioni_purifying_flame_release"
             },
             "anomalySource": {
               "actorRef": {
@@ -11902,96 +11834,18 @@
             }
           }
         ],
-        "selectedEventId": "fioni_purifying_flame_release",
-        "variants": [
-          {
-            "mode": "anomaly",
-            "cinemaLevel": 3,
-            "name": {
-              "zhCN": "3影单次焚罪异放"
-            },
-            "skillLevelsByCategory": {
-              "basic": 14,
-              "dodge": 14,
-              "assist": 14,
-              "special": 14,
-              "chain": 14
-            },
-            "events": [
-              {
-                "id": "fioni_purifying_flame_release_c3",
-                "kind": "anomaly",
-                "count": 1,
-                "stunned": true,
-                "critMode": "expected",
-                "settlementType": "release",
-                "anomalyEffect": "burn",
-                "releaseSkillRef": {
-                  "agentSkillId": "fioni",
-                  "categoryId": "basic",
-                  "moveId": "basic_purifying_flame",
-                  "rowId": "release"
-                },
-                "triggerActorRef": {
-                  "agentId": "fioni",
-                  "profileId": "fioni_purifying_flame_release"
-                },
-                "anomalySource": {
-                  "actorRef": {
-                    "agentId": "fioni"
-                  }
-                }
-              }
-            ],
-            "selectedEventId": "fioni_purifying_flame_release_c3"
-          },
-          {
-            "mode": "anomaly",
-            "cinemaLevel": 5,
-            "name": {
-              "zhCN": "5影单次焚罪异放"
-            },
-            "skillLevelsByCategory": {
-              "basic": 16,
-              "dodge": 16,
-              "assist": 16,
-              "special": 16,
-              "chain": 16
-            },
-            "events": [
-              {
-                "id": "fioni_purifying_flame_release_c5",
-                "kind": "anomaly",
-                "count": 1,
-                "stunned": true,
-                "critMode": "expected",
-                "settlementType": "release",
-                "anomalyEffect": "burn",
-                "releaseSkillRef": {
-                  "agentSkillId": "fioni",
-                  "categoryId": "basic",
-                  "moveId": "basic_purifying_flame",
-                  "rowId": "release"
-                },
-                "triggerActorRef": {
-                  "agentId": "fioni",
-                  "profileId": "fioni_purifying_flame_release"
-                },
-                "anomalySource": {
-                  "actorRef": {
-                    "agentId": "fioni"
-                  }
-                }
-              }
-            ],
-            "selectedEventId": "fioni_purifying_flame_release_c5"
-          }
-        ]
+        "skillLevelsByCategory": {
+          "basic": 12,
+          "dodge": 12,
+          "assist": 12,
+          "special": 12,
+          "chain": 12
+        },
+        "selectedEventId": "fioni_purifying_flame_release"
       },
       "importantSubStats": [
         "anomalyProficiency",
-        "atkPct",
-        "penFlat"
+        "atkPct"
       ],
       "importantPanelStats": [
         "atk",

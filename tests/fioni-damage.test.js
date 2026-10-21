@@ -86,6 +86,9 @@ approx(calc(c2Opts).damage.multipliers.dmg,1.3)
 approx(calc({...c2Opts,damage:{events:[attr]}}).damage.multipliers.anomaly,12)
 approx(calc({...c2Opts,damage:{events:[disorder]}}).damage.multipliers.anomaly,16.5)
 approx(calc({...c2Opts,damage:{events:[{...attr,anomalyEffect:'shock'}]}}).damage.multipliers.anomaly,12.5)
+// A stale release-only field on an ordinary anomaly event must stay inert.
+const staleAttribute=calc({damage:{events:[{...attr,releaseAnomalyCritDmgBonus:9}]}})
+approx(staleAttribute.damage.multipliers.anomalyCritDmg,calc({damage:{events:[attr]}}).damage.multipliers.anomalyCritDmg)
 const c4event={...event,triggerActorRef:{agentId:'fioni',profileId:'fioni_c4_extra_release'}}
 assert.throws(()=>calc({damage:{events:[c4event]}}))
 const c4=calc({cinemaLevel:4,damage:{events:[c4event]}})

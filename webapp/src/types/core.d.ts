@@ -505,6 +505,7 @@ declare module "@core/skillTargets.js" {
 }
 
 declare module "@core/effectRuleTargets.js" {
+  export function anomalySettlementTypes(target?: any): string[]
   export const DAMAGE_ELEMENTS: readonly string[]
   export const ELEMENT_CRIT_DMG_STAT_BY_ELEMENT: Readonly<Record<string, string>>
   export const ELEMENT_DEF_IGNORE_STAT_BY_ELEMENT: Readonly<Record<string, string>>

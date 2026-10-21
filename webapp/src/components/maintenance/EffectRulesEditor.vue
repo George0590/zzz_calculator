@@ -177,15 +177,50 @@ function syncMode(rule: any) {
 }
 
 function anomalyTargetOptions(rule: any) {
-  return anomalyOptions(props.catalog, rule.target?.settlementType === "disorder")
+  return anomalyOptions(props.catalog, settlementTypesForRule(rule).includes("disorder"))
 }
 
-function changeAnomalySettlement(rule: any, settlementType: string) {
-  const normalizedType = ["attribute", "disorder", "release", "luminescence"].includes(settlementType) ? settlementType : "attribute"
-  rule.target.settlementType = normalizedType
+function settlementTypesForRule(rule: any): string[] {
+  const values = Array.isArray(rule.target?.settlementTypes)
+    ? rule.target.settlementTypes
+    : [rule.target?.settlementType ?? "attribute"]
+  return Array.from(new Set<string>(values.map((value: any) => String(value)).filter((value: string) => ANOMALY_SETTLEMENT_OPTIONS.some(option => option.value === value))))
+}
+
+function settlementOptionsForRule(rule: any) {
+  if (rule.stat === "releaseProficiencyYieldBonus" || rule.stat === "anomalyCritRatePerInitialMasteryAbove100") return ANOMALY_SETTLEMENT_OPTIONS.filter(option => option.value === "release")
+  if (["turbulenceDamageBonus", "turbulenceBaseMultiplierBonus"].includes(rule.stat)) return ANOMALY_SETTLEMENT_OPTIONS.filter(option => option.value === "turbulence")
+  if (["disorderDamageBonus", "disorderBaseMultiplierBonus"].includes(rule.stat)) return ANOMALY_SETTLEMENT_OPTIONS.filter(option => option.value === "disorder")
+  if (rule.stat === "anomalyDurationBonusSeconds") return ANOMALY_SETTLEMENT_OPTIONS.filter(option => ["attribute", "turbulence", "disorder"].includes(String(option.value)))
+  return ANOMALY_SETTLEMENT_OPTIONS
+}
+
+function settlementTypeForOptions(rule: any) {
+  return settlementTypesForRule(rule).includes("release") ? "release" : settlementTypesForRule(rule)[0] ?? "attribute"
+}
+
+function statOptionsForRule(rule: any) {
+  const options = statOptions(props.catalog, rule.target?.kind, settlementTypeForOptions(rule))
+  if (rule.target?.kind !== "anomaly" || settlementTypesForRule(rule).length === 1) return options
+  return options.filter(item => !["anomalyCritRatePerInitialMasteryAbove100", "releaseProficiencyYieldBonus", "anomalyDurationBonusSeconds", "turbulenceDamageBonus", "turbulenceBaseMultiplierBonus", "disorderDamageBonus", "disorderBaseMultiplierBonus"].includes(String(item.value)))
+}
+
+function changeAnomalySettlements(rule: any, values: unknown) {
+  const options = settlementOptionsForRule(rule)
+  const normalizedTypes = (Array.isArray(values) ? values : [values])
+    .map(String)
+    .filter(value => options.some(option => option.value === value))
+  const nextTypes = [...new Set(normalizedTypes.length ? normalizedTypes : ["attribute"])]
+  if (nextTypes.length === 1) {
+    rule.target.settlementType = nextTypes[0]
+    delete rule.target.settlementTypes
+  } else {
+    rule.target.settlementTypes = nextTypes
+    delete rule.target.settlementType
+  }
   delete rule.target.anomalyEffects
-  if (normalizedType !== "attribute") delete rule.target.anomalyVariants
-  const allowedStats = statOptions(props.catalog, "anomaly", normalizedType)
+  if (nextTypes.length !== 1 || nextTypes[0] !== "attribute") delete rule.target.anomalyVariants
+  const allowedStats = statOptions(props.catalog, "anomaly", settlementTypeForOptions(rule))
   if (!allowedStats.some(item => item.value === rule.stat)) {
     rule.stat = String(allowedStats[0]?.value ?? "anomalyDamageBonus")
     syncMode(rule)
@@ -201,9 +236,10 @@ function changeAnomalyEffects(rule: any, values: unknown) {
 }
 
 function anomalyTargetPlaceholder(rule: any) {
-  if (rule.target?.settlementType === "release") return "全部原异常"
-  if (rule.target?.settlementType === "disorder") return "全部紊乱"
-  if (rule.target?.settlementType === "luminescence") return "全部耀变"
+  const types = settlementTypesForRule(rule)
+  if (types.includes("disorder") && types.length === 1) return "全部紊乱"
+  if (types.includes("luminescence") && types.length === 1) return "全部耀变"
+  if (types.includes("turbulence") || types.includes("release")) return "全部异常类型 / 原异常"
   return "全部属性异常"
 }
 
@@ -215,7 +251,7 @@ function corePassiveScalingFieldOptions() {
   return [
     option("", "固定值"),
     ...fields.map(field => {
-      return option(field, `核心被动倍率 · ${({ searAnomalyCritDmgPct: "灼蚀异常暴伤%", anomalyProficiencyFlat: "核心异常精通", assaultCritRatePct: "强击基础暴击率%", assaultCritRatePerAnomalyProficiencyPct: "每点精通增加强击暴击率%" } as Record<string, string>)[field] ?? statLabel(field, props.catalog?.meta)}`)
+      return option(field, `核心被动倍率 · ${({ searAnomalyCritDmgPct: "灼蚀异常暴伤%", anomalyProficiencyFlat: "异常精通", assaultCritRatePct: "强击基础暴击率%", assaultCritRatePerAnomalyProficiencyPct: "每点精通增加强击暴击率%" } as Record<string, string>)[field] ?? statLabel(field, props.catalog?.meta)}`)
     }),
   ]
 }
@@ -683,7 +719,7 @@ function setRuleLabel(rule: any, value: string) {
         <label v-if="!simple" class="maintenance-field"><span>计算类型</span><NSelect :value="rule.type ?? 'fixed'" :options="EFFECT_TYPE_OPTIONS" :disabled="disabled" @update:value="changeType(rule, String($event))" /></label>
       <label v-if="!simple" class="maintenance-field maintenance-field-wide"><span>增幅对象</span><NRadioGroup class="maintenance-target-mode" :value="targetMode(rule)" :disabled="disabled || (rule.type === 'formula' && formulaSourceKind(rule) !== 'runtime' && !allowsOutOfCombatAnomalyCritTarget(rule))" size="small"><NRadioButton v-for="item in TARGET_KIND_OPTIONS" :key="item.value" :value="item.value" :disabled="allowsOutOfCombatAnomalyCritTarget(rule) && !['default', 'anomaly'].includes(String(item.value))" :label="item.label" @click="changeTarget(rule, String(item.value))" /></NRadioGroup></label>
       <label v-if="!simple" class="maintenance-field"><span>规则生效范围</span><NSelect :value="ruleScope(rule)" :options="SCOPE_OPTIONS" :disabled="disabled || (rule.type === 'formula' && formulaSourceKind(rule) !== 'runtime')" @update:value="setRuleScope(rule, String($event))" /></label>
-        <label class="maintenance-field" data-field-key="stat"><span>增幅类型</span><NSelect filterable :consistent-menu-width="false" :value="rule.stat" :options="statOptions(catalog, rule.target?.kind, rule.target?.settlementType)" :disabled="disabled || isInCombatFormulaRule(rule)" @update:value="changeStat(rule, String($event))" /></label>
+        <label class="maintenance-field" data-field-key="stat"><span>增幅类型</span><NSelect filterable :consistent-menu-width="false" :value="rule.stat" :options="statOptionsForRule(rule)" :disabled="disabled || isInCombatFormulaRule(rule)" @update:value="changeStat(rule, String($event))" /></label>
         <label v-if="!simple" class="maintenance-field maintenance-field-wide"><span>效果名称</span><NInput :value="textOf(rule.label)" :disabled="disabled" placeholder="留空使用系统名称" @update:value="setRuleLabel(rule, String($event))" /></label>
         <label v-if="valueSourceOptions().length > 1 && ['fixed', 'stacked'].includes(rule.type ?? 'fixed')" class="maintenance-field"><span>数值来源</span><NSelect :value="valueSourceOptionValue(rule)" :options="valueSourceOptions()" :disabled="disabled" @update:value="setValueSourceField(rule, $event ? String($event) : null)" /></label>
         <label v-if="!['derived', 'formula'].includes(rule.type)" class="maintenance-field"><span>{{ stackedUsesActivationValue(rule) ? '激活数值' : rule.type === 'stacked' ? '每层数值' : '数值' }}</span><NInputNumber :value="rule[editableValueKey(rule)]" :disabled="disabled || Boolean(rule.valueSource)" :step="0.01" @update:value="rule[editableValueKey(rule)] = $event; emit('change')" /></label>
@@ -697,9 +733,10 @@ function setRuleLabel(rule: any, value: string) {
       </div>
 
       <div v-if="rule.target?.kind === 'anomaly'" class="maintenance-nested-panel maintenance-grid">
-        <label class="maintenance-field"><span>结算类型</span><NSelect :value="rule.target.settlementType" :options="ANOMALY_SETTLEMENT_OPTIONS" :disabled="disabled" @update:value="changeAnomalySettlement(rule, String($event))" /></label>
-        <label v-if="rule.target.settlementType !== 'luminescence'" class="maintenance-field maintenance-field-wide"><span>具体异常（留空为全部）</span><NSelect multiple filterable clearable :value="rule.target.anomalyEffects ?? []" :options="anomalyTargetOptions(rule)" :placeholder="anomalyTargetPlaceholder(rule)" :disabled="disabled" @update:value="changeAnomalyEffects(rule, $event)" /></label>
-        <label v-if="rule.target.settlementType === 'attribute'" class="maintenance-field maintenance-field-wide"><span>异常形态（留空为全部）</span><NSelect multiple clearable :value="rule.target.anomalyVariants ?? []" :options="ANOMALY_VARIANT_OPTIONS" :disabled="disabled" @update:value="changeAnomalyVariants(rule, $event)" /></label>
+        <label class="maintenance-field maintenance-field-wide"><span>结算类型</span><NSelect multiple :value="settlementTypesForRule(rule)" :options="settlementOptionsForRule(rule)" :disabled="disabled" @update:value="changeAnomalySettlements(rule, $event)" /></label>
+        <label v-if="!settlementTypesForRule(rule).includes('luminescence')" class="maintenance-field maintenance-field-wide"><span>{{ settlementTypesForRule(rule).some(type => ['turbulence', 'release'].includes(type)) ? '异常类型 / 原异常（留空为全部）' : '异常类型（留空为全部）' }}</span><NSelect multiple filterable clearable :value="rule.target.anomalyEffects ?? []" :options="anomalyTargetOptions(rule)" :placeholder="anomalyTargetPlaceholder(rule)" :disabled="disabled" @update:value="changeAnomalyEffects(rule, $event)" /></label>
+        <label v-if="settlementTypesForRule(rule).length === 1 && settlementTypesForRule(rule)[0] === 'attribute'" class="maintenance-field maintenance-field-wide"><span>异常形态（留空为全部）</span><NSelect multiple clearable :value="rule.target.anomalyVariants ?? []" :options="ANOMALY_VARIANT_OPTIONS" :disabled="disabled" @update:value="changeAnomalyVariants(rule, $event)" /></label>
+        <div v-if="settlementTypesForRule(rule).length > 1" class="maintenance-field-wide maintenance-rule-summary">命中：{{ settlementTypesForRule(rule).map(type => ({ attribute: '属性异常', turbulence: '乱流', release: '异放', disorder: '紊乱', luminescence: '耀变' } as Record<string, string>)[type] ?? type).join('、') }} · {{ (rule.target.anomalyEffects ?? []).length ? (rule.target.anomalyEffects ?? []).join('、') : anomalyTargetPlaceholder(rule) }}</div>
       </div>
 
       <NAlert v-if="rule.appliesTo" type="error" title="旧筛选无法保存">

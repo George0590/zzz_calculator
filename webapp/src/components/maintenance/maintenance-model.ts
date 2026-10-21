@@ -3,7 +3,7 @@ import {
   SYSTEM_MANAGED_SKILL_GROUP_COUNTS,
 } from "@core/maintenanceValidation.js"
 import { legacySkillTypeForMove, normalizeSkillTargetsInValue } from "@core/skillTargets.js"
-import { normalizeLegacyEffectAppliesToInValue } from "@core/effectRuleTargets.js"
+import { anomalySettlementTypes, normalizeLegacyEffectAppliesToInValue } from "@core/effectRuleTargets.js"
 import { isAllowedInCombatFormulaOutput, migrateLegacyBloodMarrowWEngine } from "@core/effectFormula.js"
 import { isReleaseSettlement, isVelinaReleaseAgent, normalizeAnomalyReleaseEventForAgent } from "@core/anomalyRelease.js"
 
@@ -341,7 +341,7 @@ function normalizeEffectRule(rule: any) {
         && rule.source.stat === "anomalyMastery"
         && rule.formula?.valueUnit === "storedPercent"
         && rule.target?.kind === "anomaly"
-        && ["attribute", "release"].includes(rule.target?.settlementType)
+        && anomalySettlementTypes(rule.target).every((type: string) => ["attribute", "turbulence", "release"].includes(type))
       if (!anomalyCritTarget) rule.target = { kind: "default" }
       rule.source.variable = "x"
       rule.source.unit ??= ["critRate", "critDmg", "energyRegen", "penRatio"].includes(rule.source.stat)

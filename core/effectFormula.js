@@ -27,6 +27,15 @@ const IN_COMBAT_FORMULA_SOURCE_STAT_SET = new Set(IN_COMBAT_FORMULA_SOURCE_STATS
 const IN_COMBAT_FORMULA_SOURCE_TYPE_SET = new Set(IN_COMBAT_FORMULA_SOURCE_TYPES)
 const PARAMETER_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/
 
+function commonAnomalyCritTarget(rule = {}) {
+    const target = rule.target
+    if (target?.kind !== "anomaly") return false
+    const types = Array.isArray(target.settlementTypes)
+        ? target.settlementTypes
+        : [target.settlementType ?? "attribute"]
+    return types.length > 0 && types.every(type => ["attribute", "turbulence", "release"].includes(type))
+}
+
 export function isInCombatFormulaRule(rule = {}) {
     return rule?.type === "formula" && rule?.source?.kind === "inCombatStat"
 }
@@ -38,7 +47,7 @@ export function isOutOfCombatFormulaRule(rule = {}) {
 export function isInitialMasteryAnomalyCritRule(rule = {}) {
     return isOutOfCombatFormulaRule(rule) && rule.source?.stat === "anomalyMastery"
         && rule.source?.unit === "storedValue" && rule.stat === "anomalyCritRate"
-        && rule.target?.kind === "anomaly" && ["attribute", "release"].includes(rule.target.settlementType)
+        && commonAnomalyCritTarget(rule)
         && rule.formula?.valueUnit === "storedPercent" && (rule.mode ?? "flat") === "flat"
 }
 
@@ -111,7 +120,7 @@ export function isAllowedInCombatFormulaOutput(rule = {}, sourceType = "self") {
         return target === "default" && rule.formula?.valueUnit === "storedValue"
     }
     return rule.stat === "anomalyCritRate" && target === "anomaly"
-        && rule.target.settlementType === "attribute"
+        && commonAnomalyCritTarget(rule)
         && rule.formula?.valueUnit === "storedPercent"
 }
 

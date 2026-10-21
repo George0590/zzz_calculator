@@ -29,7 +29,7 @@ it('initializes one Fire release at C0/F/Lv12 and preserves custom C4 through re
 })
 it('keeps initial-mastery formula targets, profile bindings and exact Core fractions during maintenance',()=>{
  const draft=prepareDraft('agents',agent)
- expect(draft.combatBuffs.corePassive.effects.filter((r:any)=>r.type==='formula').map((r:any)=>r.target.settlementType)).toEqual(['attribute','release'])
+ expect(draft.combatBuffs.corePassive.effects.filter((r:any)=>r.type==='formula').map((r:any)=>r.target.settlementTypes)).toEqual([['attribute','turbulence','release']])
  expect(draft.anomalyReleaseProfiles).toEqual(agent.anomalyReleaseProfiles)
  expect(draft.coreSkill.corePassiveScaling.levels[1].searAnomalyCritDmgPct).toBe(12.5+12.5/6)
 })

@@ -9,6 +9,27 @@ export const ANOMALY_SETTLEMENT_TYPES = Object.freeze([
 ])
 
 export const ANOMALY_SETTLEMENT_TYPE_VALUES = new Set(ANOMALY_SETTLEMENT_TYPES)
+export const COMMON_ANOMALY_SETTLEMENT_TYPES = Object.freeze(["attribute", "turbulence", "release"])
+export const COMMON_ANOMALY_SETTLEMENT_TYPE_VALUES = new Set(COMMON_ANOMALY_SETTLEMENT_TYPES)
+export const COMMON_ANOMALY_TARGET_STATS = Object.freeze([
+    "anomalyDamageBonus", "baseMultiplierBonus", "anomalyCritRate", "anomalyCritDmg",
+    "enemyDefReduction", "enemyDefIgnore", "enemyResReduction", "allResIgnore",
+    "physicalDefIgnore", "fireDefIgnore", "iceDefIgnore", "electricDefIgnore", "etherDefIgnore", "windDefIgnore",
+    "physicalResIgnore", "fireResIgnore", "iceResIgnore", "electricResIgnore", "etherResIgnore", "windResIgnore",
+])
+export const COMMON_ANOMALY_TARGET_STAT_VALUES = new Set(COMMON_ANOMALY_TARGET_STATS)
+
+export function anomalySettlementTypes(target = {}) {
+    const values = Array.isArray(target?.settlementTypes)
+        ? target.settlementTypes
+        : target?.settlementType !== undefined
+            ? [target.settlementType]
+            : ["attribute"]
+    const normalized = [...new Set(values
+        .map(value => String(value ?? "").trim())
+        .filter(value => ANOMALY_SETTLEMENT_TYPE_VALUES.has(value)))]
+    return normalized.length ? normalized : ["attribute"]
+}
 
 export const ELEMENT_DAMAGE_STAT_BY_ELEMENT = Object.freeze(Object.fromEntries(
     DAMAGE_ELEMENTS.map(element => [element, `${element}Dmg`]),
@@ -159,6 +180,15 @@ export function normalizeEffectRuleTarget(rule = {}) {
     }
 
     rule.target = { ...target }
+    if (Array.isArray(rule.target.settlementTypes)) {
+        rule.target.settlementTypes = anomalySettlementTypes(rule.target)
+        if (rule.target.settlementTypes.length === 1) {
+            rule.target.settlementType = rule.target.settlementTypes[0]
+            delete rule.target.settlementTypes
+        } else {
+            delete rule.target.settlementType
+        }
+    }
     if (Array.isArray(rule.target.anomalyEffects) && rule.target.anomalyEffects.length === 0) {
         delete rule.target.anomalyEffects
     }
@@ -194,6 +224,35 @@ function migrateRule(rule = {}) {
     if (!appliesTo) {
         delete next.appliesTo
         return [next]
+    }
+
+    const rawLegacySettlementTypes = nonEmptyArray(appliesTo.settlementTypes)
+    const legacySettlementTypes = rawLegacySettlementTypes
+        .filter(type => ANOMALY_SETTLEMENT_TYPE_VALUES.has(type))
+    if (legacySettlementTypes.length && legacySettlementTypes.length === rawLegacySettlementTypes.length) {
+        const currentTarget = next.target
+        if (!currentTarget || currentTarget.kind === "default") {
+            next.target = {
+                kind: "anomaly",
+                ...(legacySettlementTypes.length === 1
+                    ? { settlementType: legacySettlementTypes[0] }
+                    : { settlementTypes: legacySettlementTypes }),
+            }
+        } else if (currentTarget.kind === "anomaly") {
+            next.target = {
+                ...currentTarget,
+                ...(legacySettlementTypes.length === 1
+                    ? { settlementType: legacySettlementTypes[0] }
+                    : { settlementTypes: legacySettlementTypes }),
+            }
+            if (legacySettlementTypes.length > 1) delete next.target.settlementType
+            else delete next.target.settlementTypes
+        }
+        if (next.target?.kind === "anomaly" && nonEmptyArray(appliesTo.anomalyEffects).length) {
+            next.target.anomalyEffects = nonEmptyArray(appliesTo.anomalyEffects)
+            delete appliesTo.anomalyEffects
+        }
+        delete appliesTo.settlementTypes
     }
 
     moveLegacySkillTargets(next, appliesTo)

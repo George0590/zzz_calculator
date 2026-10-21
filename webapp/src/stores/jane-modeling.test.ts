@@ -74,7 +74,7 @@ describe("Jane main-character configuration", () => {
     const rules = draft.combatBuffs.corePassive.effects
     const crit = rules.find((r: any) => r.formula?.parameterSources)
     expect(crit.stat).toBe("anomalyCritRate")
-    expect(crit.target).toMatchObject({ kind: "anomaly", settlementType: "attribute", anomalyEffects: ["assault"] })
+    expect(crit.target).toMatchObject({ kind: "anomaly", settlementTypes: ["attribute", "turbulence", "release"], anomalyEffects: ["assault"] })
     const frenzy = draft.combatBuffs.skillBuffs.find((b: any) => b.id === "frenzy")
     expect(frenzy.effects.find((r: any) => r.stat === "atkFlat").formula.expression).toContain("120")
     expect(frenzy.sourceSkillRef).toEqual({ agentSkillId: "jane_doe", categoryId: "basic" })
