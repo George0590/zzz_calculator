@@ -1810,7 +1810,7 @@ function formatPercentValue(value: any) {
               @toggle-exclusion="toggleSchemeDiscExclusion"
             />
           </div>
-          <div v-if="exclusionUiEnabled" class="drive-disc-restriction-hints" aria-label="驱动盘使用限制说明">
+          <div v-if="exclusionUiEnabled" class="drive-disc-restriction-hints ui-notice" aria-label="驱动盘使用限制说明">
             <div class="drive-disc-restriction-hint">
               <span class="restriction-hint-button restriction-hint-button-lock" title="锁定按钮" aria-hidden="true">
                 <LockKeyhole :size="16" />
@@ -2858,9 +2858,6 @@ function formatPercentValue(value: any) {
   display: flex;
   flex-wrap: wrap;
   gap: 8px 18px;
-  padding: 10px;
-  border-left: 3px solid #3b82f6;
-  background: #f8fbff;
   color: var(--app-muted);
   font-size: 12px;
   line-height: 1.5;
@@ -2887,19 +2884,19 @@ function formatPercentValue(value: any) {
   height: 30px;
   border: 1px solid;
   border-radius: 50%;
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .restriction-hint-button-lock {
-  border-color: #bfdbfe;
-  background: #eff6ff;
-  color: #2f7df6;
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
+  color: var(--app-blue);
 }
 
 .restriction-hint-button-exclusion {
-  border-color: #fecaca;
-  background: #fff1f2;
-  color: #d14343;
+  border-color: var(--app-red-line);
+  background: var(--app-red-soft);
+  color: var(--app-red-strong);
 }
 
 .optimizer-stale-alert {

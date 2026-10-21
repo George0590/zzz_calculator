@@ -5,6 +5,7 @@ import { Calculator, Database, Download, HardDrive, Settings2, UserRound } from 
 import { useRoute } from "vue-router"
 import { useAccountStore } from "@/stores/account"
 import { useAppConfigStore } from "@/stores/app-config"
+import { useTheme } from "@/runtime/theme"
 
 const accountStore = useAccountStore()
 const appConfigStore = useAppConfigStore()
@@ -21,49 +22,68 @@ const accountChipText = computed(() => {
   return "账号加载中"
 })
 
-const themeOverrides: GlobalThemeOverrides = {
+const { isDark, naiveTheme } = useTheme()
+
+const lightThemeOverrides: GlobalThemeOverrides = {
   common: {
     primaryColor: "#2f7df6",
     primaryColorHover: "#1f6fe6",
     primaryColorPressed: "#185abd",
     borderRadius: "6px",
+    textColorBase: "#0f172a",
+    textColor1: "#0f172a",
+    textColor2: "#334155",
+    textColor3: "#5b6577",
     fontFamily: "system-ui, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif",
   },
   Card: {
     borderRadius: "8px",
   },
+  Alert: {
+    borderRadius: "8px",
+    padding: "10px 12px",
+    titleFontWeight: "700",
+    colorInfo: "#edf4ff",
+    borderInfo: "1px solid #bcd4fb",
+    colorSuccess: "#e9f7f1",
+    borderSuccess: "1px solid #b7e2cf",
+    colorWarning: "#fff8eb",
+    borderWarning: "1px solid #f5d38b",
+    colorError: "#fdecec",
+    borderError: "1px solid #f5b5b0",
+  },
   Select: {
     menuBoxShadow: "0 10px 30px rgba(15, 23, 42, 0.16)",
     peers: {
       InternalSelection: {
-        color: "#f8fafc",
+        color: "#ffffff",
         colorActive: "#ffffff",
         colorDisabled: "#f1f5f9",
-        textColor: "#111827",
+        textColor: "#0f172a",
         textColorDisabled: "#64748b",
-        border: "2px solid #64748b",
-        borderHover: "2px solid #2f7df6",
-        borderActive: "2px solid #2f7df6",
-        borderFocus: "2px solid #2f7df6",
-        boxShadowHover: "0 0 0 2px rgba(47, 125, 246, 0.10)",
+        border: "1px solid #c5cedb",
+        borderHover: "1px solid #2f7df6",
+        borderActive: "1px solid #2f7df6",
+        borderFocus: "1px solid #2f7df6",
+        boxShadowHover: "none",
         boxShadowActive: "0 0 0 3px rgba(47, 125, 246, 0.20)",
         boxShadowFocus: "0 0 0 3px rgba(47, 125, 246, 0.20)",
-        arrowColor: "#334155",
+        arrowColor: "#5b6577",
         arrowColorDisabled: "#94a3b8",
-        arrowSize: "18px",
-        paddingSingle: "0 40px 0 12px",
-        paddingMultiple: "3px 40px 0 12px",
-        borderWarning: "2px solid #b7791f",
-        borderHoverWarning: "2px solid #9a5f13",
-        borderActiveWarning: "2px solid #b7791f",
-        borderFocusWarning: "2px solid #9a5f13",
+        arrowSize: "16px",
+        paddingSingle: "0 34px 0 12px",
+        paddingMultiple: "3px 34px 0 12px",
+        borderWarning: "1px solid #b7791f",
+        borderHoverWarning: "1px solid #9a5f13",
+        borderActiveWarning: "1px solid #b7791f",
+        borderFocusWarning: "1px solid #9a5f13",
         boxShadowHoverWarning: "0 0 0 2px rgba(183, 121, 31, 0.10)",
         boxShadowActiveWarning: "0 0 0 3px rgba(183, 121, 31, 0.18)",
         boxShadowFocusWarning: "0 0 0 3px rgba(183, 121, 31, 0.18)",
-        borderError: "2px solid #d14343",
-        borderHoverError: "2px solid #b42318",
-        borderActiveError: "2px solid #d14343",
-        borderFocusError: "2px solid #b42318",
+        borderError: "1px solid #d14343",
+        borderHoverError: "1px solid #b42318",
+        borderActiveError: "1px solid #d14343",
+        borderFocusError: "1px solid #b42318",
         boxShadowHoverError: "0 0 0 2px rgba(209, 67, 67, 0.10)",
         boxShadowActiveError: "0 0 0 3px rgba(209, 67, 67, 0.18)",
         boxShadowFocusError: "0 0 0 3px rgba(209, 67, 67, 0.18)",
@@ -78,10 +98,81 @@ const themeOverrides: GlobalThemeOverrides = {
     },
   },
 }
+
+const darkThemeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: "#4b8df8",
+    primaryColorHover: "#6aa2fa",
+    primaryColorPressed: "#2f7df6",
+    primaryColorSuppl: "#4b8df8",
+    borderRadius: "6px",
+    bodyColor: "#0e131d",
+    cardColor: "#161c28",
+    modalColor: "#161c28",
+    popoverColor: "#1c2332",
+    tableColor: "#161c28",
+    inputColor: "#1c2332",
+    borderColor: "#273042",
+    dividerColor: "#273042",
+    textColorBase: "#e6eaf2",
+    textColor1: "#e6eaf2",
+    textColor2: "#c4cbd7",
+    textColor3: "#939db0",
+    fontFamily: "system-ui, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif",
+  },
+  Card: { borderRadius: "8px" },
+  Alert: {
+    borderRadius: "8px",
+    padding: "10px 12px",
+    titleFontWeight: "700",
+    colorInfo: "rgba(75, 141, 248, 0.12)",
+    borderInfo: "1px solid rgba(75, 141, 248, 0.4)",
+    colorSuccess: "rgba(39, 176, 127, 0.12)",
+    borderSuccess: "1px solid rgba(39, 176, 127, 0.4)",
+    colorWarning: "rgba(224, 163, 58, 0.12)",
+    borderWarning: "1px solid rgba(224, 163, 58, 0.4)",
+    colorError: "rgba(239, 99, 99, 0.12)",
+    borderError: "1px solid rgba(239, 99, 99, 0.4)",
+  },
+  Select: {
+    menuBoxShadow: "0 10px 30px rgba(0, 0, 0, 0.5)",
+    peers: {
+      InternalSelection: {
+        color: "#1c2332",
+        colorActive: "#1c2332",
+        colorDisabled: "#151a25",
+        textColor: "#e6eaf2",
+        textColorDisabled: "#6b7588",
+        border: "1px solid #3b475d",
+        borderHover: "1px solid #4b8df8",
+        borderActive: "1px solid #4b8df8",
+        borderFocus: "1px solid #4b8df8",
+        boxShadowHover: "none",
+        boxShadowActive: "0 0 0 3px rgba(75, 141, 248, 0.25)",
+        boxShadowFocus: "0 0 0 3px rgba(75, 141, 248, 0.25)",
+        arrowColor: "#939db0",
+        arrowColorDisabled: "#6b7588",
+        arrowSize: "16px",
+        paddingSingle: "0 34px 0 12px",
+        paddingMultiple: "3px 34px 0 12px",
+      },
+      InternalSelectMenu: {
+        color: "#1c2332",
+        optionColorPending: "#252e40",
+        optionColorActive: "rgba(75, 141, 248, 0.16)",
+        optionColorActivePending: "rgba(75, 141, 248, 0.24)",
+        optionTextColorActive: "#8db8ff",
+        optionCheckColor: "#8db8ff",
+      },
+    },
+  },
+}
+
+const themeOverrides = computed(() => isDark.value ? darkThemeOverrides : lightThemeOverrides)
 </script>
 
 <template>
-  <NConfigProvider :theme-overrides="themeOverrides">
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <NMessageProvider>
       <div class="app-shell">
         <header class="app-topbar">

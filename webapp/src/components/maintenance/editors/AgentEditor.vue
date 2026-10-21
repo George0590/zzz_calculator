@@ -549,7 +549,7 @@ function addDefaultTeammate() {
 <style scoped>
 .default-loop-section-actions { display: flex; align-items: center; gap: 6px; }
 .default-loop-summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 68px; padding: 13px 14px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-panel-muted); }
-.default-loop-summary.empty { border-style: dashed; background: #fff; }
+.default-loop-summary.empty { border-style: dashed; background: var(--app-panel); }
 .default-loop-summary > div:first-child { display: grid; min-width: 0; gap: 4px; }
 .default-loop-summary strong { font-size: 14px; }
 .default-loop-summary span { color: var(--app-muted); font-size: 12px; line-height: 1.5; }

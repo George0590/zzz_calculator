@@ -169,7 +169,7 @@ function updateLuminescenceDamageSharePct(value: number | null) {
 }
 
 .luminescence-parameter-error {
-  color: #b42318;
+  color: var(--app-red-strong);
 }
 
 @container luminescence-parameters (max-width: 440px) {

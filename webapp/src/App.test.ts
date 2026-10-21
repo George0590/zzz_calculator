@@ -6,6 +6,7 @@ vi.mock("naive-ui", () => ({
   NAlert: { props: ["title"], template: '<div role="alert">{{ title }}</div>' },
   NConfigProvider: { template: "<div><slot /></div>" },
   NMessageProvider: { template: "<div><slot /></div>" },
+  darkTheme: { name: "dark" },
 }))
 
 const routeFixture = vi.hoisted(() => ({ query: {} as Record<string, string> }))

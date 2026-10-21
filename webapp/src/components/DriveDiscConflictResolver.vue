@@ -251,7 +251,7 @@ function detailsId(conflictIndex: number, candidateIndex: number | "imported" | 
   overflow: hidden;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .drive-disc-conflict-header {
@@ -293,7 +293,7 @@ function detailsId(conflictIndex: number, candidateIndex: number | "imported" | 
   overflow-wrap: anywhere;
   border: 1px solid var(--app-border-strong);
   border-radius: 999px;
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-muted);
   font-size: 11px;
   line-height: 1.35;
@@ -421,7 +421,7 @@ function detailsId(conflictIndex: number, candidateIndex: number | "imported" | 
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
   cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
 }
@@ -437,7 +437,7 @@ function detailsId(conflictIndex: number, candidateIndex: number | "imported" | 
 }
 
 .drive-disc-conflict-option.selected {
-  background: #f5f9ff;
+  background: var(--app-blue-soft);
 }
 
 .drive-disc-conflict-option input {

@@ -169,8 +169,8 @@ function appearanceLabel(item: any) {
 .boss-override-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .boss-encounter-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; }
 .boss-encounter-list { display: grid; align-content: start; gap: 7px; }
-.boss-encounter-list button:not(.n-button) { display: grid; gap: 4px; width: 100%; padding: 10px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: #fff; text-align: left; cursor: pointer; }
-.boss-encounter-list button.active { border-color: var(--app-blue); background: #f5f9ff; }
+.boss-encounter-list button:not(.n-button) { display: grid; gap: 4px; width: 100%; padding: 10px; border: 1px solid var(--app-border); border-radius: var(--app-radius-sm); background: var(--app-panel); text-align: left; cursor: pointer; }
+.boss-encounter-list button.active { border-color: var(--app-blue); background: var(--app-blue-soft); }
 .boss-encounter-list small { display: -webkit-box; overflow: hidden; color: var(--app-muted); font-size: 11px; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
 .boss-encounter-editor { min-width: 0; padding-left: 16px; border-left: 1px solid var(--app-border); }
 .boss-editor-group { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--app-border); }
