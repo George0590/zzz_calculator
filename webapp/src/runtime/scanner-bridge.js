@@ -23,6 +23,8 @@ const DEFAULT_SCAN_TUNING = {
     scrollAcceptMode: "early-one-row",
     postScrollPanelAcceptMode: "safe",
     panelMinAcceptFloorMs: 120,
+    // 游戏 3.3 起点击背包底行不再翻页，默认使用 Scanner 自带的滚轮翻页并核对位移。
+    rowAdvanceMode: "wheel",
 }
 
 export class ScannerConnectionError extends Error {
@@ -443,6 +445,7 @@ export class ScannerBridge {
             scrollAcceptMode: options.scrollAcceptMode ?? DEFAULT_SCAN_TUNING.scrollAcceptMode,
             postScrollPanelAcceptMode: options.postScrollPanelAcceptMode ?? DEFAULT_SCAN_TUNING.postScrollPanelAcceptMode,
             panelMinAcceptFloorMs: options.panelMinAcceptFloorMs ?? DEFAULT_SCAN_TUNING.panelMinAcceptFloorMs,
+            rowAdvanceMode: options.rowAdvanceMode ?? DEFAULT_SCAN_TUNING.rowAdvanceMode,
         })
     }
 

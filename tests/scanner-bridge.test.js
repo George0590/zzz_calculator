@@ -162,6 +162,7 @@ try {
             scrollAcceptMode: "early-one-row",
             postScrollPanelAcceptMode: "safe",
             panelMinAcceptFloorMs: 120,
+            rowAdvanceMode: "wheel",
         },
     })
 
