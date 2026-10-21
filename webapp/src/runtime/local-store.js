@@ -1,3 +1,4 @@
+import { readSafeJson } from "@runtime/storage-guard.js"
 import {
     accountSummary as summarizeAccounts,
     buildScannerImportPlan,
@@ -282,11 +283,7 @@ function deleteDatabase() {
 }
 
 function readFallbackStore() {
-    try {
-        return JSON.parse(localStorage.getItem(FALLBACK_STORAGE_KEY) || "null")
-    } catch {
-        return null
-    }
+    return readSafeJson(FALLBACK_STORAGE_KEY, null)
 }
 
 function migratePersistedInventoryStore(store) {

@@ -31,7 +31,7 @@ async function bootstrap() {
       await recoverPendingEnkaImport(ownerId, recoveryLockOptions)
     }
   } catch (error) {
-    startupError = `未完成的驱动盘导入自动恢复失败，请刷新页面后再修改配置：${error instanceof Error ? error.message : String(error)}`
+    startupError = `本地数据读取或事务恢复失败，已停止修改。请先导出原始内容：${error instanceof Error ? error.message : String(error)}`
   }
   if (!startupError) {
     try {

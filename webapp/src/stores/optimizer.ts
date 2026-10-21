@@ -1,6 +1,7 @@
 import { defineStore } from "pinia"
 import { toRaw } from "vue"
 import { driveDiscOptimizationInventoryFingerprint } from "@core/inventory-model.js"
+import { readSafeJson } from "@runtime/storage-guard.js"
 
 type OptimizerStatus = "idle" | "estimating" | "preparing" | "running" | "cancelling" | "cancelled" | "done" | "error"
 
@@ -73,11 +74,7 @@ function runId() {
 }
 
 function readSettings() {
-  try {
-    return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null")
-  } catch {
-    return null
-  }
+  return readSafeJson(SETTINGS_KEY, null)
 }
 
 function writeSettings(value: any) {
