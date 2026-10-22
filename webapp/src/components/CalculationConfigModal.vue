@@ -2095,11 +2095,11 @@ function save() {
 }
 
 .calculation-add-button :deep(.n-button__border) {
-  border-color: #b8cceb;
+  border-color: var(--app-blue-line);
 }
 
 .calculation-add-button :deep(.n-button__state-border) {
-  border-color: #8fb0df;
+  border-color: var(--app-blue-line);
 }
 
 .calculation-add-button :deep(.n-button__content) {
@@ -2137,15 +2137,15 @@ function save() {
   min-width: 0;
   padding: 12px 14px;
   border-left: 3px solid var(--app-blue);
-  background: #f8fafc;
+  background: var(--app-panel-muted);
 }
 
 .calculation-turbulence-note {
   padding: 10px 12px;
-  border: 1px solid #f1c27d;
+  border: 1px solid var(--app-amber-line);
   border-radius: var(--app-radius-sm);
-  background: #fff8eb;
-  color: #7a4b00;
+  background: var(--app-amber-soft);
+  color: var(--app-amber-strong);
   font-size: 12px;
   line-height: 1.6;
 }
@@ -2285,7 +2285,7 @@ function save() {
   width: 100%;
   padding: 10px 12px;
   border-left: 3px solid var(--app-blue);
-  background: #f8fafc;
+  background: var(--app-panel-muted);
   color: var(--app-text);
   font-weight: 700;
   line-height: 1.5;
@@ -2309,7 +2309,7 @@ function save() {
   margin-top: 4px;
   padding: 16px 18px;
   border-left: 3px solid var(--app-blue);
-  background: #f8fafc;
+  background: var(--app-panel-muted);
 }
 
 .release-explanation {
@@ -2455,7 +2455,7 @@ function save() {
   padding: 8px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .skill-group-count-row span {
@@ -2528,7 +2528,7 @@ function save() {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .skill-group-child-order {
@@ -2589,12 +2589,12 @@ function save() {
   padding: 8px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .calculation-event-list-item.active {
   border-color: var(--app-blue);
-  background: #eff6ff;
+  background: var(--app-blue-soft);
 }
 
 .calculation-event-list-item.readonly {

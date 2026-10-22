@@ -385,7 +385,7 @@ function clearSlot() {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -393,8 +393,8 @@ function clearSlot() {
 
 .manual-disc-option:hover,
 .manual-disc-option.active {
-  border-color: #2563eb;
-  background: #f8fbff;
+  border-color: var(--app-blue);
+  background: var(--app-blue-soft);
 }
 
 .manual-disc-option.active {
@@ -402,7 +402,7 @@ function clearSlot() {
 }
 
 .manual-disc-option.conflict {
-  border-color: #f0a020;
+  border-color: var(--app-amber-line);
 }
 
 .manual-disc-option img {

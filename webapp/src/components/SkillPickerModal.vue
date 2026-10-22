@@ -141,7 +141,7 @@ function normalizeEventCountRange(value: any) {
   padding: 10px 12px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-text);
   text-align: left;
   cursor: pointer;

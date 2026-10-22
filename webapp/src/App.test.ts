@@ -1,6 +1,7 @@
 import { mount } from "@vue/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import App from "@/App.vue"
+import { useTheme } from "@/runtime/theme"
 import { storageIssues } from "@runtime/storage-guard.js"
 
 vi.mock("naive-ui", () => ({
@@ -8,6 +9,7 @@ vi.mock("naive-ui", () => ({
   NButton: { emits: ["click"], template: '<button @click="$emit(\'click\')"><slot /></button>' },
   NConfigProvider: { template: "<div><slot /></div>" },
   NMessageProvider: { template: "<div><slot /></div>" },
+  darkTheme: { name: "dark" },
 }))
 
 const routeFixture = vi.hoisted(() => ({ query: {} as Record<string, string> }))
@@ -62,6 +64,7 @@ beforeEach(() => {
   accountFixture.loadState = "ready"
   accountFixture.error = ""
   storageIssues.value = []
+  useTheme().setPreference("system")
 })
 
 describe("App maintenance navigation", () => {
@@ -112,14 +115,14 @@ describe("App maintenance navigation", () => {
     const wrapper = mountApp()
 
     expect(wrapper.text()).toContain("本地数据读取失败，原始内容已保留")
-    expect(wrapper.get("button").text()).toBe("导出原始内容")
+    expect(wrapper.get('[role="alert"] button').text()).toBe("导出原始内容")
   })
 
   it("does not show a raw-data export action for a transaction recovery failure", () => {
     const wrapper = mountApp({ startupError: "未完成的驱动盘导入自动恢复失败，请刷新页面后再修改配置：数据库锁定" })
 
     expect(wrapper.text()).toContain("请刷新页面后再修改配置")
-    expect(wrapper.find("button").exists()).toBe(false)
+    expect(wrapper.find('[role="alert"] button').exists()).toBe(false)
   })
 })
 
@@ -133,4 +136,18 @@ describe("App filing information", () => {
     expect(filingLink.attributes("target")).toBe("_blank")
     expect(filingLink.attributes("rel")).toBe("noopener noreferrer")
   })
+})
+
+
+it("cycles the visible theme button and announces current and next modes", async () => {
+  const wrapper = mountApp()
+  const button = wrapper.get('[data-testid="theme-toggle"]')
+  for (const [current, next] of [["跟随系统", "浅色"], ["浅色", "深色"], ["深色", "跟随系统"]]) {
+    const label = `主题：${current}（点击切换为${next}）`
+    expect(button.attributes("aria-label")).toBe(label)
+    expect(button.attributes("title")).toBe(label)
+    await button.trigger("click")
+  }
+  expect(localStorage.getItem("zzz-calculator.webapp.theme.v1")).toBe("system")
+  wrapper.unmount()
 })

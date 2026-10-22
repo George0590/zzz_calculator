@@ -30,9 +30,9 @@ const CHART_COLORS = [
   "#2f7df6",
   "#0f9f6e",
   "#b7791f",
-  "#7c3aed",
+  "var(--app-purple)",
   "#d14343",
-  "#374151",
+  "var(--app-text-secondary)",
   "#16a34a",
   "#ea580c",
   "#64748b",
@@ -627,7 +627,7 @@ function lastPoint(item: any) {
   height: 9px;
   overflow: hidden;
   border-radius: 999px;
-  background: #dde6f5;
+  background: var(--app-panel-sunken);
 }
 
 .analysis-bar-fill {
@@ -641,7 +641,7 @@ function lastPoint(item: any) {
   padding: 8px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .analysis-line-chart {
@@ -652,12 +652,12 @@ function lastPoint(item: any) {
 }
 
 .analysis-grid-line {
-  stroke: #e5e7eb;
+  stroke: var(--app-border);
   stroke-width: 1;
 }
 
 .analysis-axis-line {
-  stroke: #94a3b8;
+  stroke: var(--app-border-strong);
   stroke-width: 1.2;
 }
 

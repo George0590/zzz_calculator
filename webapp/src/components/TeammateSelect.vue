@@ -213,7 +213,7 @@ function columnStyle({ level }: { level: number }) {
 
 .teammate-select-menu .n-cascader-submenu:not(:first-child) .n-scrollbar-container::-webkit-scrollbar-track,
 .teammate-select-search-menu :is(.n-scrollbar-container, .n-virtual-list)::-webkit-scrollbar-track {
-  background: rgba(148, 163, 184, 0.35);
+  background: var(--app-panel-sunken);
   border-radius: 6px;
 }
 
@@ -230,7 +230,7 @@ function columnStyle({ level }: { level: number }) {
   width: 10px;
   height: auto;
   min-height: 24px;
-  background: rgba(51, 65, 85, 0.78);
+  background: var(--app-muted);
   border: 1px solid transparent;
   background-clip: padding-box;
   border-radius: 6px;
@@ -238,13 +238,13 @@ function columnStyle({ level }: { level: number }) {
 
 .teammate-select-menu .n-cascader-submenu:not(:first-child) .n-scrollbar-container::-webkit-scrollbar-thumb:hover,
 .teammate-select-search-menu :is(.n-scrollbar-container, .n-virtual-list)::-webkit-scrollbar-thumb:hover {
-  background: rgba(15, 23, 42, 0.9);
+  background: var(--app-text-secondary);
 }
 
 @supports not selector(::-webkit-scrollbar) {
   .teammate-select-menu .n-cascader-submenu:not(:first-child) .n-scrollbar-container,
   .teammate-select-search-menu :is(.n-scrollbar-container, .n-virtual-list) {
-    scrollbar-color: #475569 #e2e8f0;
+    scrollbar-color: var(--app-muted) var(--app-panel-sunken);
     scrollbar-width: thin;
   }
 }

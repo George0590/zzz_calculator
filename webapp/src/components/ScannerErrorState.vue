@@ -384,7 +384,7 @@ function emitAction(kind: string) {
   height: 68px;
   margin-bottom: 4px;
   border-radius: 999px;
-  background: #fff;
+  background: var(--app-panel);
   border: 1px solid var(--app-border);
 }
 
@@ -420,7 +420,7 @@ function emitAction(kind: string) {
   padding: 4px 8px;
   border: 1px solid var(--app-border);
   border-radius: 4px;
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-text);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
