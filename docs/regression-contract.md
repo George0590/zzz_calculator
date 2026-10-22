@@ -320,7 +320,12 @@
 
 ## 驱动盘、账号与本地数据
 
-验证入口：[存储兼容](../webapp/src/stores/local-store-indexeddb-compat.test.ts)、[导入事务](../tests/drive-disc-import-transaction.test.js)、[配装保存锁](../webapp/e2e/drive-disc-loadout-save-lock.e2e.ts)。
+本地完整个人备份必须覆盖全部账号库存、套装预设、绑定、角色计算配置和应用设置；独立的实验性配置键
+必须保持在备份范围之外，创建和恢复都不得删除或改写这些键。
+恢复必须先预览并检查数据指纹，确认前下载恢复前副本；写入使用 `personalDataRestore` 事务日志，失败回滚，
+启动时恢复中断日志。坏库存 fallback 只有在显式恢复且原始字符串未变化时才可替换，恢复前副本必须保留原始字符串。
+
+验证入口：[完整备份](../webapp/src/runtime/personal-backup.test.ts)、[存储兼容](../webapp/src/stores/local-store-indexeddb-compat.test.ts)、[导入事务](../tests/drive-disc-import-transaction.test.js)、[配装保存锁](../webapp/e2e/drive-disc-loadout-save-lock.e2e.ts)。
 
 - 库存 localStorage fallback、构筑选择、账号选择和优化设置的 JSON 解析失败必须保留原始内容并阻止相关保存；键不存在时才使用默认值。页面提供原始内容导出入口，不能自动猜测或修补损坏内容。扫描器偏好和维护草稿沿用各自的读取与恢复边界，不属于本保护条款。
 
