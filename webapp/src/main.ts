@@ -7,6 +7,7 @@ import { useAppConfigStore } from "@/stores/app-config"
 import { recoverAllPendingDriveDiscImports } from "@runtime/drive-disc-import-transaction"
 import { recoverPendingEnkaImport } from "@runtime/enka-import-transaction"
 import { loadUserDriveDiscStoreFresh } from "@runtime/local-store.js"
+import { formatStartupError } from "@runtime/startup-errors"
 import "@/styles/tokens.css"
 import { initTheme } from "@/runtime/theme"
 
@@ -35,7 +36,7 @@ async function bootstrap() {
       await recoverPendingEnkaImport(ownerId, recoveryLockOptions)
     }
   } catch (error) {
-    startupError = `未完成的驱动盘导入自动恢复失败，请刷新页面后再修改配置：${error instanceof Error ? error.message : String(error)}`
+    startupError = formatStartupError(error)
   }
   if (!startupError) {
     try {

@@ -47,6 +47,7 @@ import {
   writeSelectionDocuments,
 } from "@runtime/build-storage"
 import { withDriveDiscImportOwnerLock } from "@runtime/drive-disc-import-lock"
+import { readSafeJson } from "@runtime/storage-guard.js"
 
 export const STORAGE_KEY = WEBAPP_BUILD_STORAGE_KEY
 const OLD_HOME_SELECTION_KEY = "zzz-calculator.homeSelection.v1"
@@ -66,11 +67,7 @@ const TARGET_PRESET_DEFENSES: Record<string, number> = {
 }
 
 function readJson(key: string) {
-  try {
-    return JSON.parse(localStorage.getItem(key) || "null")
-  } catch {
-    return null
-  }
+  return readSafeJson(key, null)
 }
 
 function clone<T>(value: T): T {

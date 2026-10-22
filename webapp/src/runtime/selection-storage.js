@@ -1,12 +1,9 @@
 export const HOME_SELECTION_STORAGE_KEY = "zzz-calculator.homeSelection.v1"
 export const CURRENT_ACCOUNT_STORAGE_KEY = "zzz-calculator.currentAccount.v1"
+import { readSafeJson } from "@runtime/storage-guard.js"
 
 export function readJsonStorage(key, fallback) {
-    try {
-        return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback))
-    } catch {
-        return fallback
-    }
+    return readSafeJson(key, fallback)
 }
 
 export function currentAccountId() {
@@ -47,6 +44,7 @@ export function loadHomeSelection() {
 }
 
 export function saveHomeSelection(selection) {
+    readSafeJson(HOME_SELECTION_STORAGE_KEY, null)
     const ownerId = selection.currentOwnerId ?? currentAccountId()
     localStorage.setItem(HOME_SELECTION_STORAGE_KEY, JSON.stringify({
         version: 2,

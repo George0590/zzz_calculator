@@ -1,9 +1,11 @@
 import { mount } from "@vue/test-utils"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import App from "@/App.vue"
+import { storageIssues } from "@runtime/storage-guard.js"
 
 vi.mock("naive-ui", () => ({
-  NAlert: { props: ["title"], template: '<div role="alert">{{ title }}</div>' },
+  NAlert: { props: ["title"], template: '<div role="alert"><span>{{ title }}</span><slot /></div>' },
+  NButton: { emits: ["click"], template: '<button @click="$emit(\'click\')"><slot /></button>' },
   NConfigProvider: { template: "<div><slot /></div>" },
   NMessageProvider: { template: "<div><slot /></div>" },
   darkTheme: { name: "dark" },
@@ -60,6 +62,7 @@ beforeEach(() => {
   accountFixture.currentOwnerId = "internal-owner-id"
   accountFixture.loadState = "ready"
   accountFixture.error = ""
+  storageIssues.value = []
 })
 
 describe("App maintenance navigation", () => {
@@ -103,6 +106,21 @@ describe("App maintenance navigation", () => {
     const wrapper = mountApp({ startupError: "恢复失败" })
     expect(wrapper.get('[role="alert"]').text()).toContain("恢复失败")
     expect(wrapper.find('[data-testid="router-view"]').exists()).toBe(false)
+  })
+
+  it("shows the raw-data export action when storage parsing fails", () => {
+    storageIssues.value = [{ key: "zzz-calculator.webapp.build.v1", raw: "{broken" }]
+    const wrapper = mountApp()
+
+    expect(wrapper.text()).toContain("本地数据读取失败，原始内容已保留")
+    expect(wrapper.get("button").text()).toBe("导出原始内容")
+  })
+
+  it("does not show a raw-data export action for a transaction recovery failure", () => {
+    const wrapper = mountApp({ startupError: "未完成的驱动盘导入自动恢复失败，请刷新页面后再修改配置：数据库锁定" })
+
+    expect(wrapper.text()).toContain("请刷新页面后再修改配置")
+    expect(wrapper.find("button").exists()).toBe(false)
   })
 })
 
