@@ -193,7 +193,7 @@ for (const id of Object.values(FIELD_BUFF_IDS)) {
 }
 
 const allFieldBuffs = catalog.combatBuffs.filter(buff => buff.sourceType === "field")
-assert.equal(allFieldBuffs.length, 45, "Field Buff catalog should keep all maintained entries")
+assert.equal(allFieldBuffs.length, 48, "Field Buff catalog should keep all maintained entries")
 assert.deepEqual(
     allFieldBuffs
         .filter(buff => buff.period?.modeId === "defense_v5" && buff.period?.gameVersion === "3.1" && buff.period?.phaseNo === 3)
@@ -1496,3 +1496,29 @@ for (const coverage of [0, 0.5, 1]) {
     }
 }
 console.log("field Buff regression tests passed")
+
+// 3.3 phase 1: independent numeric examples and event exclusions.
+const ca33 = allFieldBuffs.filter(buff => buff.period?.gameVersion === '3.3')
+assert.deepEqual(ca33.map(buff => buff.name.zhCN), ['炽陨', '烁穹', '极韵'])
+for (const buff of ca33) {
+    const check = validateMaintenanceItem('field-buffs', buff, { items: catalog.combatBuffs, currentId: buff.id, agentSkills: catalog.agentSkills })
+    assert.equal(check.ok, true, JSON.stringify(check.errors))
+}
+for (const [count, expected] of [[0,0],[1,0],[2,20],[3,50]]) {
+    const rule = ca33[0].effects[0]
+    const result = calculateAnomaly(ca33[0].id, { id:'ca33',kind:'anomaly',settlementType:'attribute',anomalyEffect:'burn',stunned:false }, {effects:{[rule.id]:{sourceValue:count}}})
+    approx(result.inCombat.panel.anomalyProficiency - result.outOfCombat.panel.anomalyProficiency, expected, 'Chiyun team count')
+}
+for (const coverage of [0,0.5,1]) {
+    const runtime = {effects:Object.fromEntries(ca33[0].effects.slice(1).map(e=>[e.id,{coverage}]))}
+    for (const [settlementType, anomalyEffect, bonus] of [['attribute','burn',0.3],['attribute','shock',0.2],['disorder','burn',0]]) {
+        const result=calculateAnomaly(ca33[0].id,{id:'ca33',kind:'anomaly',settlementType,anomalyEffect,stunned:false},runtime)
+        approx(result.damage.multipliers[settlementType==='disorder'?'disorderDamage':'attributeAnomalyDamage'],1+bonus*coverage,'Chiyun damage scope')
+    }
+    for (const stunned of [false,true]) {
+        const rule=ca33[2].effects[1]
+        const result=calculateAnomaly(ca33[2].id,{id:'ca33',kind:'anomaly',settlementType:'attribute',anomalyEffect:'burn',stunned},{effects:{[rule.id]:{coverage}}})
+        approx(result.damage.multipliers.attributeAnomalyDamage,1.15+(stunned?0.25*coverage:0),'Jiyun requires stunned event')
+    }
+}
+console.log('3.3 phase 1 field numerical checks passed')
