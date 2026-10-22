@@ -1763,7 +1763,7 @@ async function apply() {
   padding: 5px;
   border: 1px solid var(--app-border-strong);
   border-radius: var(--app-radius);
-  background: #eef3f8;
+  background: var(--app-panel-muted);
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.02);
 }
 
@@ -1798,9 +1798,9 @@ async function apply() {
   width: 100%;
   min-height: 40px;
   padding: 0 14px;
-  border: 1px solid rgba(148, 163, 184, 0.58);
+  border: 1px solid var(--app-border-strong);
   border-radius: var(--app-radius-sm);
-  background: rgba(255, 255, 255, 0.78);
+  background: var(--app-panel);
   color: var(--app-text);
   font-weight: 750;
   transition:
@@ -1811,8 +1811,8 @@ async function apply() {
 }
 
 .buff-category-tabs :deep(.n-tabs-tab:hover) {
-  border-color: rgba(47, 125, 246, 0.72);
-  background: #fff;
+  border-color: var(--app-blue-line);
+  background: var(--app-panel);
   color: var(--app-blue);
 }
 
@@ -1823,7 +1823,7 @@ async function apply() {
 
 .buff-category-tabs :deep(.n-tabs-tab.n-tabs-tab--active) {
   border-color: var(--app-blue);
-  background: #eaf2ff;
+  background: var(--app-blue-soft);
   color: var(--app-blue);
   box-shadow:
     inset 0 0 0 1px rgba(47, 125, 246, 0.22),
@@ -1888,7 +1888,7 @@ async function apply() {
   padding: 10px 12px;
   border: 1px solid var(--app-border);
   border-radius: 6px;
-  background: rgba(248, 250, 252, 0.9);
+  background: var(--app-panel-muted);
 }
 
 .buff-runtime-parameter {
@@ -1911,7 +1911,7 @@ async function apply() {
   padding: 14px;
   border: 1px solid var(--app-border-strong);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   transition:
     border-color 0.15s ease,
@@ -1920,14 +1920,14 @@ async function apply() {
 }
 
 .standard-buff-row.is-selectable:hover {
-  border-color: rgba(47, 125, 246, 0.68);
-  background: #fbfdff;
+  border-color: var(--app-blue-line);
+  background: var(--app-panel);
   box-shadow: 0 8px 20px rgba(47, 125, 246, 0.1);
 }
 
 .standard-buff-row.is-selected {
   border-color: var(--app-blue);
-  background: rgba(47, 125, 246, 0.07);
+  background: var(--app-blue-soft);
   box-shadow:
     inset 0 0 0 1px rgba(47, 125, 246, 0.38),
     0 8px 20px rgba(47, 125, 246, 0.1);
@@ -1954,7 +1954,7 @@ async function apply() {
   height: 22px;
   border: 2px solid var(--app-border-strong);
   border-radius: 6px;
-  background: #fff;
+  background: var(--app-panel);
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.03);
 }
 
@@ -2003,8 +2003,8 @@ button.buff-row-toggle {
 }
 
 button.buff-row-toggle:hover {
-  border-color: rgba(47, 125, 246, 0.22);
-  background: rgba(47, 125, 246, 0.045);
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
 }
 
 button.buff-row-toggle:focus-visible {

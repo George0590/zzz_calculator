@@ -3,22 +3,123 @@
   font-family: system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --app-bg: #f7f8fa;
+  /* 底色、面板和文字 */
+  --app-bg: #eef1f6;
   --app-panel: #ffffff;
-  --app-panel-muted: #f2f5f8;
-  --app-border: #e5e7eb;
-  --app-border-strong: #cbd5e1;
-  --app-text: #111827;
-  --app-muted: #6b7280;
+  --app-panel-muted: #f4f6fa;
+  --app-panel-sunken: #e9edf3;
+  --app-border: #e1e6ee;
+  --app-border-strong: #c5cedb;
+  --app-text: #0f172a;
+  --app-text-secondary: #334155;
+  --app-muted: #5b6577;
+  --app-text-muted: var(--app-muted);
+  --app-faint: #94a3b8;
+  --app-surface: var(--app-panel);
+  --app-topbar-bg: rgba(255, 255, 255, 0.9);
+  --app-overlay-panel: rgba(255, 255, 255, 0.96);
+  --app-skeleton-a: #e6ebf2;
+  --app-skeleton-b: #f3f6fa;
+
+  /* 强调色：主色只用于“当前、可点、结果”，其余信息保持中性 */
   --app-blue: #2f7df6;
+  --app-blue-strong: #1d5fd6;
+  --app-blue-soft: #edf4ff;
+  --app-blue-line: #bcd4fb;
   --app-green: #0f9f6e;
+  --app-green-strong: #087a55;
+  --app-green-soft: #e9f7f1;
   --app-amber: #b7791f;
+  --app-amber-strong: #9a5f13;
+  --app-amber-soft: #fff8eb;
+  --app-amber-line: #f5d38b;
   --app-highlight: #f97316;
   --app-red: #d14343;
+  --app-red-strong: #b42318;
+  --app-red-soft: #fdecec;
+  --app-red-line: #f5b5b0;
   --app-purple: #7c3aed;
+
+  /* 形状、阴影与焦点 */
+  --app-focus-ring: 3px solid rgba(47, 125, 246, 0.35);
   --app-radius: 8px;
   --app-radius-sm: 6px;
   --app-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+}
+
+/* 深色主题：跟随系统时由媒体查询生效；手动选择时 data-theme 覆盖系统设置。 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --app-bg: #0e131d;
+    --app-panel: #161c28;
+    --app-panel-muted: #1c2332;
+    --app-panel-sunken: #0b0f17;
+    --app-border: #273042;
+    --app-border-strong: #3b475d;
+    --app-text: #e6eaf2;
+    --app-text-secondary: #c4cbd7;
+    --app-muted: #939db0;
+    --app-faint: #6b7588;
+    --app-topbar-bg: rgba(22, 28, 40, 0.9);
+    --app-overlay-panel: rgba(22, 28, 40, 0.96);
+    --app-skeleton-a: #222a3a;
+    --app-skeleton-b: #2b3446;
+    --app-blue: #4b8df8;
+    --app-blue-strong: #8db8ff;
+    --app-blue-soft: rgba(75, 141, 248, 0.15);
+    --app-blue-line: rgba(75, 141, 248, 0.45);
+    --app-green-strong: #5fd3a6;
+    --app-green-soft: rgba(39, 176, 127, 0.16);
+    --app-amber: #e0a33a;
+    --app-amber-strong: #f3c26b;
+    --app-amber-soft: rgba(224, 163, 58, 0.14);
+    --app-amber-line: rgba(224, 163, 58, 0.45);
+    --app-purple: #b49aff;
+    --app-highlight: #fb923c;
+    --app-red: #ef6363;
+    --app-red-strong: #ff958c;
+    --app-red-soft: rgba(239, 99, 99, 0.14);
+    --app-red-line: rgba(239, 99, 99, 0.45);
+    --app-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    --app-focus-ring: 3px solid rgba(110, 165, 255, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #0e131d;
+  --app-panel: #161c28;
+  --app-panel-muted: #1c2332;
+  --app-panel-sunken: #0b0f17;
+  --app-border: #273042;
+  --app-border-strong: #3b475d;
+  --app-text: #e6eaf2;
+  --app-text-secondary: #c4cbd7;
+  --app-muted: #939db0;
+  --app-faint: #6b7588;
+  --app-topbar-bg: rgba(22, 28, 40, 0.9);
+  --app-overlay-panel: rgba(22, 28, 40, 0.96);
+  --app-skeleton-a: #222a3a;
+  --app-skeleton-b: #2b3446;
+  --app-blue: #4b8df8;
+  --app-blue-strong: #8db8ff;
+  --app-blue-soft: rgba(75, 141, 248, 0.15);
+  --app-blue-line: rgba(75, 141, 248, 0.45);
+  --app-green-strong: #5fd3a6;
+  --app-green-soft: rgba(39, 176, 127, 0.16);
+  --app-amber: #e0a33a;
+  --app-amber-strong: #f3c26b;
+  --app-amber-soft: rgba(224, 163, 58, 0.14);
+  --app-amber-line: rgba(224, 163, 58, 0.45);
+  --app-purple: #b49aff;
+  --app-highlight: #fb923c;
+  --app-red: #ef6363;
+  --app-red-strong: #ff958c;
+  --app-red-soft: rgba(239, 99, 99, 0.14);
+  --app-red-line: rgba(239, 99, 99, 0.45);
+  --app-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --app-focus-ring: 3px solid rgba(110, 165, 255, 0.5);
 }
 
 * {
@@ -55,17 +156,17 @@ textarea {
   width: 32px;
   height: calc(var(--n-height) - 4px);
   box-sizing: border-box;
-  border-left: 1px solid #94a3b8;
+  border-left: 1px solid var(--app-faint);
   border-radius: 0 4px 4px 0;
-  background: #eef2f7;
+  background: var(--app-panel-muted);
   transition: border-color 0.2s ease, background-color 0.2s ease;
 }
 
 .n-select .n-base-selection:not(.n-base-selection--disabled):hover .n-base-suffix,
 .n-select .n-base-selection--focus .n-base-suffix,
 .n-select .n-base-selection--active .n-base-suffix {
-  border-left-color: #93c5fd;
-  background: #eaf2ff;
+  border-left-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
 }
 
 .n-select .n-base-selection:not(.n-base-selection--disabled):hover .n-base-suffix__arrow,
@@ -75,17 +176,17 @@ textarea {
 }
 
 .n-select .n-base-selection--disabled .n-base-suffix {
-  border-left-color: #cbd5e1;
-  background: #e9eef4;
+  border-left-color: var(--app-border-strong);
+  background: var(--app-panel-muted);
   cursor: not-allowed;
 }
 
 .n-select .n-base-selection--disabled :where(.n-base-selection-input, .n-base-selection-placeholder) {
-  color: #64748b;
+  color: var(--app-muted);
 }
 
 .n-select .n-base-selection--disabled .n-base-suffix__arrow {
-  color: #94a3b8;
+  color: var(--app-faint);
 }
 
 .num {
@@ -110,7 +211,7 @@ textarea {
   min-height: 56px;
   padding: 0 24px;
   border-bottom: 1px solid var(--app-border);
-  background: rgba(255, 255, 255, 0.92);
+  background: var(--app-topbar-bg);
   backdrop-filter: blur(12px);
 }
 
@@ -151,12 +252,45 @@ textarea {
   background: var(--app-panel-muted);
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.theme-toggle {
+  display: inline-grid;
+  flex: 0 0 30px;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 50%;
+  background: var(--app-panel);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  border-color: var(--app-blue-line);
+  color: var(--app-text);
+}
+
+.theme-toggle:focus-visible {
+  outline: var(--app-focus-ring);
+  outline-offset: 2px;
+}
+
 .account-chip {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  height: 30px;
-  padding: 0 10px;
+  min-height: 30px;
+  padding: 4px 10px;
+  overflow-wrap: anywhere;
   border: 1px solid var(--app-border);
   border-radius: 999px;
   color: var(--app-muted);
@@ -194,7 +328,7 @@ textarea {
 
 .site-footer a:focus-visible {
   border-radius: 2px;
-  outline: 3px solid rgba(47, 125, 246, 0.7);
+  outline: var(--app-focus-ring);
   outline-offset: 3px;
 }
 
@@ -229,6 +363,32 @@ textarea {
   color: var(--app-muted);
 }
 
+/* 手写提示框与 NAlert 同一套配色；默认为中性说明 */
+.ui-notice {
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-panel-muted);
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ui-notice--info {
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
+}
+
+.ui-notice--warning {
+  border-color: var(--app-amber-line);
+  background: var(--app-amber-soft);
+}
+
+.ui-notice--error {
+  border-color: var(--app-red-line);
+  background: var(--app-red-soft);
+}
+
 .section-band {
   display: grid;
   gap: 16px;
@@ -260,7 +420,7 @@ textarea {
   padding: 8px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-text);
   text-align: left;
   cursor: pointer;
@@ -301,7 +461,7 @@ textarea {
   height: var(--avatar-size, 42px);
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #eef2f7;
+  background: var(--app-panel-muted);
 }
 
 .avatar img {
@@ -453,7 +613,7 @@ textarea {
   margin-bottom: 16px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: rgba(255, 255, 255, 0.96);
+  background: var(--app-overlay-panel);
   box-shadow: var(--app-shadow);
 }
 
@@ -489,7 +649,7 @@ textarea {
   top: 0;
   z-index: 1;
   color: var(--app-muted);
-  background: #fff;
+  background: var(--app-panel);
   font-size: 12px;
   font-weight: 700;
 }
@@ -502,7 +662,7 @@ textarea {
   gap: 8px;
   padding: 12px 16px;
   border-top: 1px solid var(--app-border);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .calculation-modal.n-card {
@@ -638,14 +798,17 @@ textarea {
 @media (max-width: 480px) {
   .nav {
     gap: 2px;
-    overflow: hidden;
+    overflow-x: auto;
   }
 
   .nav a {
     flex: 1 1 0;
     justify-content: center;
     min-width: 0;
-    gap: 5px;
-    padding: 0 4px;
+    gap: 3px;
+    padding: 0 2px;
+    font-size: 12px;
   }
+
+  .nav a svg { width: 14px; height: 14px; flex-shrink: 0; }
 }

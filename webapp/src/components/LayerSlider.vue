@@ -72,11 +72,11 @@ function updateValue(event: Event) {
   min-width: 0;
   padding: 12px;
   border-radius: 4px;
-  background: #eef6ff;
+  background: var(--app-blue-soft);
 }
 
 .layer-slider-head {
-  color: #536170;
+  color: var(--app-muted);
   font-size: 12px;
   font-weight: 800;
   line-height: 1.3;
@@ -134,10 +134,10 @@ function updateValue(event: Event) {
   border-radius: 999px;
   background: linear-gradient(
     to right,
-    #3d9bff 0%,
-    #3d9bff var(--layer-slider-progress),
-    #d9e2ec var(--layer-slider-progress),
-    #d9e2ec 100%
+    var(--app-blue) 0%,
+    var(--app-blue) var(--layer-slider-progress),
+    var(--app-panel-sunken) var(--layer-slider-progress),
+    var(--app-panel-sunken) 100%
   );
 }
 
@@ -146,30 +146,30 @@ function updateValue(event: Event) {
   height: 22px;
   margin-top: -8.5px;
   appearance: none;
-  border: 2px solid #3d9bff;
+  border: 2px solid var(--app-blue);
   border-radius: 50%;
-  background: #fff;
+  background: var(--app-panel);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
 }
 
 .layer-slider input[type="range"]::-moz-range-track {
   height: 5px;
   border-radius: 999px;
-  background: #d9e2ec;
+  background: var(--app-panel-sunken);
 }
 
 .layer-slider input[type="range"]::-moz-range-progress {
   height: 5px;
   border-radius: 999px;
-  background: #3d9bff;
+  background: var(--app-blue);
 }
 
 .layer-slider input[type="range"]::-moz-range-thumb {
   width: 22px;
   height: 22px;
-  border: 2px solid #3d9bff;
+  border: 2px solid var(--app-blue);
   border-radius: 50%;
-  background: #fff;
+  background: var(--app-panel);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
 }
 </style>

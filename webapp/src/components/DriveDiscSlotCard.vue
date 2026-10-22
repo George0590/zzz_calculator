@@ -293,7 +293,7 @@ function toggleExclusion() {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .disc-slot-card-empty {
@@ -302,8 +302,8 @@ function toggleExclusion() {
 
 .disc-slot-card-missing,
 .disc-slot-card-conflict {
-  border-color: #f0a020;
-  background: #fffaf0;
+  border-color: var(--app-amber-line);
+  background: var(--app-amber-soft);
 }
 
 .disc-slot-card-manual {
@@ -312,8 +312,8 @@ function toggleExclusion() {
 
 .disc-slot-card-manual:hover,
 .disc-slot-card-manual:focus-visible {
-  border-color: #93c5fd;
-  background: #f8fbff;
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
   outline: none;
 }
 
@@ -349,7 +349,7 @@ function toggleExclusion() {
 }
 
 .disc-reservation-button-public {
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-blue);
 }
 
@@ -359,7 +359,7 @@ function toggleExclusion() {
 
 .disc-reservation-button-other,
 .disc-reservation-button-unknown {
-  background: #fff7e6;
+  background: var(--app-amber-soft);
 }
 
 .disc-exclusion-button-excluded-explicit {
@@ -368,8 +368,8 @@ function toggleExclusion() {
 }
 
 .disc-exclusion-button-excluded-by-reservation {
-  color: #d97706;
-  background: #fff7e6;
+  color: var(--app-amber-strong);
+  background: var(--app-amber-soft);
 }
 
 .disc-slot-card-copy {

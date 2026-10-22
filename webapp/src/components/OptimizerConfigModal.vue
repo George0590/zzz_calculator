@@ -449,7 +449,7 @@ function save() {
   padding: 14px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .optimizer-config-header {
@@ -651,7 +651,7 @@ function save() {
   padding: 6px 8px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-muted);
   font-size: 12px;
   font-weight: 750;
@@ -660,7 +660,7 @@ function save() {
 
 .main-stat-choice.active {
   border-color: var(--app-blue);
-  background: #eef5ff;
+  background: var(--app-blue-soft);
   color: var(--app-blue);
 }
 

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import { NAlert, NButton, NConfigProvider, NMessageProvider, type GlobalThemeOverrides } from "naive-ui"
+import { NAlert, NButton, NConfigProvider, NMessageProvider } from "naive-ui"
 import { storageIssues, exportUnreadableData } from "@runtime/storage-guard.js"
-import { Calculator, Database, Download, HardDrive, Settings2, UserRound } from "lucide-vue-next"
+import { Calculator, Database, Download, HardDrive, Settings2, UserRound, Monitor, Sun, Moon } from "lucide-vue-next"
 import { useRoute } from "vue-router"
 import { useAccountStore } from "@/stores/account"
 import { useAppConfigStore } from "@/stores/app-config"
+import { useTheme } from "@/runtime/theme"
 
 const accountStore = useAccountStore()
 const appConfigStore = useAppConfigStore()
@@ -22,67 +23,18 @@ const accountChipText = computed(() => {
   return "账号加载中"
 })
 
-const themeOverrides: GlobalThemeOverrides = {
-  common: {
-    primaryColor: "#2f7df6",
-    primaryColorHover: "#1f6fe6",
-    primaryColorPressed: "#185abd",
-    borderRadius: "6px",
-    fontFamily: "system-ui, Segoe UI, PingFang SC, Microsoft YaHei, sans-serif",
-  },
-  Card: {
-    borderRadius: "8px",
-  },
-  Select: {
-    menuBoxShadow: "0 10px 30px rgba(15, 23, 42, 0.16)",
-    peers: {
-      InternalSelection: {
-        color: "#f8fafc",
-        colorActive: "#ffffff",
-        colorDisabled: "#f1f5f9",
-        textColor: "#111827",
-        textColorDisabled: "#64748b",
-        border: "2px solid #64748b",
-        borderHover: "2px solid #2f7df6",
-        borderActive: "2px solid #2f7df6",
-        borderFocus: "2px solid #2f7df6",
-        boxShadowHover: "0 0 0 2px rgba(47, 125, 246, 0.10)",
-        boxShadowActive: "0 0 0 3px rgba(47, 125, 246, 0.20)",
-        boxShadowFocus: "0 0 0 3px rgba(47, 125, 246, 0.20)",
-        arrowColor: "#334155",
-        arrowColorDisabled: "#94a3b8",
-        arrowSize: "18px",
-        paddingSingle: "0 40px 0 12px",
-        paddingMultiple: "3px 40px 0 12px",
-        borderWarning: "2px solid #b7791f",
-        borderHoverWarning: "2px solid #9a5f13",
-        borderActiveWarning: "2px solid #b7791f",
-        borderFocusWarning: "2px solid #9a5f13",
-        boxShadowHoverWarning: "0 0 0 2px rgba(183, 121, 31, 0.10)",
-        boxShadowActiveWarning: "0 0 0 3px rgba(183, 121, 31, 0.18)",
-        boxShadowFocusWarning: "0 0 0 3px rgba(183, 121, 31, 0.18)",
-        borderError: "2px solid #d14343",
-        borderHoverError: "2px solid #b42318",
-        borderActiveError: "2px solid #d14343",
-        borderFocusError: "2px solid #b42318",
-        boxShadowHoverError: "0 0 0 2px rgba(209, 67, 67, 0.10)",
-        boxShadowActiveError: "0 0 0 3px rgba(209, 67, 67, 0.18)",
-        boxShadowFocusError: "0 0 0 3px rgba(209, 67, 67, 0.18)",
-      },
-      InternalSelectMenu: {
-        optionColorPending: "#f1f5f9",
-        optionColorActive: "#eaf2ff",
-        optionColorActivePending: "#dbeafe",
-        optionTextColorActive: "#185abd",
-        optionCheckColor: "#2f7df6",
-      },
-    },
-  },
-}
+const { preference, naiveTheme, themeOverrides, cyclePreference } = useTheme()
+const themeButtonLabel = computed(() => ({
+  system: "主题：跟随系统（点击切换为浅色）",
+  light: "主题：浅色（点击切换为深色）",
+  dark: "主题：深色（点击切换为跟随系统）",
+})[preference.value])
+
+
 </script>
 
 <template>
-  <NConfigProvider :theme-overrides="themeOverrides">
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <NMessageProvider>
       <div class="app-shell">
         <header class="app-topbar">
@@ -116,7 +68,21 @@ const themeOverrides: GlobalThemeOverrides = {
               <span>维护</span>
             </RouterLink>
           </nav>
-          <span class="account-chip" aria-live="polite">{{ accountChipText }}</span>
+          <div class="topbar-actions">
+            <button
+              type="button"
+              class="theme-toggle"
+              data-testid="theme-toggle"
+              :title="themeButtonLabel"
+              :aria-label="themeButtonLabel"
+              @click="cyclePreference"
+            >
+              <Monitor v-if="preference === 'system'" :size="16" aria-hidden="true" />
+              <Sun v-else-if="preference === 'light'" :size="16" aria-hidden="true" />
+              <Moon v-else :size="16" aria-hidden="true" />
+            </button>
+            <span class="account-chip" aria-live="polite">{{ accountChipText }}</span>
+          </div>
         </header>
         <main class="app-main">
           <NAlert v-if="storageIssues.length" type="error" title="本地数据读取失败，原始内容已保留">

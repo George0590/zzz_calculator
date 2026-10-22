@@ -2014,10 +2014,10 @@ function confirmDangerImport() {
 .disc-editor-warning {
   margin: 0;
   padding: 10px 12px;
-  border: 1px solid #f3d46f;
+  border: 1px solid var(--app-amber-line);
   border-radius: var(--app-radius-sm);
-  background: #fff8d8;
-  color: #7c5b00;
+  background: var(--app-amber-soft);
+  color: var(--app-amber-strong);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -2028,7 +2028,7 @@ function confirmDangerImport() {
   padding: 12px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #f8fafc;
+  background: var(--app-panel-muted);
 }
 
 .disc-row-identity {
@@ -2090,8 +2090,8 @@ function confirmDangerImport() {
 
 .restriction-summary-dormant {
   padding: 10px;
-  border-left: 3px solid #f0a020;
-  background: #fffaf0;
+  border-left: 3px solid var(--app-amber-line);
+  background: var(--app-amber-soft);
 }
 
 .restriction-actions {
@@ -2416,10 +2416,10 @@ function confirmDangerImport() {
   min-height: 26px;
   align-items: center;
   padding: 4px 8px;
-  border: 1px solid #f3d46f;
+  border: 1px solid var(--app-amber-line);
   border-radius: 999px;
-  background: #fff8d8;
-  color: #7c5b00;
+  background: var(--app-amber-soft);
+  color: var(--app-amber-strong);
   font-weight: 800;
 }
 
@@ -2530,8 +2530,8 @@ function confirmDangerImport() {
   margin: 0;
   padding: 8px 10px;
   border-radius: var(--app-radius-sm);
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--app-amber-soft);
+  color: var(--app-amber-strong);
   font-size: 12px;
 }
 

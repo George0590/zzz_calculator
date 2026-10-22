@@ -259,9 +259,9 @@ function rankTooltip(value: number) {
   min-height: 36px;
   overflow: hidden;
   padding: 8px 12px;
-  border: 1px solid #bfdbfe;
+  border: 1px solid var(--app-blue-line);
   border-radius: var(--app-radius-sm);
-  background: #f1f5f9;
+  background: var(--app-panel-muted);
   color: var(--app-text);
   text-align: center;
 }
@@ -270,17 +270,17 @@ function rankTooltip(value: number) {
   position: absolute;
   inset: 0 auto 0 0;
   width: var(--optimizer-result-ratio);
-  background: #dbeafe;
+  background: var(--app-blue-soft);
   transition: width 160ms ease;
 }
 
 .optimizer-result-ratio.is-stale {
-  border-color: #f59e0b;
-  background: #fffbeb;
+  border-color: var(--app-amber-line);
+  background: var(--app-amber-soft);
 }
 
 .optimizer-result-ratio.is-stale .optimizer-result-ratio-fill {
-  background: #fef3c7;
+  background: var(--app-amber-soft);
 }
 
 .optimizer-result-ratio strong {

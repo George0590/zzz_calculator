@@ -9,8 +9,10 @@ import { recoverPendingEnkaImport } from "@runtime/enka-import-transaction"
 import { loadUserDriveDiscStoreFresh } from "@runtime/local-store.js"
 import { formatStartupError } from "@runtime/startup-errors"
 import "@/styles/tokens.css"
+import { initTheme } from "@/runtime/theme"
 
 const STARTUP_RECOVERY_LOCK_TIMEOUT_MS = 5_000
+initTheme()
 
 async function bootstrap() {
   const pinia = createPinia()
