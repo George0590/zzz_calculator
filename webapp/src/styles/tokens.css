@@ -40,7 +40,7 @@
   --app-red-line: #f5b5b0;
   --app-purple: #7c3aed;
 
-  /* 仅保留现有形状；主题相关的颜色和焦点语义在本 PR 定义 */
+  /* 形状、阴影与焦点 */
   --app-focus-ring: 3px solid rgba(47, 125, 246, 0.35);
   --app-radius: 8px;
   --app-radius-sm: 6px;
@@ -75,6 +75,7 @@
     --app-amber-strong: #f3c26b;
     --app-amber-soft: rgba(224, 163, 58, 0.14);
     --app-amber-line: rgba(224, 163, 58, 0.45);
+    --app-purple: #b49aff;
     --app-highlight: #fb923c;
     --app-red: #ef6363;
     --app-red-strong: #ff958c;
@@ -111,6 +112,7 @@
   --app-amber-strong: #f3c26b;
   --app-amber-soft: rgba(224, 163, 58, 0.14);
   --app-amber-line: rgba(224, 163, 58, 0.45);
+  --app-purple: #b49aff;
   --app-highlight: #fb923c;
   --app-red: #ef6363;
   --app-red-strong: #ff958c;
@@ -250,12 +252,45 @@ textarea {
   background: var(--app-panel-muted);
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.theme-toggle {
+  display: inline-grid;
+  flex: 0 0 30px;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid var(--app-border);
+  border-radius: 50%;
+  background: var(--app-panel);
+  color: var(--app-text-secondary);
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  border-color: var(--app-blue-line);
+  color: var(--app-text);
+}
+
+.theme-toggle:focus-visible {
+  outline: var(--app-focus-ring);
+  outline-offset: 2px;
+}
+
 .account-chip {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  height: 30px;
-  padding: 0 10px;
+  min-height: 30px;
+  padding: 4px 10px;
+  overflow-wrap: anywhere;
   border: 1px solid var(--app-border);
   border-radius: 999px;
   color: var(--app-muted);
@@ -763,14 +798,17 @@ textarea {
 @media (max-width: 480px) {
   .nav {
     gap: 2px;
-    overflow: hidden;
+    overflow-x: auto;
   }
 
   .nav a {
     flex: 1 1 0;
     justify-content: center;
     min-width: 0;
-    gap: 5px;
-    padding: 0 4px;
+    gap: 3px;
+    padding: 0 2px;
+    font-size: 12px;
   }
+
+  .nav a svg { width: 14px; height: 14px; flex-shrink: 0; }
 }

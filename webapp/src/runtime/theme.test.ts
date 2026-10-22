@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@/runtime/naive-dark-theme", () => ({ darkTheme: { name: "dark" } }))
+vi.mock("naive-ui", () => ({ darkTheme: { name: "dark" } }))
 
 const THEME_KEY = "zzz-calculator.webapp.theme.v1"
 
@@ -12,6 +12,7 @@ function stubMatchMedia(dark: boolean) {
   }
   vi.stubGlobal("matchMedia", vi.fn(() => query))
   return {
+    listenerCount: () => listeners.length,
     setDark(value: boolean) {
       query.matches = value
       for (const listener of listeners) listener()
@@ -30,7 +31,7 @@ describe("theme preference", () => {
     localStorage.removeItem(THEME_KEY)
     document.documentElement.removeAttribute("data-theme")
   })
-  afterEach(() => { vi.unstubAllGlobals() })
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
   it("follows the system by default without forcing a data-theme attribute", async () => {
     const media = stubMatchMedia(false)
@@ -80,23 +81,60 @@ describe("theme preference", () => {
     expect(theme.useTheme().preference.value).toBe("system")
   })
 
-  it("loads the Naive UI dark theme only when dark mode is active", async () => {
+  it("changes Naive UI synchronously with the system", async () => {
     const media = stubMatchMedia(false)
     const { initTheme, useTheme } = await loadTheme()
-    await initTheme()
+    initTheme()
     const { naiveTheme } = useTheme()
-    await new Promise(resolve => setTimeout(resolve, 0))
     expect(naiveTheme.value).toBeNull()
 
     media.setDark(true)
-    await vi.waitFor(() => expect(naiveTheme.value).toEqual({ name: "dark" }))
+    expect(naiveTheme.value).toEqual({ name: "dark" })
   })
 
   it("has the dark theme ready before mount when starting in dark mode", async () => {
     stubMatchMedia(false)
     localStorage.setItem(THEME_KEY, "dark")
     const { initTheme, useTheme } = await loadTheme()
-    await initTheme()
+    initTheme()
     expect(useTheme().naiveTheme.value).toEqual({ name: "dark" })
   })
+  it("shares one listener and keeps explicit preference above system changes", async () => {
+    const media = stubMatchMedia(false)
+    const { initTheme, useTheme } = await loadTheme()
+    initTheme()
+    const theme = useTheme()
+    useTheme()
+    expect(media.listenerCount()).toBe(1)
+    theme.setPreference("light")
+    media.setDark(true)
+    expect(theme.naiveTheme.value).toBeNull()
+    theme.setPreference("dark")
+    media.setDark(false)
+    expect(theme.naiveTheme.value).toEqual({ name: "dark" })
+    theme.setPreference("system")
+    expect(theme.naiveTheme.value).toBeNull()
+  })
+
+  it("keeps switching usable when browser storage is unavailable", async () => {
+    stubMatchMedia(false)
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked") })
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("full") })
+    const { useTheme } = await loadTheme()
+    const theme = useTheme()
+    expect(theme.preference.value).toBe("system")
+    theme.setPreference("dark")
+    expect(theme.naiveTheme.value).toEqual({ name: "dark" })
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark")
+  })
+
+  it("defaults to light when matchMedia is unavailable", async () => {
+    vi.stubGlobal("matchMedia", undefined)
+    const { useTheme } = await loadTheme()
+    const theme = useTheme()
+    expect(theme.naiveTheme.value).toBeNull()
+    theme.setPreference("dark")
+    expect(theme.naiveTheme.value).toEqual({ name: "dark" })
+  })
+
 })

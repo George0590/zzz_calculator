@@ -12,9 +12,7 @@ import "@/styles/tokens.css"
 import { initTheme } from "@/runtime/theme"
 
 const STARTUP_RECOVERY_LOCK_TIMEOUT_MS = 5_000
-// 深色主题下载卡住时不阻塞挂载，最多等这么久，之后照常显示并在加载完成后切换
-const THEME_READY_TIMEOUT_MS = 1_500
-const themeReady = initTheme()
+initTheme()
 
 async function bootstrap() {
   const pinia = createPinia()
@@ -50,8 +48,6 @@ async function bootstrap() {
   } catch {
     // The store starts with all optional feature flags disabled.
   }
-
-  await Promise.race([themeReady, new Promise(resolve => setTimeout(resolve, THEME_READY_TIMEOUT_MS))])
 
   createApp(App, { startupError })
     .use(pinia)

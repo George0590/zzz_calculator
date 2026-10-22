@@ -151,13 +151,13 @@ function parameterLabel(definition: any) {
   padding: 8px 10px;
   border: 1px solid var(--app-border-strong);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-text);
   font-size: 14px;
 }
 .teammate-buff-card.is-selected {
   border-color: var(--app-blue);
-  background: #f3f7ff;
+  background: var(--app-blue-soft);
 }
 .buff-row-main {
   flex: 0 1 auto;
@@ -171,7 +171,7 @@ function parameterLabel(definition: any) {
   flex: 0 0 auto;
   padding: 1px 6px;
   border-radius: 999px;
-  background: #eef2f7;
+  background: var(--app-panel-muted);
   color: var(--app-muted);
   font-size: 12px;
   font-weight: 500;

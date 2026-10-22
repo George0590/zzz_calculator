@@ -2474,13 +2474,13 @@ function formatPercentValue(value: any) {
 }
 
 .calculation-event-summary-toggle:not(.n-button--disabled):hover {
-  background: #eef5ff;
-  color: #124b9c;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
 }
 
 .calculation-event-summary-toggle:not(.n-button--disabled):active {
-  background: #dbeafe;
-  color: #0f438c;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
 }
 
 .calculation-event-summary-toggle:focus-visible {
@@ -2510,24 +2510,24 @@ function formatPercentValue(value: any) {
   height: 40px;
   padding: 0 16px;
   border: 2px solid var(--app-blue);
-  background: #eef5ff;
-  color: #185abd;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
   font-weight: 750;
   box-shadow: 0 2px 5px rgba(47, 125, 246, 0.12);
   transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
 .prominent-config-button:not(.n-button--disabled):hover {
-  border-color: #1f6fe6;
-  background: #dbeafe;
-  color: #124b9c;
+  border-color: var(--app-blue);
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
   box-shadow: 0 3px 8px rgba(47, 125, 246, 0.18);
   transform: translateY(-1px);
 }
 
 .prominent-config-button:not(.n-button--disabled):active {
-  background: #cfe1ff;
-  color: #0f438c;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
   box-shadow: 0 1px 3px rgba(47, 125, 246, 0.16);
   transform: translateY(0);
 }
@@ -2761,7 +2761,7 @@ function formatPercentValue(value: any) {
   align-items: center;
   padding: 8px 10px;
   border-left: 3px solid var(--app-blue);
-  background: #f1f5fb;
+  background: var(--app-panel-muted);
 }
 
 .drive-disc-source-label {
@@ -2796,9 +2796,9 @@ function formatPercentValue(value: any) {
 .drive-disc-analysis-strip {
   padding: 8px 10px;
   border: 0;
-  border-left: 3px solid #93c5fd;
+  border-left: 3px solid var(--app-blue-line);
   border-radius: 0;
-  background: #f8fbff;
+  background: var(--app-blue-soft);
 }
 
 .drive-disc-analysis-strip > div {
@@ -2913,7 +2913,7 @@ function formatPercentValue(value: any) {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .disc-slot-card-empty {
@@ -2925,8 +2925,8 @@ function formatPercentValue(value: any) {
 }
 
 .disc-slot-card-manual:hover {
-  border-color: #93c5fd;
-  background: #f8fbff;
+  border-color: var(--app-blue-line);
+  background: var(--app-blue-soft);
 }
 
 .disc-slot-card img {
@@ -3040,7 +3040,7 @@ function formatPercentValue(value: any) {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -3048,8 +3048,8 @@ function formatPercentValue(value: any) {
 
 .manual-disc-option:hover,
 .manual-disc-option.active {
-  border-color: #2563eb;
-  background: #f8fbff;
+  border-color: var(--app-blue);
+  background: var(--app-blue-soft);
 }
 
 .manual-disc-option.active {
@@ -3278,36 +3278,36 @@ function formatPercentValue(value: any) {
   min-width: 48px;
   height: 32px;
   padding: 0 10px;
-  color: #334155;
-  background: #fff;
+  color: var(--app-text-secondary);
+  background: var(--app-panel);
   font-weight: 650;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
 }
 
 .optimizer-set-select-button :deep(.n-button__border),
 .optimizer-set-select-button :deep(.n-button__state-border) {
-  border: 1px solid #94a3b8;
+  border: 1px solid var(--app-border-strong);
 }
 
 .optimizer-set-select-button:not(.n-button--disabled):hover {
-  color: #1f2937;
-  background: #f1f5f9;
+  color: var(--app-text);
+  background: var(--app-panel-muted);
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1);
 }
 
 .optimizer-set-select-button:not(.n-button--disabled):hover :deep(.n-button__border),
 .optimizer-set-select-button:not(.n-button--disabled):hover :deep(.n-button__state-border) {
-  border-color: #64748b;
+  border-color: var(--app-muted);
 }
 
 .optimizer-set-select-button:not(.n-button--disabled):active {
-  background: #e2e8f0;
+  background: var(--app-panel-sunken);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.1);
 }
 
 .optimizer-set-select-button:not(.n-button--disabled):active :deep(.n-button__border),
 .optimizer-set-select-button:not(.n-button--disabled):active :deep(.n-button__state-border) {
-  border-color: #475569;
+  border-color: var(--app-text-secondary);
 }
 
 .optimizer-set-select-button:focus-visible {
@@ -3324,7 +3324,7 @@ function formatPercentValue(value: any) {
   padding: 5px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .selected-set-empty {
@@ -3341,10 +3341,10 @@ function formatPercentValue(value: any) {
   min-height: 26px;
   gap: 6px;
   padding: 3px 4px 3px 9px;
-  border: 1px solid #cfe1ff;
+  border: 1px solid var(--app-blue-line);
   border-radius: 999px;
-  background: #f2f7ff;
-  color: #285da8;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
   font-size: 12px;
   font-weight: 800;
 }
@@ -3374,12 +3374,12 @@ function formatPercentValue(value: any) {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #285da8;
+  color: var(--app-blue-strong);
   cursor: pointer;
 }
 
 .selected-set-remove:hover {
-  background: rgba(40, 93, 168, 0.12);
+  background: var(--app-blue-soft);
   color: var(--app-text);
 }
 
@@ -3404,7 +3404,7 @@ function formatPercentValue(value: any) {
   padding: 7px 9px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
   color: var(--app-muted);
   font-size: 12px;
   font-weight: 800;
@@ -3415,7 +3415,7 @@ function formatPercentValue(value: any) {
 .main-stat-choice:hover,
 .main-stat-choice.active {
   border-color: var(--app-blue);
-  background: #eef5ff;
+  background: var(--app-blue-soft);
   color: var(--app-blue);
 }
 
@@ -3448,7 +3448,7 @@ function formatPercentValue(value: any) {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius);
-  background: #fff;
+  background: var(--app-panel);
   cursor: pointer;
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
@@ -3456,7 +3456,7 @@ function formatPercentValue(value: any) {
 .set-choice:hover,
 .set-choice.active {
   border-color: var(--app-blue);
-  background: #eef5ff;
+  background: var(--app-blue-soft);
 }
 
 .set-choice input {
@@ -3517,7 +3517,7 @@ function formatPercentValue(value: any) {
   padding: 10px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #fff;
+  background: var(--app-panel);
 }
 
 .optimizer-result-disc-row-empty {
@@ -3585,13 +3585,13 @@ function formatPercentValue(value: any) {
   overflow: hidden;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-sm);
-  background: #f8fbff;
+  background: var(--app-blue-soft);
 }
 
 .optimizer-progress-card[data-status="complete"],
 .optimizer-progress-card[data-status="done"] {
-  border-color: #bbdfd1;
-  background: #f5fbf8;
+  border-color: var(--app-green-strong);
+  background: var(--app-green-soft);
 }
 
 .optimizer-progress-card[data-status="cancelled"] {
@@ -3621,7 +3621,7 @@ function formatPercentValue(value: any) {
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: #dde6f5;
+  background: var(--app-panel-sunken);
 }
 
 .optimizer-progress-fill {
