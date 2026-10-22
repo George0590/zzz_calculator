@@ -13,9 +13,9 @@ const meta = buildMeta(catalog)
 const source = JSON.parse(await readFile(path.join(rootDir, "data", "bosses.json"), "utf8"))
 
 assert.equal(source.version, 2)
-assert.equal(source.bosses.length, 18)
-assert.equal(meta.bosses.length, 18)
-assert.equal(meta.bossCombatBuffs.length, 26)
+assert.equal(source.bosses.length, 22)
+assert.equal(meta.bosses.length, 22)
+assert.equal(meta.bossCombatBuffs.length, 30)
 
 for (const boss of source.bosses) {
     assert.ok(boss.images.icon.startsWith("/assets/bosses/"))
@@ -48,8 +48,8 @@ const bossEntries = source.bosses.flatMap(boss =>
         ...(encounter.playerDebuffs ?? []),
     ]))
 const bossEffects = bossEntries.flatMap(entry => entry.effects ?? [])
-assert.equal(bossEntries.length, 49)
-assert.equal(bossEffects.length, 53)
+assert.equal(bossEntries.length, 55)
+assert.equal(bossEffects.length, 60)
 for (const effect of bossEffects) {
     assert.deepEqual(
         effect.coverage,
@@ -477,3 +477,18 @@ for (const stacks of [0, 1, 3]) {
     assert.equal(result.inCombat.buffTotals.critDmg, stacks * 0.25)
 }
 console.log("boss catalog tests passed")
+
+for (const stacks of [0,1,3]) {
+    const id='boss_encounter.integrated_girtablullu_stagnant_aberrant.v3_3.p1'
+    const result=resultFor(id,{[id]:{effects:{integrated_stagnant_v3_3_p1_anomaly:{stacks},integrated_stagnant_v3_3_p1_sharp:{stacks}}}})
+    const mods=result.inCombat.activeEffects.flatMap(e=>e.resolvedDamageModifiers??[])
+    for (const [stat,perStack] of [['anomalyDamageBonus',0.15],['sharpDmgBonus',0.35]]) {
+        assert.ok(Math.abs(mods.find(e=>e.stat===stat).value-stacks*perStack)<1e-9)
+    }
+    assert.equal(result.inCombat.panel.anomalyProficiency-result.outOfCombat.panel.anomalyProficiency,50)
+}
+for (const stacks of [0,1,4]) {
+    const id='boss_encounter.unknown_corruption_complex.v3_3.p1'
+    assert.equal(resultFor(id,{[id]:{effects:{unknown_complex_v3_3_p1_crit:{stacks}}}}).inCombat.buffTotals.critDmg,stacks*0.25)
+}
+console.log('3.3 phase 1 boss stack checks passed')

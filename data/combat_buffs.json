@@ -8809,6 +8809,248 @@
         }
       ],
       "buffModifiers": []
+    },
+    {
+      "id": "field.critical_assault.v3_3.p1.chiyun",
+      "sourceType": "field",
+      "scope": "inCombat",
+      "period": {
+        "modeId": "critical_assault",
+        "gameVersion": "3.3",
+        "phaseNo": 1,
+        "phaseName": {
+          "zhCN": "第一期"
+        }
+      },
+      "name": {
+        "zhCN": "炽陨"
+      },
+      "source": {
+        "zhCN": "危局强袭战"
+      },
+      "sourcePeriod": {
+        "zhCN": "3.3版本第一期"
+      },
+      "description": {
+        "zhCN": "队伍内存在2/3名[异常]特性代理人时，全队异常精通分别提升20/50点。\n[异常]特性代理人造成属性异常伤害并触发暴击后，全队造成的属性异常伤害提升20%，火属性异常伤害额外提升10%，持续15秒，重复触发时刷新持续时间。"
+      },
+      "effects": [
+        {
+          "id": "field_critical_assault_v3_3_p1_chiyun_proficiency",
+          "type": "formula",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "anomalyProficiency",
+          "mode": "flat",
+          "source": {
+            "variable": "x",
+            "label": {
+              "zhCN": "队伍内异常特性代理人数量"
+            },
+            "defaultValue": 3,
+            "min": 0,
+            "max": 3
+          },
+          "formula": {
+            "expression": "20 * max(x - 1, 0) + 10 * max(x - 2, 0)",
+            "valueUnit": "storedValue"
+          },
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_critical_assault_v3_3_p1_chiyun_anomaly",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "anomalyDamageBonus",
+          "mode": "flat",
+          "value": 20,
+          "condition": "[异常]特性代理人造成属性异常伤害并触发暴击后",
+          "durationSeconds": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_critical_assault_v3_3_p1_chiyun_fire_anomaly",
+          "type": "fixed",
+          "target": {
+            "kind": "anomaly",
+            "settlementType": "attribute",
+            "anomalyEffects": [
+              "burn"
+            ]
+          },
+          "stat": "anomalyDamageBonus",
+          "mode": "flat",
+          "value": 10,
+          "condition": "[异常]特性代理人造成属性异常伤害并触发暴击后",
+          "durationSeconds": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        }
+      ],
+      "buffModifiers": []
+    },
+    {
+      "id": "field.critical_assault.v3_3.p1.shuoqiong",
+      "sourceType": "field",
+      "scope": "inCombat",
+      "period": {
+        "modeId": "critical_assault",
+        "gameVersion": "3.3",
+        "phaseNo": 1,
+        "phaseName": {
+          "zhCN": "第一期"
+        }
+      },
+      "name": {
+        "zhCN": "烁穹"
+      },
+      "source": {
+        "zhCN": "危局强袭战"
+      },
+      "sourcePeriod": {
+        "zhCN": "3.3版本第一期"
+      },
+      "description": {
+        "zhCN": "[击破]特性代理人造成的失衡值提升20%，能量获取效率提升20%。\n代理人发动[强化特殊技]、[特殊技]后，锐化伤害提升30%，攻击命中敌人时无视其20%的电属性伤害抗性和以太伤害抗性，持续15秒，重复触发时刷新持续时间。"
+      },
+      "effects": [
+        {
+          "id": "field_critical_assault_v3_3_p1_shuoqiong_sharpDmgBonus",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "sharpDmgBonus",
+          "mode": "flat",
+          "value": 30,
+          "condition": "代理人发动[强化特殊技]、[特殊技]后",
+          "durationSeconds": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_critical_assault_v3_3_p1_shuoqiong_electricResIgnore",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "electricResIgnore",
+          "mode": "flat",
+          "value": 20,
+          "condition": "代理人发动[强化特殊技]、[特殊技]后",
+          "durationSeconds": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_critical_assault_v3_3_p1_shuoqiong_etherResIgnore",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "etherResIgnore",
+          "mode": "flat",
+          "value": 20,
+          "condition": "代理人发动[强化特殊技]、[特殊技]后",
+          "durationSeconds": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        }
+      ],
+      "buffModifiers": []
+    },
+    {
+      "id": "field.critical_assault.v3_3.p1.jiyun",
+      "sourceType": "field",
+      "scope": "inCombat",
+      "period": {
+        "modeId": "critical_assault",
+        "gameVersion": "3.3",
+        "phaseNo": 1,
+        "phaseName": {
+          "zhCN": "第一期"
+        }
+      },
+      "name": {
+        "zhCN": "极韵"
+      },
+      "source": {
+        "zhCN": "危局强袭战"
+      },
+      "sourcePeriod": {
+        "zhCN": "3.3版本第一期"
+      },
+      "description": {
+        "zhCN": "[击破]特性代理人造成的失衡值提升15%，命中失衡状态的敌人后，其失衡恢复速度降低10%，持续15秒，重复触发时刷新持续时间。\n代理人造成的属性异常伤害提升15%，对处于失衡状态中的敌人，造成的属性异常伤害额外提升25%。"
+      },
+      "effects": [
+        {
+          "id": "field_critical_assault_v3_3_p1_jiyun_anomaly",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "anomalyDamageBonus",
+          "mode": "flat",
+          "value": 15,
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        },
+        {
+          "id": "field_critical_assault_v3_3_p1_jiyun_stunned_anomaly",
+          "type": "fixed",
+          "target": {
+            "kind": "default"
+          },
+          "stat": "anomalyDamageBonus",
+          "mode": "flat",
+          "value": 25,
+          "condition": "敌人处于失衡状态",
+          "requirement": {
+            "eventStunned": true
+          },
+          "coverage": {
+            "default": 1,
+            "min": 0,
+            "max": 1,
+            "step": 0.1
+          }
+        }
+      ],
+      "buffModifiers": []
     }
   ],
   "bossBuffs": [],
