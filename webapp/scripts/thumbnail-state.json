@@ -41,6 +41,10 @@
       "sourceHash": "f96613bf7550983aa2b1f5679b2d6d3acedc0880bbb375aa010b2b120abf2818",
       "thumbnailUrl": "/assets/thumbs/agents/ellen_joe.09a5507303d80877.webp"
     },
+    "/assets/agents/fioni.png": {
+      "sourceHash": "e1f53a152426d78e1cfbf3ae74daa24b3990560ec45ac581930879c43e7ffbb1",
+      "thumbnailUrl": "/assets/thumbs/agents/fioni.6b90a762401e8eb5.webp"
+    },
     "/assets/agents/hoshimi_miyabi.png": {
       "sourceHash": "f5ef77e9c9f85051f34ac0ba1df757a51be3fa0eeea9f1621300ce234d280ae1",
       "thumbnailUrl": "/assets/thumbs/agents/hoshimi_miyabi.2a84217a73396800.webp"
@@ -516,6 +520,10 @@
     "/assets/w-engines/zzz_wiki_225.png": {
       "sourceHash": "f861ad1cc37580f5d035d7935f8d2925780a2011dccc0b2b65524ef7e2623e9c",
       "thumbnailUrl": "/assets/thumbs/w-engines/zzz_wiki_225.50f2097ec5557c59.webp"
+    },
+    "/assets/w-engines/zzz_wiki_2259.png": {
+      "sourceHash": "f1a30e6703268d01a68b423af2e6fbadc8a754b696ece9f9d0ab8de83887c6c8",
+      "thumbnailUrl": "/assets/thumbs/w-engines/zzz_wiki_2259.7a365c75d2120f85.webp"
     },
     "/assets/w-engines/zzz_wiki_263.png": {
       "sourceHash": "c88e6efab4285b0f873eb35100476ac6496bff47d785ca395a1090af18343dbc",

@@ -3,7 +3,7 @@ import {
   SYSTEM_MANAGED_SKILL_GROUP_COUNTS,
 } from "@core/maintenanceValidation.js"
 import { legacySkillTypeForMove, normalizeSkillTargetsInValue } from "@core/skillTargets.js"
-import { normalizeLegacyEffectAppliesToInValue } from "@core/effectRuleTargets.js"
+import { anomalySettlementTypes, normalizeLegacyEffectAppliesToInValue } from "@core/effectRuleTargets.js"
 import { isAllowedInCombatFormulaOutput, migrateLegacyBloodMarrowWEngine } from "@core/effectFormula.js"
 import { isReleaseSettlement, isVelinaReleaseAgent, normalizeAnomalyReleaseEventForAgent } from "@core/anomalyRelease.js"
 
@@ -121,6 +121,10 @@ const FIELD_LABELS: Record<string, string> = {
   anomalyDurationBonusSeconds: "异常持续时间延长（秒）",
   elements: "元素",
   skillTargets: "技能目标",
+  releaseTargets: "指定异放",
+  releaseTarget: "指定异放",
+  agentId: "角色",
+  profileId: "异放方案",
   agentSkillId: "角色",
   categoryId: "技能目录",
   skillType: "技能大类",
@@ -337,7 +341,12 @@ function normalizeEffectRule(rule: any) {
         : "storedValue"
     } else if (rule.source.kind === "outOfCombatStat") {
       rule.scope = "inCombat"
-      rule.target = { kind: "default" }
+      const anomalyCritTarget = rule.stat === "anomalyCritRate"
+        && rule.source.stat === "anomalyMastery"
+        && rule.formula?.valueUnit === "storedPercent"
+        && rule.target?.kind === "anomaly"
+        && anomalySettlementTypes(rule.target).every((type: string) => ["attribute", "turbulence", "release"].includes(type))
+      if (!anomalyCritTarget) rule.target = { kind: "default" }
       rule.source.variable = "x"
       rule.source.unit ??= ["critRate", "critDmg", "energyRegen", "penRatio"].includes(rule.source.stat)
         ? "storedPercent"

@@ -9,6 +9,7 @@ import {
     unknownLegacySkillTargetPrefixes,
 } from "./skillTargets.js"
 import {
+    anomalySettlementTypes,
     ELEMENT_CRIT_DMG_STATS,
     ELEMENT_DEF_IGNORE_STATS,
     ELEMENT_SHARP_DMG_STATS,
@@ -1302,20 +1303,32 @@ function ruleTargetText(rule = {}, meta) {
         return targets.length ? `（技能：${skillTargetLabels(targets, meta).join("；")}）` : "（技能：未选择）"
     }
     if (target.kind === "anomaly") {
-        const settlementLabel = target.settlementType === "disorder"
-            ? "紊乱"
-            : target.settlementType === "turbulence"
-                ? "乱流"
-            : target.settlementType === "release"
-                ? "异放"
-                : target.settlementType === "luminescence"
-                    ? "耀变"
-                    : "属性异常"
+        const settlementLabels = {
+            attribute: "属性异常",
+            turbulence: "乱流",
+            disorder: "紊乱",
+            release: "异放",
+            luminescence: "耀变",
+        }
+        const settlementLabel = anomalySettlementTypes(target).map(type => settlementLabels[type] ?? type).join("、")
         const effects = Array.isArray(target.anomalyEffects) ? target.anomalyEffects : []
         const labels = effects.map(effect => ANOMALY_EFFECT_LABELS[effect] ?? effect)
+        const agents = Array.isArray(meta?.agents) ? meta.agents : meta?.agents?.agents ?? []
+        const releaseTargets = Array.isArray(target.releaseTargets) ? target.releaseTargets : []
+        const releaseLabels = releaseTargets.map(item => {
+            const agent = agents.find(entry => String(entry?.id ?? "") === String(item?.agentId ?? ""))
+            const profile = agent?.anomalyReleaseProfiles?.find(entry => String(entry?.id ?? "") === String(item?.profileId ?? ""))
+            const agentLabel = localizedText(agent?.name) || item?.agentId
+            const profileLabel = localizedText(profile?.name) || item?.profileId
+            return `${agentLabel}·${profileLabel}`
+        })
+        const releaseText = releaseLabels.length ? `；指定异放：${releaseLabels.join("、")}` : ""
+        if (releaseLabels.length && settlementLabels.release && anomalySettlementTypes(target).every(type => type === "release")) {
+            return `（指定异放：${releaseLabels.join("、")}）`
+        }
         return labels.length
-            ? `（${settlementLabel}：${labels.join("；")}）`
-            : `（${settlementLabel}）`
+            ? `（${settlementLabel}：${labels.join("；")}${releaseText}）`
+            : `（${settlementLabel}${releaseText}）`
     }
     return ""
 }
@@ -1589,7 +1602,32 @@ export function normalizeCustomBuffEffect(effect) {
                 ...(Array.isArray(effect.target.damageKinds) && effect.target.damageKinds.length
                     ? { damageKinds: [...new Set(effect.target.damageKinds.map(String).filter(Boolean))] }
                     : {}),
+                ...(Array.isArray(effect.target.releaseTargets) && effect.target.releaseTargets.length
+                    ? { releaseTargets: effect.target.releaseTargets.map(target => ({
+                        agentId: String(target?.agentId ?? ""),
+                        profileId: String(target?.profileId ?? ""),
+                    })).filter(target => target.agentId && target.profileId) }
+                    : {}),
             }
+            : effect.target?.kind === "anomaly"
+                ? {
+                    kind: "anomaly",
+                    ...(Array.isArray(effect.target.settlementTypes)
+                        ? { settlementTypes: [...new Set(effect.target.settlementTypes.map(String).filter(Boolean))] }
+                        : { settlementType: String(effect.target.settlementType ?? "attribute") }),
+                    ...(Array.isArray(effect.target.anomalyEffects) && effect.target.anomalyEffects.length
+                        ? { anomalyEffects: [...new Set(effect.target.anomalyEffects.map(String).filter(Boolean))] }
+                        : {}),
+                    ...(Array.isArray(effect.target.anomalyVariants) && effect.target.anomalyVariants.length
+                        ? { anomalyVariants: [...new Set(effect.target.anomalyVariants.map(String).filter(Boolean))] }
+                        : {}),
+                    ...(Array.isArray(effect.target.releaseTargets) && effect.target.releaseTargets.length
+                        ? { releaseTargets: effect.target.releaseTargets.map(target => ({
+                            agentId: String(target?.agentId ?? ""),
+                            profileId: String(target?.profileId ?? ""),
+                        })).filter(target => target.agentId && target.profileId) }
+                        : {}),
+                }
             : { kind: "default" }
         if (target.kind === "skill" && !target.skillTargets.length) {
             return null

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { NButton, NInput, NSelect, NSwitch } from "naive-ui"
+import { NButton, NInput, NInputNumber, NSelect, NSwitch } from "naive-ui"
 import { Plus, Trash2 } from "lucide-vue-next"
 import { DAMAGE_ELEMENT_OPTIONS, option } from "./maintenance-options"
 import ReleaseExpressionEditor from "./ReleaseExpressionEditor.vue"
 
-const props = defineProps<{ model: any, disabled?: boolean }>()
+const props = defineProps<{ model: any, catalog?: any, disabled?: boolean }>()
 const emit = defineEmits<{ change: [] }>()
 const resultModeOptions = [option("originalAnomalyRatio", "原异常倍率比例"), option("fixedAnomalyMultiplier", "固定异放倍率")]
 
@@ -19,6 +19,26 @@ function mutableProfiles() {
   return props.model.anomalyReleaseProfiles as any[]
 }
 
+function releaseRows() {
+  const skills = props.catalog?.agentSkills?.agentSkills ?? []
+  return skills.filter((skill: any) => skill.agentId === props.model.id).flatMap((skill: any) =>
+    skill.categories.flatMap((category: any) => category.moves.flatMap((move: any) =>
+      move.rows.filter((row: any) => row.kind === "releaseMultiplier").map((row: any) => ({
+        label: `${move.name?.zhCN} / ${row.label?.zhCN}`,
+        value: [skill.id, category.id, move.id, row.id].join("|"),
+        ref: { agentSkillId: skill.id, categoryId: category.id, moveId: move.id, rowId: row.id },
+      })))))
+}
+function refKey(profile: any) {
+  const r = profile.releaseSkillRef
+  return r ? [r.agentSkillId, r.categoryId, r.moveId, r.rowId].join("|") : null
+}
+function setRef(profile: any, key: string | null) {
+  const row = releaseRows().find((row: any) => row.value === key)
+  if (row) profile.releaseSkillRef = { ...row.ref }
+  else delete profile.releaseSkillRef
+  emit("change")
+}
 function addProfile() {
   const items = mutableProfiles()
   const usedIds = new Set(items.map((profile: any) => String(profile?.id ?? "")))
@@ -56,6 +76,11 @@ function setDefault(index: number, value: boolean) {
         <label class="maintenance-switch-field"><span>默认方案</span><NSwitch :value="profile.default === true" :disabled="disabled" @update:value="setDefault(index, Boolean($event))" /></label>
         <label class="maintenance-field maintenance-field-wide"><span>支持属性</span><NSelect multiple v-model:value="profile.supportedElements" :options="DAMAGE_ELEMENT_OPTIONS" :disabled="disabled" @update:value="emit('change')" /></label>
         <label class="maintenance-field"><span>倍率结果</span><NSelect v-model:value="profile.resultMode" :options="resultModeOptions" :disabled="disabled" @update:value="emit('change')" /></label>
+      </div>
+      <div class="maintenance-grid">
+        <label class="maintenance-field maintenance-field-wide"><span>来源技能异放倍率</span><NSelect :value="refKey(profile)" :options="releaseRows()" clearable :disabled="disabled" placeholder="常量或面板公式无需绑定" @update:value="setRef(profile, $event)" /></label>
+        <label class="maintenance-field"><span>附加异常暴击伤害%</span><NInputNumber :value="Number(profile.critDmgBonus ?? 0) * 100" :min="0" :disabled="disabled" @update:value="profile.critDmgBonus = Number($event ?? 0) / 100; emit('change')" /></label>
+        <label class="maintenance-field"><span>最低影画</span><NInputNumber :value="Number(profile.minimumCinemaLevel ?? 0)" :min="0" :max="6" :precision="0" :disabled="disabled" @update:value="profile.minimumCinemaLevel = Number($event ?? 0); emit('change')" /></label>
       </div>
       <ReleaseExpressionEditor :node="profile.expression" :core-scaling="model.coreSkill?.corePassiveScaling" :disabled="disabled" @change="emit('change')" />
       <div class="maintenance-row-head">

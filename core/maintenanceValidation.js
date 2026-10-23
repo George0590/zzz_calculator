@@ -10,6 +10,8 @@ import {
 } from "./skillTargets.js"
 import {
     ANOMALY_SETTLEMENT_TYPE_VALUES,
+    anomalySettlementTypes,
+    COMMON_ANOMALY_TARGET_STAT_VALUES,
     ELEMENT_CRIT_DMG_STATS,
     ELEMENT_DEF_IGNORE_STATS,
     ELEMENT_SHARP_DMG_STATS,
@@ -224,7 +226,7 @@ const FORMULA_SOURCE_KIND_VALUES = new Set(["runtime", "inCombatStat", "outOfCom
 const BUFF_MODIFIER_OPERATION_VALUES = new Set(["multiplyResolvedValue"])
 const FORMULA_VALUE_UNIT_VALUES = new Set(["storedValue", "storedPercent"])
 const OUT_OF_COMBAT_EFFECT_SOURCE_KIND_VALUES = new Set(["outOfCombatStat"])
-const SKILL_ROW_KIND_VALUES = new Set(["damageMultiplier", "dazeMultiplier", "energyCost", "statBonus"])
+const SKILL_ROW_KIND_VALUES = new Set(["damageMultiplier", "releaseMultiplier", "dazeMultiplier", "energyCost", "statBonus"])
 const SKILL_ROW_DAMAGE_BASIS_VALUES = new Set(["atk", "def", "sheerForce", "anomalyProficiency"])
 const SKILL_LEVEL_SCALE_VALUES = new Set(["skill", "coreSkill"])
 const CORE_SKILL_LEVEL_VALUES = new Set(["0", "A", "B", "C", "D", "E", "F"])
@@ -830,24 +832,30 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             }
         }
     } else if (targetKind === "anomaly") {
-        const settlementType = target.settlementType
-        requireEnum(errors, settlementType, ANOMALY_SETTLEMENT_TYPE_VALUES, `${path}.target.settlementType`)
+        const settlementTypes = anomalySettlementTypes(target)
+        if (Array.isArray(target.settlementTypes)) {
+            if (!target.settlementTypes.length) add(errors, `${path}.target.settlementTypes`, "结算类型至少需要一项。")
+            target.settlementTypes.forEach((type, index) => requireEnum(errors, type, ANOMALY_SETTLEMENT_TYPE_VALUES, `${path}.target.settlementTypes[${index}]`))
+            if (new Set(target.settlementTypes).size !== target.settlementTypes.length) add(errors, `${path}.target.settlementTypes`, "结算类型不能重复。")
+        } else {
+            requireEnum(errors, target.settlementType, ANOMALY_SETTLEMENT_TYPE_VALUES, `${path}.target.settlementType`)
+        }
         if (target.anomalyEffects !== undefined && !Array.isArray(target.anomalyEffects)) {
             add(errors, `${path}.target.anomalyEffects`, "具体异常必须是数组。")
-        } else if (settlementType === "luminescence" && target.anomalyEffects?.length) {
+        } else if (settlementTypes.includes("luminescence") && target.anomalyEffects?.length) {
             add(errors, `${path}.target.anomalyEffects`, "耀变结算只能配置为整类目标，不能指定具体异常。")
         } else if (Array.isArray(target.anomalyEffects)) {
-            const validEffects = calculationAnomalyIds(context, settlementType === "disorder" ? "disorder" : "anomaly")
+            const validEffects = new Set(settlementTypes.flatMap(type => [...calculationAnomalyIds(context, type === "disorder" ? "disorder" : "anomaly")]))
             target.anomalyEffects.forEach((effectId, index) => {
                 if (!validEffects.has(effectId)) {
                     add(errors, `${path}.target.anomalyEffects[${index}]`, "异常效果不存在或不属于所选结算类型。")
                 }
             })
         }
-        if (settlementType === "luminescence" && Array.isArray(target.anomalyVariants) && target.anomalyVariants.length) {
+        if (settlementTypes.includes("luminescence") && Array.isArray(target.anomalyVariants) && target.anomalyVariants.length) {
             add(errors, `${path}.target.anomalyVariants`, "耀变结算只能配置为整类目标，不能指定异常形态。")
-        } else if (target.anomalyVariants !== undefined && settlementType !== "attribute") {
-            add(errors, `${path}.target.anomalyVariants`, "只有属性异常结算可以配置异常形态。")
+        } else if (target.anomalyVariants !== undefined && (settlementTypes.length !== 1 || settlementTypes[0] !== "attribute")) {
+            add(errors, `${path}.target.anomalyVariants`, "只有纯属性异常结算可以配置异常形态。")
         } else if (target.anomalyVariants !== undefined) {
             if (!Array.isArray(target.anomalyVariants) || !target.anomalyVariants.length) {
                 add(errors, `${path}.target.anomalyVariants`, "异常形态至少需要选择一个。")
@@ -857,8 +865,48 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
                 )
             }
         }
+        if (target.releaseTargets !== undefined) {
+            if (!Array.isArray(target.releaseTargets) || !target.releaseTargets.length) {
+                add(errors, `${path}.target.releaseTargets`, "指定异放至少需要一个目标。")
+            } else if (settlementTypes.length !== 1 || settlementTypes[0] !== "release") {
+                add(errors, `${path}.target.releaseTargets`, "指定异放只能用于纯异放结算。")
+            } else {
+                const seenReleaseTargets = new Set()
+                const agents = Array.isArray(context.agents) ? context.agents : []
+                target.releaseTargets.forEach((releaseTarget, index) => {
+                    const targetPath = `${path}.target.releaseTargets[${index}]`
+                    const agentId = String(releaseTarget?.agentId ?? "").trim()
+                    const profileId = String(releaseTarget?.profileId ?? "").trim()
+                    if (!agentId) add(errors, `${targetPath}.agentId`, "异放角色不能为空。")
+                    if (!profileId) add(errors, `${targetPath}.profileId`, "异放方案不能为空。")
+                    const key = `${agentId}\u0000${profileId}`
+                    if (seenReleaseTargets.has(key)) add(errors, targetPath, "指定异放不能重复。")
+                    seenReleaseTargets.add(key)
+                    // Skill-source rules carry the edited agent on `agent`; keep the
+                    // roster as the general source for cross-agent targets.
+                    const agent = String(context.agent?.id ?? "") === agentId
+                        ? context.agent
+                        : String(context.currentAgent?.id ?? "") === agentId
+                            ? context.currentAgent
+                            : agents.find(item => String(item?.id ?? "") === agentId)
+                    if (!agent) {
+                        add(errors, `${targetPath}.agentId`, "异放角色不存在。")
+                    } else if (!(agent.anomalyReleaseProfiles ?? []).some(profile => String(profile?.id ?? "") === profileId)) {
+                        add(errors, `${targetPath}.profileId`, "异放方案不存在。")
+                    }
+                })
+            }
+        }
         if (!ANOMALY_TARGET_STAT_VALUES.has(rule.stat)) {
             add(errors, `${path}.stat`, "异常增幅对象不支持该增幅类型。")
+        }
+        if (settlementTypes.length > 1) {
+            if (!settlementTypes.every(type => ["attribute", "turbulence", "release"].includes(type))) {
+                add(errors, `${path}.target.settlementTypes`, "多结算异常规则只能选择属性异常、乱流和异放。")
+            }
+            if (!COMMON_ANOMALY_TARGET_STAT_VALUES.has(rule.stat)) {
+                add(errors, `${path}.stat`, "该增幅类型不能同时作用于多种异常结算。")
+            }
         }
         if (effectiveScope !== "inCombat") {
             add(errors, `${path}.target.kind`, "异常增幅对象只能用于局内 Buff。")
@@ -870,11 +918,11 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
         add(errors, `${path}.stat`, "异常持续时间延长必须指定异常效果。")
     }
     if (rule.stat === "anomalyCritRatePerInitialMasteryAbove100"
-        && (targetKind !== "anomaly" || target.settlementType !== "release")) {
+        && (targetKind !== "anomaly" || JSON.stringify(anomalySettlementTypes(target)) !== JSON.stringify(["release"]))) {
         add(errors, `${path}.stat`, "初始异常掌控转异常暴击率只能用于异放结算。")
     }
     if (rule.stat === "releaseProficiencyYieldBonus"
-        && (targetKind !== "anomaly" || target.settlementType !== "release")) {
+        && (targetKind !== "anomaly" || JSON.stringify(anomalySettlementTypes(target)) !== JSON.stringify(["release"]))) {
         add(errors, `${path}.stat`, "异放精通收益提升只能用于异放结算。")
     }
     if (DEFAULT_EVENT_MODIFIER_STAT_VALUES.has(rule.stat) && effectiveScope !== "inCombat") {
@@ -967,8 +1015,13 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
             }
             requireName(errors, source.label, `${path}.source.label`)
             requireEnum(errors, source.unit, FORMULA_VALUE_UNIT_VALUES, `${path}.source.unit`)
-            if (targetKind !== "default") {
-                add(errors, `${path}.target.kind`, "局外面板公式只能作用于常规属性 / 全局效果。")
+            const anomalyCritFormulaTarget = rule.stat === "anomalyCritRate"
+                && targetKind === "anomaly"
+                && anomalySettlementTypes(rule.target).every(type => ["attribute", "turbulence", "release"].includes(type))
+                && source.stat === "anomalyMastery"
+                && rule.formula?.valueUnit === "storedPercent"
+            if (targetKind !== "default" && !anomalyCritFormulaTarget) {
+                add(errors, `${path}.target.kind`, "局外面板公式只能作用于常规属性 / 全局效果，或异常暴击率的属性异常/异放目标。")
             }
         } else {
             requireName(errors, source.label ?? rule.sourceLabel, `${path}.source.label`)
@@ -1658,6 +1711,39 @@ function validateCalculationSkillRef(errors, skillRef, path, context = {}, agent
     return { skill, category, move, row }
 }
 
+function validateReleaseSkillRef(errors, skillRef, path, context = {}, agentId = "") {
+    if (!skillRef || typeof skillRef !== "object" || Array.isArray(skillRef)) {
+        add(errors, path, "必须选择异放来源技能。")
+        return null
+    }
+    for (const key of ["agentSkillId", "categoryId", "moveId", "rowId"]) {
+        if (!String(skillRef[key] ?? "").trim()) add(errors, `${path}.${key}`, "必填。")
+    }
+    const skill = skillCatalogForRef(context, skillRef)
+    if (!skill) {
+        add(errors, `${path}.agentSkillId`, "技能倍率目录不存在。")
+        return null
+    }
+    if (agentId && skill.agentId !== agentId) add(errors, `${path}.agentSkillId`, "技能倍率目录不属于当前角色。")
+    const category = (skill.categories ?? []).find(item => item.id === skillRef.categoryId)
+    if (!category) {
+        add(errors, `${path}.categoryId`, "技能大类不存在。")
+        return null
+    }
+    const move = (category.moves ?? []).find(item => item.id === skillRef.moveId)
+    if (!move) {
+        add(errors, `${path}.moveId`, "技能招式不存在。")
+        return null
+    }
+    const row = (move.rows ?? []).find(item => item.id === skillRef.rowId)
+    if (!row) {
+        add(errors, `${path}.rowId`, "技能倍率行不存在。")
+        return null
+    }
+    if (row.kind !== "releaseMultiplier") add(errors, `${path}.rowId`, "异放来源只能选择 releaseMultiplier 行。")
+    return { skill, category, move, row }
+}
+
 function validateSkillBuffSourceRef(errors, skillRef, path, context = {}, agentId = "") {
     if (!skillRef || typeof skillRef !== "object" || Array.isArray(skillRef)) {
         add(errors, path, "必须选择来源技能。")
@@ -1903,6 +1989,10 @@ function validateCalculationEvent(errors, event, path, context = {}, agentId = "
         }
         const triggerAgentId = String(event.triggerActorRef?.agentId ?? "")
         const profileId = String(event.triggerActorRef?.profileId ?? "")
+        const releaseProfile = currentAgent?.anomalyReleaseProfiles?.find(profile => profile?.id === profileId)
+        if (event.releaseSkillRef !== undefined || (releaseProfile?.expression?.kind === "skillMultiplier" && !releaseProfile?.releaseSkillRef)) {
+            validateReleaseSkillRef(errors, event.releaseSkillRef, `${path}.releaseSkillRef`, context, agentId)
+        }
         if (!triggerAgentId || triggerAgentId !== String(agentId ?? "")) {
             add(errors, `${path}.triggerActorRef.agentId`, "异放触发者必须是当前角色。")
         }
@@ -1915,8 +2005,13 @@ function validateCalculationEvent(errors, event, path, context = {}, agentId = "
             if (!triggerAgent?.anomalyReleaseProfiles?.some(profile => profile?.id === profileId)) {
                 add(errors, `${path}.triggerActorRef.profileId`, "异放倍率方案不存在。")
             }
+            const minimumCinemaLevel = Number(releaseProfile?.minimumCinemaLevel ?? 0)
+            if (Number.isFinite(minimumCinemaLevel) && Number(context.cinemaLevel ?? 0) < minimumCinemaLevel) {
+                add(errors, `${path}.triggerActorRef.profileId`, `该异放方案仅在${minimumCinemaLevel}影及以上开放。`)
+            }
         }
         const sourceAgentId = String(event.anomalySource?.actorRef?.agentId ?? "")
+        if (currentAgent?.id === "fioni" && sourceAgentId !== triggerAgentId) add(errors, `${path}.anomalySource.actorRef.agentId`, "菲欧妮异放固定使用自身面板。")
         if (!sourceAgentId) {
             add(errors, `${path}.anomalySource.actorRef.agentId`, "必须选择原异常施加者。")
         } else if (sourceAgentId !== triggerAgentId) {
@@ -1995,7 +2090,7 @@ function validateCalculationEventList(errors, events, path, context = {}, agentI
     }
     const ids = new Set()
     events.forEach((event, index) => {
-        validateCalculationEvent(errors, event, `${path}[${index}]`, context, agentId, options)
+        validateCalculationEvent(errors, event, `${path}[${index}]`, { ...context, cinemaLevel: options.cinemaLevel ?? context.cinemaLevel }, agentId, options)
         if (event?.id) {
             if (ids.has(event.id)) {
                 add(errors, `${path}[${index}].id`, "事件 ID 不能重复。")
@@ -2103,6 +2198,7 @@ function validateDefaultCalculationConfigEntry(errors, config, path, context = {
         allowEmpty: true,
         allowSkillGroup: true,
         skillGroupById,
+        cinemaLevel: config.cinemaLevel ?? context.cinemaLevel ?? 0,
     })
     if (config.selectedEventId && !eventIds.has(config.selectedEventId)) {
         add(errors, `${path}.selectedEventId`, "必须指向一个已配置事件。")
@@ -2196,7 +2292,7 @@ function validateDefaultCalculationConfig(errors, config, context = {}, agentId 
                     errors,
                     variant,
                     path,
-                    { ...context, potentialLevel: minPotentialLevel },
+                    { ...context, potentialLevel: minPotentialLevel, cinemaLevel: variant.cinemaLevel ?? 0 },
                     agentId,
                     skillGroupById,
                 )
@@ -2220,7 +2316,7 @@ function validateDefaultCalculationConfig(errors, config, context = {}, agentId 
                                 errors,
                                 cinemaVariant,
                                 cinemaPath,
-                                { ...context, potentialLevel: minPotentialLevel },
+                                { ...context, potentialLevel: minPotentialLevel, cinemaLevel: cinemaVariant.cinemaLevel ?? 0 },
                                 agentId,
                                 skillGroupById,
                             )
@@ -2315,7 +2411,7 @@ function validateSkillValues(errors, row, levelRange, path) {
 
     row.values.forEach((value, index) => {
         const numericValue = requireFinite(errors, value, `${path}.values[${index}]`)
-        if (Number.isFinite(numericValue) && numericValue <= 0 && (row.kind ?? "damageMultiplier") === "damageMultiplier") {
+        if (Number.isFinite(numericValue) && numericValue <= 0 && ["damageMultiplier", "releaseMultiplier"].includes(row.kind ?? "damageMultiplier")) {
             add(errors, `${path}.values[${index}]`, "伤害倍率必须大于 0。")
         }
     })
@@ -2504,7 +2600,7 @@ function validateSkillBuffs(errors, skillBuffs, context = {}, agentId = "") {
     })
 }
 
-function validateAnomalyReleaseProfiles(errors, profiles) {
+function validateAnomalyReleaseProfiles(errors, profiles, context = {}, agentId = "") {
     if (profiles === undefined || profiles === null) return
     if (!Array.isArray(profiles)) {
         add(errors, "anomalyReleaseProfiles", "必须是数组。")
@@ -2517,6 +2613,15 @@ function validateAnomalyReleaseProfiles(errors, profiles) {
         const id = String(profile?.id ?? "")
         if (ids.has(id)) add(errors, `${path}.id`, "同一角色的异放倍率方案 ID 不能重复。")
         ids.add(id)
+        if (profile?.minimumCinemaLevel !== undefined) {
+            const level = requireFinite(errors, profile.minimumCinemaLevel, `${path}.minimumCinemaLevel`)
+            if (Number.isFinite(level) && (!Number.isInteger(level) || level < 0 || level > 6)) {
+                add(errors, `${path}.minimumCinemaLevel`, "最低影画必须是 0 到 6 的整数。")
+            }
+        }
+        if (profile?.releaseSkillRef !== undefined) {
+            validateReleaseSkillRef(errors, profile.releaseSkillRef, `${path}.releaseSkillRef`, context, agentId)
+        }
         if (profile?.default === true) defaultCount += 1
         for (const message of validateAnomalyReleaseProfile(profile)) {
             add(errors, path, message)
@@ -2660,7 +2765,7 @@ function validateAgent(item, context) {
         ...context, agent: item, allowCorePassiveScalingSource: true,
     }, item?.id)
     validateCinemaBuffs(errors, item?.combatBuffs?.cinemaBuffs, context)
-    validateAnomalyReleaseProfiles(errors, item?.anomalyReleaseProfiles)
+    validateAnomalyReleaseProfiles(errors, item?.anomalyReleaseProfiles, context, item?.id)
     validatePreferredDriveDiscs(errors, item?.preferredDriveDiscs, context)
     validateImportantSubStats(errors, item?.importantSubStats)
     validateImportantPanelStats(errors, item?.importantPanelStats)

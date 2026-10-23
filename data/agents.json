@@ -8312,7 +8312,11 @@
               },
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8333,7 +8337,11 @@
               "allowExtendedPanelFormula": true,
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8375,7 +8383,11 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8416,7 +8428,11 @@
               },
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8499,7 +8515,11 @@
                 "mode": "flat",
                 "target": {
                   "kind": "anomaly",
-                  "settlementType": "attribute",
+                  "settlementTypes": [
+                    "attribute",
+                    "turbulence",
+                    "release"
+                  ],
                   "anomalyEffects": [
                     "assault"
                   ]
@@ -8519,7 +8539,11 @@
                 "mode": "flat",
                 "target": {
                   "kind": "anomaly",
-                  "settlementType": "attribute",
+                  "settlementTypes": [
+                    "attribute",
+                    "turbulence",
+                    "release"
+                  ],
                   "anomalyEffects": [
                     "assault"
                   ]
@@ -11157,6 +11181,724 @@
         "masteryConversion": "Reads unrounded initial/out-of-combat mastery; source states no cap and no flooring. Combat-only mastery does not increase impact conversion.",
         "defaultObjective": "One self-sourced corruption Abloom at four tremolo stacks. Not a whole team rotation or automatic stun simulation.",
         "unsupportedMechanics": "Automatic buildup, stun generation/duration, resource/tremolo transitions and multi-actor disorder source snapshots remain descriptive."
+      }
+    },
+    {
+      "id": "fioni",
+      "name": {
+        "zhCN": "菲欧妮"
+      },
+      "rarity": "S",
+      "attribute": "fire",
+      "damageElement": "fire",
+      "specialty": "anomaly",
+      "attackTypes": [
+        "slash"
+      ],
+      "faction": "坎卜斯黑枝",
+      "images": {
+        "icon": "/assets/agents/fioni.png",
+        "source": "https://act-upload.mihoyo.com/nap-obc-indep/2026/10/16/71319299/0c6fe6449ebd56b87745a332ade80e1f_5954047325411114795.png",
+        "officialPage": "https://baike.mihoyo.com/zzz/wiki/content/2216/detail?mhy_presentation_style=fullscreen"
+      },
+      "level60": {
+        "hpBase": 7673,
+        "atkBase": 797,
+        "defBase": 612,
+        "critRate": 5,
+        "critDmg": 50,
+        "impact": 86,
+        "anomalyProficiency": 118,
+        "anomalyMastery": 116,
+        "energyRegen": 120,
+        "penRatio": 0
+      },
+      "combatBuffs": {
+        "corePassive": {
+          "scope": "inCombat",
+          "name": {
+            "zhCN": "核心被动：涅槃"
+          },
+          "description": {
+            "zhCN": "核心被动：涅槃\n菲欧妮的异常精通提升43/50/57/64/71/78/85点；\n队伍中任意角色对敌人造成属性异常伤害时，会使其陷入[灼蚀]状态，持续20秒，重复触发刷新持续时间；[灼蚀]状态下的敌人受到属性异常伤害时有概率触发暴击，基础暴击率为30%，暴击伤害为12.5%/14.6%/16.7%/18.8%/20.8%/22.9%/25%，若菲欧妮的初始异常掌控大于155点，每点超过的异常掌控会使得该效果的暴击率额外提升0.7%；\n当菲欧妮的初始异常掌控达到255点时，[灼蚀]状态下的敌人受到属性异常伤害的暴击率达到最大值；\n[灼蚀]状态下的敌人每8秒受到菲欧妮25%/29.2%/33.3%/37.5%/41.7%/45.8%/50%攻击力的火属性伤害，该伤害视为[强化特殊技]伤害。"
+          },
+          "effects": [
+            {
+              "id": "fioni-core-anomaly-proficiency",
+              "type": "fixed",
+              "stat": "anomalyProficiency",
+              "value": 43,
+              "mode": "flat",
+              "target": {
+                "kind": "default"
+              },
+              "valueSource": {
+                "kind": "corePassiveScaling",
+                "field": "anomalyProficiencyFlat"
+              }
+            },
+            {
+              "id": "fioni-sear-crit-rate-attribute",
+              "type": "formula",
+              "scope": "inCombat",
+              "stat": "anomalyCritRate",
+              "mode": "flat",
+              "target": {
+                "kind": "anomaly",
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ]
+              },
+              "source": {
+                "kind": "outOfCombatStat",
+                "stat": "anomalyMastery",
+                "unit": "storedValue",
+                "label": {
+                  "zhCN": "初始异常掌控"
+                },
+                "variable": "x"
+              },
+              "formula": {
+                "expression": "clamp(30 + max(x - 155, 0) * 0.7, 0, 100)",
+                "valueUnit": "storedPercent"
+              }
+            },
+            {
+              "id": "fioni-sear-crit-dmg-attribute",
+              "type": "fixed",
+              "stat": "anomalyCritDmg",
+              "value": 12.5,
+              "mode": "flat",
+              "target": {
+                "kind": "anomaly",
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ]
+              },
+              "valueSource": {
+                "kind": "corePassiveScaling",
+                "field": "searAnomalyCritDmgPct"
+              }
+            }
+          ],
+          "buffModifiers": [],
+          "defaultChecked": true
+        },
+        "additionalAbility": {
+          "scope": "inCombat",
+          "name": {
+            "zhCN": "额外能力：黑枝王牌"
+          },
+          "description": {
+            "zhCN": "队伍中存在其他异常角色或同阵营角色时，灼蚀目标受到属性异常伤害的暴击伤害提升15%。"
+          },
+          "effects": [
+            {
+              "id": "fioni-additional-sear-crit-dmg-attribute",
+              "type": "fixed",
+              "stat": "anomalyCritDmg",
+              "value": 15,
+              "mode": "flat",
+              "target": {
+                "kind": "anomaly",
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ]
+              }
+            }
+          ],
+          "buffModifiers": [],
+          "defaultChecked": true
+        },
+        "skillBuffs": [
+          {
+            "id": "release_crit_dmg",
+            "scope": "inCombat",
+            "sourceSkillRef": {
+              "agentSkillId": "fioni",
+              "categoryId": "basic",
+              "moveId": "basic_purifying_flame"
+            },
+            "name": {
+              "zhCN": "焚罪／烬火追魂｜异放额外暴伤"
+            },
+            "description": {
+              "zhCN": "焚罪与烬火追魂触发的异放暴击时，异常暴击伤害额外提升40%。"
+            },
+            "effects": [
+              {
+                "id": "fioni-release-crit-dmg",
+                "type": "fixed",
+                "stat": "anomalyCritDmg",
+                "value": 40,
+                "mode": "flat",
+                "target": {
+                  "kind": "anomaly",
+                  "settlementType": "release",
+                  "releaseTargets": [
+                    {
+                      "agentId": "fioni",
+                      "profileId": "fioni_purifying_flame_release"
+                    },
+                    {
+                      "agentId": "fioni",
+                      "profileId": "fioni_soul_searching_blaze_release"
+                    }
+                  ]
+                }
+              }
+            ],
+            "buffModifiers": [],
+            "defaultChecked": true
+          }
+        ],
+        "cinemaBuffs": [
+          {
+            "cinemaLevel": 1,
+            "cinemaName": {
+              "zhCN": "痛觉残留与刺激游行"
+            },
+            "name": {
+              "zhCN": "影画1｜痛觉残留与刺激游行"
+            },
+            "description": {
+              "zhCN": "进入战场时，菲欧妮获得1点[升变]，在勘域模式中此效果180秒内最多触发一次；\n[灼蚀]状态下的敌人受到属性异常伤害的暴击伤害额外提升25%；\n[燃烧攻击]造成伤害时，[燔焰]的获取效率提升15%。"
+            },
+            "scope": "inCombat",
+            "defaultChecked": false,
+            "effects": [
+              {
+                "id": "fioni-c1-sear-crit-dmg-attribute",
+                "type": "fixed",
+                "stat": "anomalyCritDmg",
+                "value": 25,
+                "mode": "flat",
+                "target": {
+                  "kind": "anomaly",
+                  "settlementTypes": [
+                    "attribute",
+                    "turbulence",
+                    "release"
+                  ]
+                }
+              }
+            ],
+            "buffModifiers": []
+          },
+          {
+            "cinemaLevel": 2,
+            "cinemaName": {
+              "zhCN": "好奇心害不死猫"
+            },
+            "name": {
+              "zhCN": "影画2｜好奇心害不死猫"
+            },
+            "description": {
+              "zhCN": "菲欧妮对敌人施加[灼烧]效果时，该效果的持续时间提升2秒；\n菲欧妮对[灼蚀]状态下的敌人造成的伤害提升30%。"
+            },
+            "scope": "inCombat",
+            "defaultChecked": false,
+            "effects": [
+              {
+                "id": "fioni-c2-damage",
+                "type": "fixed",
+                "stat": "dmgBonus",
+                "value": 30,
+                "mode": "flat",
+                "target": {
+                  "kind": "default"
+                }
+              },
+              {
+                "id": "fioni-c2-burn-duration-attribute",
+                "type": "fixed",
+                "stat": "anomalyDurationBonusSeconds",
+                "mode": "flat",
+                "value": 2,
+                "target": {
+                  "kind": "anomaly",
+                  "settlementType": "attribute",
+                  "anomalyEffects": [
+                    "burn"
+                  ]
+                }
+              },
+              {
+                "id": "fioni-c2-burn-duration-disorder",
+                "type": "fixed",
+                "stat": "anomalyDurationBonusSeconds",
+                "mode": "flat",
+                "value": 2,
+                "target": {
+                  "kind": "anomaly",
+                  "settlementType": "disorder",
+                  "anomalyEffects": [
+                    "burn"
+                  ]
+                }
+              },
+              {
+                "id": "fioni-c2-burn-duration-turbulence",
+                "type": "fixed",
+                "stat": "anomalyDurationBonusSeconds",
+                "mode": "flat",
+                "value": 2,
+                "target": {
+                  "kind": "anomaly",
+                  "settlementType": "turbulence",
+                  "anomalyEffects": [
+                    "burn"
+                  ]
+                }
+              }
+            ],
+            "buffModifiers": []
+          },
+          {
+            "cinemaLevel": 6,
+            "cinemaName": {
+              "zhCN": "禁闭室手记"
+            },
+            "name": {
+              "zhCN": "影画6｜禁闭室手记"
+            },
+            "description": {
+              "zhCN": "菲欧妮无视目标15%全属性伤害抗性；\n菲欧妮发动[强化特殊技：眩焰]时，获得1点[升变]；\n菲欧妮触发的[异放]效果无视敌人40%防御力。"
+            },
+            "scope": "inCombat",
+            "defaultChecked": false,
+            "effects": [
+              {
+                "id": "fioni-c6-all-res-ignore",
+                "type": "fixed",
+                "stat": "allResIgnore",
+                "value": 15,
+                "mode": "flat",
+                "target": {
+                  "kind": "default"
+                }
+              },
+              {
+                "id": "fioni-c6-release-def-ignore",
+                "type": "fixed",
+                "stat": "enemyDefIgnore",
+                "value": 40,
+                "mode": "flat",
+                "target": {
+                  "kind": "anomaly",
+                  "settlementType": "release"
+                }
+              }
+            ],
+            "buffModifiers": []
+          }
+        ]
+      },
+      "cinemaDescriptions": [
+        {
+          "cinemaLevel": 1,
+          "name": {
+            "zhCN": "痛觉残留与刺激游行"
+          },
+          "description": {
+            "zhCN": "进入战场时，菲欧妮获得1点[升变]，在勘域模式中此效果180秒内最多触发一次；\n[灼蚀]状态下的敌人受到属性异常伤害的暴击伤害额外提升25%；\n[燃烧攻击]造成伤害时，[燔焰]的获取效率提升15%。"
+          },
+          "modeled": true
+        },
+        {
+          "cinemaLevel": 2,
+          "name": {
+            "zhCN": "好奇心害不死猫"
+          },
+          "description": {
+            "zhCN": "菲欧妮对敌人施加[灼烧]效果时，该效果的持续时间提升2秒；\n菲欧妮对[灼蚀]状态下的敌人造成的伤害提升30%。"
+          },
+          "modeled": true
+        },
+        {
+          "cinemaLevel": 3,
+          "name": {
+            "zhCN": "稻草人症候群"
+          },
+          "description": {
+            "zhCN": "[普通攻击]、[闪避]、[支援技]、[特殊技]、[连携技]技能等级+2\n技能等级输入是最终等级，不重复加级。"
+          },
+          "modeled": true
+        },
+        {
+          "cinemaLevel": 4,
+          "name": {
+            "zhCN": "生命尽头与冷酷仙境"
+          },
+          "description": {
+            "zhCN": "[终结技：烬火追魂]以及[普通攻击：焚罪]终结一击命中处于异常状态的敌人时，\n额外触发一次[异放]效果，固定结算600%倍率的对应属性的属性异常伤害。\n使用独立600%异放事件手动加入，不自动叠加到默认单次异放；按约定不继承主异放的40%额外暴伤。"
+          },
+          "modeled": true
+        },
+        {
+          "cinemaLevel": 5,
+          "name": {
+            "zhCN": "狂欢马戏团"
+          },
+          "description": {
+            "zhCN": "[普通攻击]、[闪避]、[支援技]、[特殊技]、[连携技]技能等级+2\n技能等级输入是最终等级，不重复加级。"
+          },
+          "modeled": true
+        },
+        {
+          "cinemaLevel": 6,
+          "name": {
+            "zhCN": "禁闭室手记"
+          },
+          "description": {
+            "zhCN": "菲欧妮无视目标15%全属性伤害抗性；\n菲欧妮发动[强化特殊技：眩焰]时，获得1点[升变]；\n菲欧妮触发的[异放]效果无视敌人40%防御力。"
+          },
+          "modeled": true
+        }
+      ],
+      "coreSkill": {
+        "name": {
+          "zhCN": "涅槃"
+        },
+        "defaultLevel": "F",
+        "maxLevel": "F",
+        "levels": [
+          {
+            "level": "A",
+            "label": "强化A",
+            "stats": [
+              {
+                "stat": "anomalyMasteryFlat",
+                "value": 12,
+                "mode": "flat",
+                "target": "panel"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "B",
+            "label": "强化B",
+            "stats": [
+              {
+                "stat": "atkBase",
+                "value": 25,
+                "mode": "flat",
+                "target": "base"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "C",
+            "label": "强化C",
+            "stats": [
+              {
+                "stat": "anomalyMasteryFlat",
+                "value": 12,
+                "mode": "flat",
+                "target": "panel"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "D",
+            "label": "强化D",
+            "stats": [
+              {
+                "stat": "atkBase",
+                "value": 25,
+                "mode": "flat",
+                "target": "base"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "E",
+            "label": "强化E",
+            "stats": [
+              {
+                "stat": "anomalyMasteryFlat",
+                "value": 12,
+                "mode": "flat",
+                "target": "panel"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "level": "F",
+            "label": "强化F",
+            "stats": [
+              {
+                "stat": "atkBase",
+                "value": 25,
+                "mode": "flat",
+                "target": "base"
+              }
+            ],
+            "skillLevelBonuses": [
+              {
+                "skill": "corePassive",
+                "value": 1
+              }
+            ]
+          }
+        ],
+        "corePassiveScaling": {
+          "name": {
+            "zhCN": "核心被动：涅槃"
+          },
+          "levels": [
+            {
+              "level": 1,
+              "anomalyProficiencyFlat": 43,
+              "searAnomalyCritDmgPct": 12.5
+            },
+            {
+              "level": 2,
+              "anomalyProficiencyFlat": 50,
+              "searAnomalyCritDmgPct": 14.583333333333334
+            },
+            {
+              "level": 3,
+              "anomalyProficiencyFlat": 57,
+              "searAnomalyCritDmgPct": 16.666666666666668
+            },
+            {
+              "level": 4,
+              "anomalyProficiencyFlat": 64,
+              "searAnomalyCritDmgPct": 18.75
+            },
+            {
+              "level": 5,
+              "anomalyProficiencyFlat": 71,
+              "searAnomalyCritDmgPct": 20.833333333333336
+            },
+            {
+              "level": 6,
+              "anomalyProficiencyFlat": 78,
+              "searAnomalyCritDmgPct": 22.916666666666664
+            },
+            {
+              "level": 7,
+              "anomalyProficiencyFlat": 85,
+              "searAnomalyCritDmgPct": 25
+            }
+          ],
+          "defaultLevelAtCoreSkill": "F"
+        },
+        "sources": []
+      },
+      "anomalyReleaseProfiles": [
+        {
+          "id": "fioni_purifying_flame_release",
+          "name": {
+            "zhCN": "焚罪异放"
+          },
+          "default": true,
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "fixedAnomalyMultiplier",
+          "expression": {
+            "kind": "skillMultiplier",
+            "unit": "percent",
+            "whiteBoxRole": "conversionSource",
+            "label": {
+              "zhCN": "焚罪异放倍率"
+            }
+          },
+          "releaseSkillRef": {
+            "agentSkillId": "fioni",
+            "categoryId": "basic",
+            "moveId": "basic_purifying_flame",
+            "rowId": "release"
+          }
+        },
+        {
+          "id": "fioni_soul_searching_blaze_release",
+          "name": {
+            "zhCN": "烬火追魂异放"
+          },
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "fixedAnomalyMultiplier",
+          "expression": {
+            "kind": "skillMultiplier",
+            "unit": "percent",
+            "whiteBoxRole": "conversionSource",
+            "label": {
+              "zhCN": "烬火追魂异放倍率"
+            }
+          },
+          "releaseSkillRef": {
+            "agentSkillId": "fioni",
+            "categoryId": "chain",
+            "moveId": "chain_soul_searching_blaze",
+            "rowId": "release"
+          }
+        },
+        {
+          "id": "fioni_c4_extra_release",
+          "name": {
+            "zhCN": "影画4额外异放"
+          },
+          "supportedElements": [
+            "ether",
+            "electric",
+            "fire",
+            "physical",
+            "ice",
+            "wind"
+          ],
+          "resultMode": "fixedAnomalyMultiplier",
+          "expression": {
+            "kind": "constant",
+            "value": 600,
+            "unit": "percent",
+            "whiteBoxRole": "conversionSource",
+            "label": {
+              "zhCN": "影画4固定异放倍率"
+            }
+          },
+          "critDmgBonus": 0,
+          "minimumCinemaLevel": 4
+        }
+      ],
+      "preferredDriveDiscs": {
+        "defaultSetIds": [
+          "freedom_blues"
+        ],
+        "defaultTwoPieceSetIds": [
+          "phaethons_melody"
+        ],
+        "mainStatLimits": {
+          "4": [
+            "anomalyProficiency",
+            "atkPct"
+          ],
+          "5": [
+            "fireDmg",
+            "atkPct",
+            "penRatio"
+          ],
+          "6": [
+            "anomalyMastery",
+            "atkPct"
+          ]
+        }
+      },
+      "defaultCalculationConfig": {
+        "mode": "anomaly",
+        "cinemaLevel": 0,
+        "name": {
+          "zhCN": "单次焚罪异放"
+        },
+        "events": [
+          {
+            "id": "fioni_purifying_flame_release",
+            "kind": "anomaly",
+            "count": 1,
+            "stunned": true,
+            "critMode": "expected",
+            "settlementType": "release",
+            "anomalyEffect": "burn",
+            "triggerActorRef": {
+              "agentId": "fioni",
+              "profileId": "fioni_purifying_flame_release"
+            },
+            "releaseSkillRef": {
+              "agentSkillId": "fioni",
+              "categoryId": "basic",
+              "moveId": "basic_purifying_flame",
+              "rowId": "release"
+            },
+            "anomalySource": {
+              "actorRef": {
+                "agentId": "fioni"
+              }
+            }
+          }
+        ],
+        "skillLevelsByCategory": {
+          "basic": 12,
+          "dodge": 12,
+          "assist": 12,
+          "special": 12,
+          "chain": 12
+        },
+        "selectedEventId": "fioni_purifying_flame_release"
+      },
+      "importantSubStats": [
+        "anomalyProficiency",
+        "atkPct"
+      ],
+      "importantPanelStats": [
+        "atk",
+        "anomalyProficiency",
+        "anomalyMastery"
+      ],
+      "hidden": false,
+      "sources": [
+        "https://baike.mihoyo.com/zzz/wiki/content/2216/detail?mhy_presentation_style=fullscreen",
+        "https://zzz.nanoka.cc/character/1641",
+        "https://static.nanoka.cc/zzz/3.3.12+19629936/en/character/1641.json "
+      ],
+      "officialEntryPageId": 2216,
+      "officialEntryVersion": "1792158014",
+      "verification": {
+        "official": "Official structured HoYoWiki entry 2216, revision 1792158014; skill data labeled creative test server.",
+        "nanokaSupplement": "Nanoka 3.3.12+19629936 supplies missing Core Passive A-F values; internal values preserve linear fractions rather than display rounding.",
+        "defaultObjective": "One self-sourced Fire Abloom/Release from Basic Attack: Purifying Flame at Basic level 12 (445%).",
+        "unsupportedMechanics": "Sear lifetime, Pyre/Ascension/Wither and Bloom resource transitions, fatal-damage recovery, automatic 8-second tick scheduling and Ultimate follow-up remain descriptive/manual events.",
+        "masteryPrecision": "Uses unrounded initial mastery; combat-only mastery does not alter Sear CRIT. Linear Core fractions are a user-approved modeling assumption, not measured internal game values.",
+        "acquiredAt": "2026-10-17",
+        "officialEntrySha256": "19a0e2e12c9bcca978039daf972786208cbb6ad73e07df1d2a7aa33fb433dea2"
       }
     }
   ]

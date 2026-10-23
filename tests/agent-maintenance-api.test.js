@@ -166,7 +166,7 @@ try {
     const dynamicRule = janeReread.combatBuffs.corePassive.effects.find(rule => rule.formula?.parameterSources)
     assert.equal(dynamicRule.stat, "anomalyCritRate")
     assert.equal(dynamicRule.formula.parameters.rate, 0.09)
-    assert.deepEqual(dynamicRule.target, { kind: "anomaly", settlementType: "attribute", anomalyEffects: ["assault"] })
+    assert.deepEqual(dynamicRule.target, { kind: "anomaly", settlementTypes: ["attribute", "turbulence", "release"], anomalyEffects: ["assault"] })
     assert.equal(janeReread.potentialVision.defaultLevel, 6)
     assert.deepEqual(janeReread.defaultCalculationConfig, jane.defaultCalculationConfig)
     const frenzy = janeReread.combatBuffs.skillBuffs.find(buff => buff.id === "frenzy")

@@ -1308,6 +1308,7 @@ function cleanCalculationEvent(event = {}, index = 0, options = {}) {
                 settlementType: "release",
                 anomalyEffect: String(event.anomalyEffect ?? "").trim(),
                 triggerActorRef: { agentId: triggerAgentId, profileId },
+                ...(cleanCalculationSkillRef(event.releaseSkillRef) ? { releaseSkillRef: cleanCalculationSkillRef(event.releaseSkillRef) } : {}),
                 anomalySource: {
                     actorRef: { agentId: sourceAgentId },
                     ...(snapshot ? { snapshot } : {}),
@@ -2112,6 +2113,11 @@ async function saveMaintenanceItem(resource, item, headers = {}) {
             const agentSkillsPayload = await readDataFile("agent_skills.json")
             validationContext.agentSkills = agentSkillsPayload.agentSkills ?? []
         }
+        if (resource !== "agents") {
+            // Rules on other resources can target an agent's anomaly Release.
+            const agentsPayload = await readDataFile("agents.json")
+            validationContext.agents = agentsPayload.agents ?? []
+        }
         if (resource === "agents") {
             const [anomalyEffectsPayload, driveDiscSetsPayload, combatBuffsPayload] = await Promise.all([
                 readDataFile("anomaly_effects.json"),
@@ -2128,6 +2134,12 @@ async function saveMaintenanceItem(resource, item, headers = {}) {
             cleanOptions.disorderEffects = validationContext.disorderEffects
         }
         const itemForValidation = cleanMaintenanceItem(resource, normalizedItem, cleanOptions)
+        if (resource === "agents") {
+            // Include the draft so Release profiles added in this edit validate.
+            validationContext.agents = itemForValidation?.id
+                ? upsertById(collection, itemForValidation)
+                : collection
+        }
         assertValidMaintenanceItem(resource, itemForValidation, validationContext)
         const savedItem = itemForValidation
         const nextPayload = {

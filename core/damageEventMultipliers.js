@@ -1,4 +1,4 @@
-import { anomalyReleaseProfile, evaluateAnomalyReleaseProfile, isReleaseSettlement } from "./anomalyRelease.js"
+import { anomalyReleaseProfile, evaluateAnomalyReleaseProfile, isReleaseSettlement, resolveReleaseSkillRef } from "./anomalyRelease.js"
 import { corePassiveScalingRow } from "./corePassiveScaling.js"
 
 const DEFAULT_ELAPSED_STEP_SECONDS = 0.5
@@ -166,8 +166,9 @@ export function resolveDamageEventMultiplier(event = {}, catalog = {}, releaseCo
         const agent = releaseContext.agent
             ?? (catalog?.agents ?? []).find(item => item?.id === event.triggerActorRef?.agentId)
         const profile = event.releaseProfile
-            ?? anomalyReleaseProfile(agent, event.triggerActorRef?.profileId, effect.element)
+            ?? anomalyReleaseProfile(agent, event.triggerActorRef?.profileId, effect.element, releaseContext.cinemaLevel ?? 0)
         if (!profile) return null
+        const skill = resolveReleaseSkillRef(catalog, agent, profile.releaseSkillRef ?? event.releaseSkillRef, releaseContext)
         return evaluateAnomalyReleaseProfile(profile, {
             originalBaseMultiplier: finiteNonNegative(effect.baseMultiplier, 0),
             trigger: {
@@ -176,6 +177,7 @@ export function resolveDamageEventMultiplier(event = {}, catalog = {}, releaseCo
             },
             releaseModifiers: releaseContext.releaseModifiers ?? {},
             coreScalingRow: event.releaseCoreScalingRow ?? corePassiveScalingRow(agent, releaseContext.coreSkillLevel),
+            releaseSkillMultiplier: skill?.releaseSkillMultiplier ?? event.releaseSkillMultiplier,
             event,
             eventElement: effect.element,
         }).finalBaseMultiplier * damageScale

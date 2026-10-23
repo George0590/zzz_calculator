@@ -12,16 +12,18 @@ import { analyzeDriveDiscStatGains } from "../core/driveDiscAnalysis-core.js"
 import { optimizeDriveDiscsAsync } from "../backend/driveDiscOptimizer.js"
 import { createDriveDiscOptimizerRuntime } from "../core/driveDiscOptimizer-core.js"
 import {
+    compileInitialMasteryAnomalyCritFormula,
     evaluateInCombatFormulaRule,
     formulaExpressionVariables,
     formulaParameterNames,
     formulaParameterValues,
     isAllowedInCombatFormulaSourceType,
+    isInitialMasteryAnomalyCritRule,
     materializeFormulaRuleForModificationLevel,
     migrateLegacyBloodMarrowWEngine,
     migrateLegacySharpOverflowEffect,
 } from "../core/effectFormula.js"
-import { validateFormulaExpression } from "../core/formulaEvaluator.js"
+import { evaluateFormulaExpression, validateFormulaExpression } from "../core/formulaEvaluator.js"
 import {
     defaultRuntimeForBuff,
     sanitizeAddedCombatBuffs,
@@ -532,5 +534,78 @@ const marrowText = storedEffectRuleText(
 assert.match(marrowText, /局内暴击率超过100%时/u)
 assert.match(marrowText, /当前局内暴击率118.8%，通用伤害提升15.04%/u)
 assert.doesNotMatch(marrowText, /来源数值输入/u)
+
+// Fioni's initial-mastery -> anomaly CRIT conversion is the only formula the
+// strict optimizer may turn into a monotone upper bound. The compiler must
+// accept exactly the whitelisted clamp shape and reproduce the ordinary
+// dynamic evaluator (storedPercent/100) without any numeric drift.
+const fioniCorePassive = catalog.agentsMap.get("fioni").combatBuffs.corePassive
+const fioniCritRateRule = fioniCorePassive.effects
+    .find(rule => rule.id === "fioni-sear-crit-rate-attribute")
+assert.ok(fioniCritRateRule, "Fioni initial-mastery anomaly CRIT rule must remain in the catalog")
+assert.equal(isInitialMasteryAnomalyCritRule(fioniCritRateRule), true)
+const fioniCritRateFormula = compileInitialMasteryAnomalyCritFormula(fioniCritRateRule)
+assert.equal(typeof fioniCritRateFormula, "function", "Fioni clamp rule must compile")
+const fioniMasterySamples = [0, 100, 154, 155, 155.5, 200, 240, 255, 300]
+for (const mastery of fioniMasterySamples) {
+    approx(
+        fioniCritRateFormula(mastery),
+        evaluateFormulaExpression(fioniCritRateRule.formula.expression, { x: mastery }) / 100,
+        `Fioni compiled anomaly CRIT at ${mastery} mastery`,
+    )
+}
+
+const fioniParameterRule = {
+    ...structuredClone(fioniCritRateRule),
+    formula: {
+        expression: "clamp(base + max(x - threshold, 0) * rate, 0, cap)",
+        valueUnit: "storedPercent",
+        parameters: { base: 30, threshold: 155, rate: 0.7, cap: 100 },
+    },
+}
+assert.equal(isInitialMasteryAnomalyCritRule(fioniParameterRule), true)
+const fioniParameterFormula = compileInitialMasteryAnomalyCritFormula(fioniParameterRule)
+assert.equal(typeof fioniParameterFormula, "function", "parameterized Fioni clamp rule must compile")
+for (const mastery of fioniMasterySamples) {
+    approx(
+        fioniParameterFormula(mastery),
+        evaluateFormulaExpression(fioniParameterRule.formula.expression, {
+            x: mastery,
+            ...fioniParameterRule.formula.parameters,
+        }) / 100,
+        `Fioni parameterized compiled anomaly CRIT at ${mastery} mastery`,
+    )
+}
+
+let previousFioniCritRate = Number.NEGATIVE_INFINITY
+for (let mastery = 0; mastery <= 400; mastery += 0.5) {
+    const value = fioniCritRateFormula(mastery)
+    assert.ok(Number.isFinite(value), `Fioni compiled anomaly CRIT must stay finite at ${mastery}`)
+    assert.ok(value >= 0 && value <= 1, `Fioni compiled anomaly CRIT must stay in [0, 1] at ${mastery}`)
+    assert.ok(value >= previousFioniCritRate, `Fioni compiled anomaly CRIT must be monotone at ${mastery}`)
+    previousFioniCritRate = value
+}
+
+const rejectedFioniRules = [
+    ["a non-clamp expression", rule => { rule.formula.expression = "max(x - 155, 0) * 0.7" }],
+    ["a division", rule => {
+        rule.formula.expression = "clamp(30 + max(x - 155, 0) * 0.7 / 100, 0, 1)"
+    }],
+    ["an unsupported output stat", rule => { rule.stat = "anomalyProficiency" }],
+    ["an unsupported anomaly settlement type", rule => { rule.target.settlementTypes = ["disorder"] }],
+    ["a storedPercent source unit", rule => { rule.source.unit = "storedPercent" }],
+    ["a percentage mode", rule => { rule.mode = "pct" }],
+    ["a storedValue formula unit", rule => { rule.formula.valueUnit = "storedValue" }],
+]
+for (const [label, mutate] of rejectedFioniRules) {
+    const rejected = structuredClone(fioniCritRateRule)
+    mutate(rejected)
+    assert.equal(
+        compileInitialMasteryAnomalyCritFormula(rejected),
+        null,
+        `Fioni compiler must reject ${label}`,
+    )
+}
+assert.equal(compileInitialMasteryAnomalyCritFormula(), null, "Fioni compiler must reject a missing rule")
 
 console.log("in-combat formula tests passed")

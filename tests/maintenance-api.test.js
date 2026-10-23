@@ -394,6 +394,20 @@ try {
         "maxCount",
     ), false)
 
+    // Release targets name an agent and one of that agent's Release profiles.
+    // Saving must resolve them against the current agent roster.
+    const managedFioni = (await catalog()).agents.agents.find(item => item.id === "fioni")
+    const fioniTargets = structuredClone(managedFioni?.combatBuffs?.skillBuffs?.[0]?.effects?.[0]?.target?.releaseTargets)
+    assert.ok(fioniTargets?.length, "Fioni Release target fixture must exist")
+    const fioniSave = await save("agents", managedFioni)
+    assert.deepEqual(
+        fioniSave.savedItem.combatBuffs.skillBuffs[0].effects[0].target.releaseTargets,
+        fioniTargets,
+        "self-referencing Release targets must validate against the saved agent roster",
+    )
+    const reloadedFioni = (await catalog()).agents.agents.find(item => item.id === "fioni")
+    assert.deepEqual(reloadedFioni.combatBuffs.skillBuffs[0].effects[0].target.releaseTargets, fioniTargets)
+
     const velinaAgent = structuredClone(managedAgentCatalog.agents.agents.find(item => item.id === "velina"))
     // Release migration is independent of the administrator-maintained default rotation.
     velinaAgent.defaultCalculationConfig.events = [{

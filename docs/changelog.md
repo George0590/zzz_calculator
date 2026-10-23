@@ -11,6 +11,13 @@
 - 关键边界：沿用偏好存储键；只改变呈现，不改变计算、排序、角色数据、账号管理或工作台结构。没有引入其他待合并 PR 的导航动画或工作台重排；不宣称首屏减包或彻底消除闪烁。
 - 验证：本地 WebApp 单测 66 文件、911 项通过；类型检查与生产构建通过；主题浏览器聚焦测试 6 项通过，覆盖 1440/390/320px、键盘、刷新、路由、系统变化、弹窗草稿和关键文本对比度，并留存浅深截图；仓库完整性（187 项目录资源）、文档链接与差异检查通过。未在本地重跑完整计算与布局套件；远端完整 CI 以该 PR 最新提交检查为准，未合并或部署。
 
+## 2026-10-24 — 菲欧妮精准优化剪枝修复
+
+- 问题：默认异放事件叠加初始异常掌控→异常暴击率 clamp 公式后，固定套装 objective 内核无法给出异放区间上界，`releaseIntervalBound=false`，精准优化退化为全枚举；真实库存 283,708 组合实测约 186s。
+- 变化：新增 `compileInitialMasteryAnomalyCritFormula` 白名单解析器，仅编译可证明单调的 `clamp(base + max(x - threshold, 0) * rate, 0, cap)`；固定套装 objective 内核以区间上界纳入该项，`releaseIntervalBound` 可为 true；严格优化器 metrics 新增 `releaseIntervalBoundEnabled` 与 `releaseBoundFallbackReason` 诊断。机制见[菲欧妮专题](fioni-modeling.md#优化器)，验收边界见[回归契约](regression-contract.md#优化器)。
+- 关键边界：只支持上述可证明形状，其他动态公式或无法证明的区间继续返回无限上界并全枚举；伤害语义不变，Top 10 与 `exact-legacy` 全等，`scoredCombinationCount + prunedBySuperBound === estimatedCombinationCount`。
+- 验证：`npm test` 全部通过（含菲欧妮、固定评分、Worker、优化器与 WebApp 883 项）；`npm run build:server` 通过并生成绑定当前 SHA 的服务器制品。当前仍需通过远端 CI/CD 后才能视为生产发布。
+
 ## 2026-10-13 — 本地优化方案整套锁定与驱动盘顺序
 
 - 变化：优化结果方案数字左侧增加“一键锁定”，将当前方案六张盘设为当前角色专属；优化、自选、已有套装统一按 `1、6 / 2、5 / 3、4` 排列。

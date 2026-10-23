@@ -646,3 +646,128 @@ assert.equal(
     "anomalyMastery",
 )
 assert.equal(browserAliceOptimized.results[0].data.outOfCombat.panel.anomalyMastery, 195.96)
+
+const fioniAgent = catalog.agentsMap.get("fioni")
+const fioniFourSet = "freedom_blues"
+const fioniTwoSet = "phaethons_melody"
+const fioniOptimizerSlotMain = {
+    1: { stat: "hpFlat", value: 2200 },
+    2: { stat: "atkFlat", value: 316 },
+    3: { stat: "defFlat", value: 184 },
+    4: { stat: "anomalyProficiency", value: 92 },
+    5: { stat: "fireDmg", value: 30, mode: "pct" },
+    6: { stat: "atkPct", value: 30, mode: "pct" },
+}
+const fioniWorkerStore = {
+    ...store,
+    driveDiscs: [fioniFourSet, fioniTwoSet].flatMap((setId, setIndex) =>
+        [1, 2, 3, 4, 5, 6].flatMap(slot => [0, 1].map(variant => {
+            const mainStat = slot === 6 && variant
+                ? { stat: "anomalyMastery", value: 30, mode: "pct" }
+                : fioniOptimizerSlotMain[slot]
+            return disc(
+                `browser-fioni-${setIndex}-${slot}-${variant}`,
+                setId,
+                slot,
+                mainStat,
+                [
+                    { stat: "atkPct", value: 3 + slot + setIndex, mode: "pct" },
+                    { stat: "penFlat", value: 6 + slot },
+                    { stat: "anomalyProficiency", value: 9 + slot },
+                ].filter(stat => stat.stat !== mainStat.stat),
+            )
+        })),
+    ),
+}
+const fioniReleaseEvent = structuredClone(fioniAgent.defaultCalculationConfig.events[0])
+const fioniWorkerInput = {
+    agentId: "fioni",
+    coreSkillLevel: "F",
+    cinemaLevel: 0,
+    wEngineId: "zzz_wiki_154",
+    wEngineModificationLevel: 1,
+    combatBuffs: {
+        activeBuffIds: [
+            "agent:fioni.corePassive",
+            "agent:fioni.additionalAbility",
+            "agent:fioni.skill.release_crit_dmg",
+            `driveDisc4pc:${fioniFourSet}.self`,
+        ],
+    },
+    damage: {
+        mode: "anomaly",
+        selectedEventId: fioniReleaseEvent.id,
+        events: [fioniReleaseEvent],
+        target: {
+            defense: 953,
+            levelCoefficient: 794,
+            resistanceByElement: { fire: 0 },
+        },
+    },
+    settings: {
+        objective: "damage",
+        algorithm: "exact-super-bound",
+        fourPieceSetId: fioniFourSet,
+        twoPieceSetId: fioniTwoSet,
+        mainStatLimits: fioniAgent.preferredDriveDiscs.mainStatLimits,
+        enableUpperBoundPruning: true,
+        disableParallel: true,
+    },
+}
+const fioniWorkerRuntime = createDriveDiscOptimizerRuntime({
+    availableParallelism: () => 1,
+    yieldControl: async () => {},
+})
+const fioniWorkerResult = await fioniWorkerRuntime.optimizeDriveDiscsAsync(catalog, fioniWorkerStore, fioniWorkerInput)
+const fioniWorkerLegacyResult = await fioniWorkerRuntime.optimizeDriveDiscsAsync(catalog, fioniWorkerStore, {
+    ...fioniWorkerInput,
+    settings: {
+        ...fioniWorkerInput.settings,
+        algorithm: "exact-legacy",
+        enableUpperBoundPruning: false,
+    },
+})
+assert.equal(fioniWorkerResult.results.length, 10,
+    "Browser Worker Fioni Release fixture should produce a full Top 10.")
+assert.equal(fioniWorkerResult.metrics.strictExact, true)
+assert.equal(fioniWorkerResult.metrics.estimatedCombinationCount, 960,
+    "Browser Worker Fioni estimate should cover the complete legal 4+2 candidate space.")
+assert.ok(Number(fioniWorkerResult.metrics.superBoundChecks ?? 0) > 0,
+    "Browser Worker Fioni Release fixture should execute interval-bound checks.")
+assert.ok(Number(fioniWorkerResult.metrics.prunedBySuperBound ?? 0) > 0,
+    "Browser Worker Fioni Release fixture should prune at least one legal loadout.")
+assert.ok(
+    Number(fioniWorkerResult.metrics.scoredCombinationCount ?? 0)
+        < Number(fioniWorkerResult.metrics.estimatedCombinationCount ?? 0),
+    "Browser Worker Fioni Release fixture should score fewer loadouts than exhaustive enumeration.",
+)
+assert.equal(
+    Number(fioniWorkerResult.metrics.scoredCombinationCount ?? 0)
+        + Number(fioniWorkerResult.metrics.prunedBySuperBound ?? 0),
+    Number(fioniWorkerResult.metrics.estimatedCombinationCount ?? 0),
+    "Browser Worker Fioni scored and pruned loadouts should account for the full search space.",
+)
+assert.equal(fioniWorkerResult.metrics.releaseIntervalBoundEnabled, true,
+    "Browser Worker Fioni Release kernel should declare a provable interval upper bound.")
+assert.equal(fioniWorkerResult.metrics.releaseBoundFallbackReason, null,
+    "Browser Worker Fioni Release kernel should not report an interval-bound fallback.")
+assert.deepEqual(
+    fioniWorkerResult.results.map(result => result.driveDiscIdsBySlot),
+    fioniWorkerLegacyResult.results.map(result => result.driveDiscIdsBySlot),
+    "Browser Worker Fioni Release Top 10 IDs should match exact legacy enumeration.",
+)
+assert.deepEqual(
+    fioniWorkerResult.results.map(result => result.score),
+    fioniWorkerLegacyResult.results.map(result => result.score),
+    "Browser Worker Fioni Release Top 10 scores should match exact legacy enumeration.",
+)
+for (const fioniWorkerItem of fioniWorkerResult.results) {
+    const fioniWorkerCoreResult = browserCalculateInCombatPanel(catalog, {
+        ...fioniWorkerInput,
+        driveDiscs: fioniWorkerItem.driveDiscs,
+    })
+    assert.ok(
+        Math.abs(fioniWorkerItem.score - fioniWorkerCoreResult.damage.totalFinalDamage) <= 1e-9,
+        "Every Browser Worker Fioni Top 10 score should equal direct shared-core calculation.",
+    )
+}
