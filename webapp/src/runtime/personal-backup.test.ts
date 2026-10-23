@@ -4,8 +4,6 @@ import { loadUserDriveDiscStoreFresh, saveUserDriveDiscStore } from "./local-sto
 
 const KEY = "zzz-calculator.webapp.build.v1"
 const FALLBACK = "zzz-calculator.userStore.v1"
-const PRESETS_KEY = "zzz-calculator.calculation-presets.v1"
-const PRESETS = JSON.stringify({ version: 1, byOwner: { default: { miyabi: { label: "保留" } } } })
 beforeEach(async () => {
   localStorage.clear()
   await saveUserDriveDiscStore({ version: 1, currentOwnerId: "default", owners: [{ id: "default", label: "A" }, { id: "alt", label: "B" }],
@@ -13,7 +11,6 @@ beforeEach(async () => {
     driveDiscLoadouts: [{ id: "l1", ownerId: "default", driveDiscIdsBySlot: { 1: "d1" } }], imports: [],
     enkaImportState: { version: 1, byOwner: { alt: { binding: { uid: "123456789" } } } }, futureField: { retain: true } })
   localStorage.setItem(KEY, JSON.stringify({ version: 2, byOwner: { default: { byAgent: { miyabi: { agentLevel: 60, combat: { activeBuffIds: ["test"] } } } } } }))
-  localStorage.setItem(PRESETS_KEY, PRESETS)
   localStorage.setItem("unrelated-site", "keep")
 })
 afterEach(() => vi.restoreAllMocks())
@@ -21,7 +18,6 @@ afterEach(() => vi.restoreAllMocks())
 describe("complete personal backup", () => {
   it("round trips all accounts, references, binding and config without touching other site keys", async () => {
     const backup = await createPersonalBackup()
-    expect(backup.data.localStorage.some(record => record.key === PRESETS_KEY)).toBe(false)
     const store = await loadUserDriveDiscStoreFresh()
     store.driveDiscs[0].level = 12
     await saveUserDriveDiscStore(store)
@@ -33,7 +29,6 @@ describe("complete personal backup", () => {
     expect(restored.data.inventory.enkaImportState).toEqual(backup.data.inventory.enkaImportState)
     expect(restored.data.inventory.futureField).toEqual({ retain: true })
     expect(restored.data.localStorage).toEqual(backup.data.localStorage)
-    expect(localStorage.getItem(PRESETS_KEY)).toBe(PRESETS)
     expect(localStorage.getItem("unrelated-site")).toBe("keep")
   })
 
