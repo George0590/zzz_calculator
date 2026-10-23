@@ -122,7 +122,14 @@ for(const events of [[event],[attr],[disorder],[direct],[event,attr,disorder,dir
  const dense=p.compileDensePanelScoreTarget({statIds,setIds:[],setIndexById:sets});assert.ok(dense)
  approx(dense.scoreDense(values,[]).finalDamage,truth,'dense')
  const fixed=dense.compileForSetCounts([]);approx(fixed.scoreScalar(values).finalDamage,truth,'fixed')
- assert.equal(fixed.releaseIntervalBound,false,'dynamic formula must not claim an unproven pruning bound')
+ const hasRelease=events.some(e=>(e.settlementType??'')==='release')
+ assert.equal(fixed.releaseIntervalBound,hasRelease,'release interval bound must match release events')
+ if(hasRelease){
+  assert.equal(fixed.scoreKernel,'compiled-objective-fixed-sets','release objective kernel')
+  assert.equal(typeof fixed.scoreObjectiveScalar,'function','release objective scalar')
+  approx(fixed.scoreObjectiveScalar(values).finalDamage,truth,'objective scalar')
+  approx(fixed.scoreCombinedScalar(values).finalDamage,truth,'combined scalar')
+ }
  assert.ok(p.optimizerStatMetadata().relevantStatIds.includes('anomalyMastery'))
 }
 // Independent exhaustive Cartesian oracle, including attack/mastery main-stat tradeoff.
@@ -133,4 +140,35 @@ function check(result){assert.equal(result.results.length,10);result.results.for
 check(optimizeDriveDiscs(catalog,store,request))
 check(await createDriveDiscOptimizerRuntime().optimizeDriveDiscsAsync(catalog,store,request))
 check(await optimizeDriveDiscsAsync(catalog,store,{...request,settings:{...request.settings,algorithm:'exact-super-bound-parallel',workerCount:2}}))
+// Larger dual-set inventory: pruning must be restored and stay strictly exact.
+function topSignature(result){return result.results.map(r=>({ids:Object.values(r.driveDiscIdsBySlot),score:Number(r.score.toFixed(6))}))}
+function assertSameTop(label,legacy,superBound){
+ assert.deepEqual(topSignature(superBound),topSignature(legacy),`${label}: Top 10 ids/scores`)
+ const estimated=Number(superBound.metrics.estimatedCombinationCount??0)
+ assert.ok(estimated>0,`${label}: estimated combinations`)
+ assert.equal(superBound.metrics.strictExact,true,`${label}: strict exact`)
+ assert.ok(Number(superBound.metrics.superBoundChecks??0)>0,`${label}: interval bound checks`)
+ assert.ok(Number(superBound.metrics.prunedBySuperBound??0)>0,`${label}: pruning`)
+ assert.ok(Number(superBound.metrics.scoredCombinationCount??0)<estimated,`${label}: scored fewer than exhaustive`)
+ assert.equal(Number(superBound.metrics.scoredCombinationCount??0)+Number(superBound.metrics.prunedBySuperBound??0),estimated,`${label}: scored+pruned accounting`)
+ assert.equal(superBound.metrics.releaseIntervalBoundEnabled,true,`${label}: interval bound enabled metric`)
+ assert.equal(superBound.metrics.releaseBoundFallbackReason,null,`${label}: no interval bound fallback`)
+}
+const pruneStore=fioniOptimizerStore({variants:3,dualSets:true}),pruneRequest=fioniOptimizerInput()
+const pruneLegacy=optimizeDriveDiscs(catalog,pruneStore,{...pruneRequest,settings:{...pruneRequest.settings,algorithm:'exact-legacy',enableUpperBoundPruning:false}})
+const pruneSuperBound=optimizeDriveDiscs(catalog,pruneStore,pruneRequest)
+assert.equal(pruneSuperBound.metrics.estimatedCombinationCount,10935,'10935 fixture: legal combination count')
+assertSameTop('fioni 10935',pruneLegacy,pruneSuperBound)
+const pruneWinner=pruneSuperBound.results[0]
+approx(pruneWinner.score,calculateInCombatPanel(catalog,{...pruneRequest,driveDiscs:pruneWinner.driveDiscs}).damage.totalFinalDamage,'10935 winner score')
+// Minimum-panel checks keep the objective-scalar kernel disabled; the fixed scoreScalar bound must still prune exactly.
+const minimumStore=fioniOptimizerStore({variants:2,dualSets:true}),minimumRequest=fioniOptimizerInput()
+const minimumSettings={...minimumRequest.settings,minimums:{anomalyMastery:120}}
+const minimumLegacy=optimizeDriveDiscs(catalog,minimumStore,{...minimumRequest,settings:{...minimumSettings,algorithm:'exact-legacy',enableUpperBoundPruning:false}})
+const minimumSuperBound=optimizeDriveDiscs(catalog,minimumStore,{...minimumRequest,settings:minimumSettings})
+assert.ok(minimumSuperBound.results.length>0,'minimum panel: results')
+assert.equal(minimumSuperBound.metrics.strictExact,true,'minimum panel: strict exact')
+assert.equal(Number(minimumSuperBound.metrics.scoredCombinationCount??0)+Number(minimumSuperBound.metrics.prunedBySuperBound??0),Number(minimumSuperBound.metrics.estimatedCombinationCount??0),'minimum panel: accounting')
+assert.ok(Number(minimumSuperBound.metrics.superBoundChecks??0)>0,'minimum panel: bound checks')
+assert.deepEqual(topSignature(minimumSuperBound),topSignature(minimumLegacy),'minimum panel: Top 10 ids/scores')
 console.log('Fioni: pinned official rows, independent formulas, thresholds, Cinema isolation, maintenance, all scoring paths and exhaustive/Node Worker Top 10 passed')

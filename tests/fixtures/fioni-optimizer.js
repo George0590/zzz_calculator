@@ -14,17 +14,29 @@ export function fioniOptimizerInput() {
     }
 }
 
-export function fioniOptimizerStore() {
+export function fioniOptimizerStore({ variants = 2, dualSets = false } = {}) {
     const main = [null, ["hpFlat", 2200], ["atkFlat", 316], ["defFlat", 184], ["anomalyProficiency", 92], ["fireDmg", 30], ["atkPct", 30]]
     const driveDiscs = []
-    for (let slot = 1; slot <= 6; slot++) for (let variant = 0; variant < 2; variant++) {
-        const [stat, value] = slot === 6 && variant ? ["anomalyMastery", 30] : main[slot]
-        driveDiscs.push({ id: `fioni-${slot}-${variant}`, ownerId: "default", partition: slot,
-            setId: slot <= 4 ? "phaethons_melody" : "hormone_punk", rarity: "S", level: 15, maxLevel: 15,
+    const pushDisc = (slot, variant, setId, idPrefix) => {
+        const [stat, value] = slot === 6 && variant % 2 ? ["anomalyMastery", 30] : main[slot]
+        driveDiscs.push({ id: `${idPrefix}-${slot}-${variant}`, ownerId: "default", partition: slot,
+            setId, rarity: "S", level: 15, maxLevel: 15,
             mainStat: { stat, value },
-            subStats: [{ stat: "atkPct", value: 3 + variant * 6 }, { stat: "anomalyProficiency", value: 9 + (1 - variant) * 18 },
+            subStats: [{ stat: "atkPct", value: 3 + variant * 6 }, { stat: "anomalyProficiency", value: 9 + (1 - (variant % 2)) * 18 },
                 { stat: "penFlat", value: slot + variant * (9 + 2 ** slot / 100) }].filter(s => s.stat !== stat),
             source: { type: "test", sequence: slot * 100 + variant } })
+    }
+    if (dualSets) {
+        for (let slot = 1; slot <= 6; slot++) {
+            for (const setId of ["phaethons_melody", "hormone_punk"]) {
+                const idPrefix = `fioni-${setId === "phaethons_melody" ? "four" : "two"}`
+                for (let variant = 0; variant < variants; variant++) pushDisc(slot, variant, setId, idPrefix)
+            }
+        }
+    } else {
+        for (let slot = 1; slot <= 6; slot++) for (let variant = 0; variant < variants; variant++) {
+            pushDisc(slot, variant, slot <= 4 ? "phaethons_melody" : "hormone_punk", "fioni")
+        }
     }
     return { version: 1, currentOwnerId: "default", owners: [{ id: "default", label: "Synthetic" }], imports: [], driveDiscLoadouts: [], driveDiscs }
 }

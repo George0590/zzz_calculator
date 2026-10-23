@@ -51,6 +51,50 @@ export function isInitialMasteryAnomalyCritRule(rule = {}) {
         && rule.formula?.valueUnit === "storedPercent" && (rule.mode ?? "flat") === "flat"
 }
 
+const FORMULA_ATOM = "([+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)|[A-Za-z_][A-Za-z0-9_]*)"
+
+// Compiles the initial-mastery -> anomaly CRIT conversion clamp into a
+// monotone evaluator. Only the exact whitelisted shape is accepted; the
+// returned function yields the same storedPercent/100 value as the ordinary
+// dynamic-formula path, so the strict optimizer can use the aggregate
+// out-of-combat mastery as a provable interval upper bound.
+export function compileInitialMasteryAnomalyCritFormula(rule = {}) {
+    if (!isInitialMasteryAnomalyCritRule(rule)) return null
+    const variable = String(rule.source?.variable ?? "x")
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(variable)) return null
+    const parameters = formulaParameterValues(rule)
+    if (Object.prototype.hasOwnProperty.call(parameters, variable)) return null
+    const expression = String(rule.formula?.expression ?? "")
+    const compact = expression.replace(/\s+/g, "")
+    const pattern = new RegExp(
+        `^clamp\\(${FORMULA_ATOM}\\+max\\(${variable}-${FORMULA_ATOM},0\\)\\*${FORMULA_ATOM},0,${FORMULA_ATOM}\\)$`,
+    )
+    const match = compact.match(pattern)
+    if (!match) return null
+    const resolveToken = token => Object.prototype.hasOwnProperty.call(parameters, token)
+        ? parameters[token]
+        : Number(token)
+    const [base, threshold, rate, cap] = match.slice(1).map(resolveToken)
+    if (![base, threshold, rate, cap].every(Number.isFinite) || rate < 0 || cap < 0) return null
+    try {
+        evaluateFormulaExpression(expression, { [variable]: 0, ...parameters })
+    } catch {
+        return null
+    }
+    const evaluate = rawMastery => {
+        const value = Number(rawMastery ?? 0)
+        const x = Number.isFinite(value) ? value : 0
+        return Math.max(0, Math.min(cap, base + Math.max(x - threshold, 0) * rate)) / 100
+    }
+    for (const x of [0, 50, 100, 154, 155, 155.5, 200, 255, 400]) {
+        const expected = evaluateFormulaExpression(expression, { [variable]: x, ...parameters })
+        if (!Number.isFinite(expected) || Math.abs(evaluate(x) * 100 - expected) > 1e-9) {
+            return null
+        }
+    }
+    return evaluate
+}
+
 // A deliberately small, monotone subset of the existing expression language.
 // Preserve the interpreter's operation order, including floor at FP boundaries.
 // Unsupported expressions must retain the ordinary calculator fallback.

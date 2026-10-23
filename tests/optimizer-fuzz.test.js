@@ -558,6 +558,205 @@ assert.ok(vivianReleaseSetCoverage.size >= 3, "Vivian Release fuzz should cover 
 assert.ok(vivianReleaseBoundChecks > 0, "Vivian Release fuzz should exercise interval-bound checks.")
 assert.ok(vivianReleasePruned > 0, "Vivian Release fuzz should exercise strict upper-bound pruning.")
 
+const FIONI_RELEASE_FUZZ_CASES = [
+    { seed: 4101, cinemaLevel: 0, coreSkillLevel: "A", profileId: "fioni_purifying_flame_release", fourPieceSetId: "freedom_blues", twoPieceSetId: "phaethons_melody" },
+    { seed: 4102, cinemaLevel: 0, coreSkillLevel: "C", profileId: "fioni_soul_searching_blaze_release", fourPieceSetId: "phaethons_melody", twoPieceSetId: "hormone_punk" },
+    { seed: 4103, cinemaLevel: 4, coreSkillLevel: "F", profileId: "fioni_c4_extra_release", fourPieceSetId: "inferno_metal", twoPieceSetId: "freedom_blues" },
+    { seed: 4104, cinemaLevel: 6, coreSkillLevel: "A", profileId: "fioni_purifying_flame_release", fourPieceSetId: "freedom_blues", twoPieceSetId: "hormone_punk" },
+]
+const fioniReleaseMainStatOptions = {
+    1: [{ stat: "hpFlat", value: 2200 }],
+    2: [{ stat: "atkFlat", value: 316 }],
+    3: [{ stat: "defFlat", value: 184 }],
+    4: [
+        { stat: "anomalyProficiency", value: 92 },
+        { stat: "atkPct", value: 30, mode: "pct" },
+    ],
+    5: [
+        { stat: "fireDmg", value: 30, mode: "pct" },
+        { stat: "atkPct", value: 30, mode: "pct" },
+        { stat: "penRatio", value: 24, mode: "pct" },
+    ],
+    6: [
+        { stat: "anomalyMastery", value: 30, mode: "pct" },
+        { stat: "atkPct", value: 30, mode: "pct" },
+    ],
+}
+const fioniReleaseSubStatPool = [
+    "anomalyProficiency",
+    "atkPct",
+    "atkFlat",
+    "penRatio",
+    "dmgBonus",
+]
+
+function fioniReleaseFuzzDisc(scenario, scenarioIndex, setId, setIndex, slot, variant, rng) {
+    const mainOptions = fioniReleaseMainStatOptions[slot]
+    const mainStat = mainOptions[(scenarioIndex + setIndex + slot + variant) % mainOptions.length]
+    const used = new Set([mainStat.stat])
+    const subStats = []
+    while (subStats.length < 3) {
+        const stat = pick(rng, fioniReleaseSubStatPool)
+        if (used.has(stat)) continue
+        used.add(stat)
+        subStats.push({
+            stat,
+            value: subStatValue(stat, rng),
+            mode: stat === "atkFlat" || stat === "anomalyProficiency" ? "flat" : "pct",
+            label: stat,
+        })
+    }
+    return {
+        id: `fioni-release-${scenario.seed}-${setIndex}-${slot}-${variant}`,
+        ownerId: "default",
+        setId,
+        setName: catalog.driveDiscSetsMap.get(setId)?.name?.zhCN ?? setId,
+        partition: slot,
+        rarity: "S",
+        level: 15,
+        maxLevel: 15,
+        locked: false,
+        equippedBy: null,
+        reservedForAgentId: null,
+        mainStat: {
+            ...mainStat,
+            mode: mainStat.mode ?? "flat",
+            label: mainStat.stat,
+        },
+        subStats,
+        source: {
+            type: "fioni-release-fuzz",
+            sequence: scenario.seed * 100 + setIndex * 20 + slot * 2 + variant,
+        },
+    }
+}
+
+function fioniReleaseFuzzStore(scenario, scenarioIndex) {
+    const rng = createRng(scenario.seed)
+    return {
+        version: 1,
+        currentOwnerId: "default",
+        owners: [{ id: "default", label: "默认用户" }],
+        imports: [],
+        driveDiscLoadouts: [],
+        driveDiscs: [scenario.fourPieceSetId, scenario.twoPieceSetId].flatMap((setId, setIndex) =>
+            [1, 2, 3, 4, 5, 6].flatMap(slot => [0, 1].map(variant =>
+                fioniReleaseFuzzDisc(scenario, scenarioIndex, setId, setIndex, slot, variant, rng),
+            )),
+        ),
+    }
+}
+
+function fioniReleaseOptimizerInput(scenario, algorithm) {
+    return {
+        agentId: "fioni",
+        coreSkillLevel: scenario.coreSkillLevel,
+        cinemaLevel: scenario.cinemaLevel,
+        wEngineId: "zzz_wiki_154",
+        wEngineModificationLevel: 1,
+        driveDiscs: [],
+        combatBuffs: {
+            activeBuffIds: [
+                "agent:fioni.corePassive",
+                "agent:fioni.additionalAbility",
+                "agent:fioni.skill.release_crit_dmg",
+                ...(scenario.cinemaLevel >= 2 ? ["agent:fioni.cinema.2"] : []),
+                ...(scenario.cinemaLevel >= 6 ? ["agent:fioni.cinema.6"] : []),
+            ],
+        },
+        damage: {
+            mode: "anomaly",
+            selectedEventId: `fioni-fuzz-release-${scenario.seed}`,
+            events: [{
+                id: `fioni-fuzz-release-${scenario.seed}`,
+                kind: "anomaly",
+                settlementType: "release",
+                anomalyEffect: "burn",
+                count: 1,
+                stunned: true,
+                critMode: "expected",
+                triggerActorRef: { agentId: "fioni", profileId: scenario.profileId },
+                anomalySource: { actorRef: { agentId: "fioni" } },
+            }],
+            target: {
+                defense: 953,
+                levelCoefficient: 794,
+                resistanceByElement: { fire: 0 },
+            },
+        },
+        settings: {
+            objective: "damage",
+            algorithm,
+            fourPieceSetId: scenario.fourPieceSetId,
+            twoPieceSetId: scenario.twoPieceSetId,
+            mainStatLimits: catalog.agentsMap.get("fioni").preferredDriveDiscs.mainStatLimits,
+            minimums: {},
+            disableParallel: true,
+            enableUpperBoundPruning: algorithm !== "exact-legacy",
+        },
+    }
+}
+
+let fioniReleaseBoundChecks = 0
+let fioniReleasePruned = 0
+const fioniReleaseCinemaCoverage = new Set()
+const fioniReleaseCoreLevelCoverage = new Set()
+const fioniReleaseProfileCoverage = new Set()
+const fioniReleaseSetCoverage = new Set()
+for (const [scenarioIndex, scenario] of FIONI_RELEASE_FUZZ_CASES.entries()) {
+    const fioniStore = fioniReleaseFuzzStore(scenario, scenarioIndex)
+    const fioniLegacy = optimizeDriveDiscs(
+        catalog,
+        fioniStore,
+        fioniReleaseOptimizerInput(scenario, "exact-legacy"),
+    )
+    const fioniSuperBound = optimizeDriveDiscs(
+        catalog,
+        fioniStore,
+        fioniReleaseOptimizerInput(scenario, "exact-super-bound"),
+    )
+    const scenarioLabel = `${scenario.coreSkillLevel}/C${scenario.cinemaLevel}/${scenario.profileId}/${scenario.fourPieceSetId}+${scenario.twoPieceSetId}`
+    assert.equal(fioniSuperBound.metrics.strictExact, true, `Fioni Release ${scenarioLabel}: strict exact`)
+    assert.equal(fioniSuperBound.results.length, 10, `Fioni Release ${scenarioLabel}: Top 10`)
+    assertSameTop(`fioni-release-${scenario.seed}`, scenarioLabel, fioniLegacy, fioniSuperBound)
+    assert.equal(
+        Number(fioniSuperBound.metrics.scoredCombinationCount ?? 0)
+            + Number(fioniSuperBound.metrics.prunedBySuperBound ?? 0),
+        Number(fioniSuperBound.metrics.estimatedCombinationCount ?? 0),
+        `Fioni Release ${scenarioLabel} should account for every scored or pruned loadout.`,
+    )
+    assert.ok(
+        Number(fioniSuperBound.metrics.superBoundChecks ?? 0) > 0,
+        `Fioni Release ${scenarioLabel} should execute its interval upper bound.`,
+    )
+    assert.ok(
+        Number(fioniSuperBound.metrics.prunedBySuperBound ?? 0) > 0,
+        `Fioni Release ${scenarioLabel} should prune at least one legal loadout.`,
+    )
+    assert.equal(
+        fioniSuperBound.metrics.releaseIntervalBoundEnabled,
+        true,
+        `Fioni Release ${scenarioLabel} should report an enabled release interval bound.`,
+    )
+    assert.equal(
+        fioniSuperBound.metrics.releaseBoundFallbackReason,
+        null,
+        `Fioni Release ${scenarioLabel} should not report a release bound fallback.`,
+    )
+    fioniReleaseBoundChecks += Number(fioniSuperBound.metrics.superBoundChecks ?? 0)
+    fioniReleasePruned += Number(fioniSuperBound.metrics.prunedBySuperBound ?? 0)
+    fioniReleaseCinemaCoverage.add(scenario.cinemaLevel)
+    fioniReleaseCoreLevelCoverage.add(scenario.coreSkillLevel)
+    fioniReleaseProfileCoverage.add(scenario.profileId)
+    fioniReleaseSetCoverage.add(`${scenario.fourPieceSetId}+${scenario.twoPieceSetId}`)
+}
+assert.deepEqual([...fioniReleaseCinemaCoverage].sort((a, b) => a - b), [0, 4, 6])
+assert.deepEqual([...fioniReleaseCoreLevelCoverage].sort(), ["A", "C", "F"])
+assert.ok(fioniReleaseProfileCoverage.size >= 2, "Fioni Release fuzz should cover multiple release profiles.")
+assert.ok(fioniReleaseSetCoverage.size >= 3, "Fioni Release fuzz should cover multiple 4+2 set pairs.")
+assert.ok(fioniReleaseBoundChecks > 0, "Fioni Release fuzz should exercise interval-bound checks.")
+assert.ok(fioniReleasePruned > 0, "Fioni Release fuzz should exercise strict upper-bound pruning.")
+
 const chunkStore = chunkBoundStore()
 const chunkLegacy = optimizeDriveDiscs(catalog, chunkStore, optimizerInput("chunk", 0, "exact-legacy", chunkStore))
 const chunkSuperBound = optimizeDriveDiscs(catalog, chunkStore, optimizerInput(
@@ -573,4 +772,4 @@ assert.ok(Number(chunkSuperBound.metrics.chunkBoundChecks ?? 0) > 0, "chunk boun
 chunkBoundCoverage += 1
 
 assert.ok(reservationCoverage > 0, "reservation fuzz should exclude other-agent candidates")
-console.log(`optimizer fuzz tests passed (${FUZZ_SEEDS} seeds, reservations=${reservationCoverage}, suffixTopK=${suffixTopKBoundCoverage}, chunk=${chunkBoundCoverage}, vivianReleaseChecks=${vivianReleaseBoundChecks}, vivianReleasePruned=${vivianReleasePruned})`)
+console.log(`optimizer fuzz tests passed (${FUZZ_SEEDS} seeds, reservations=${reservationCoverage}, suffixTopK=${suffixTopKBoundCoverage}, chunk=${chunkBoundCoverage}, vivianReleaseChecks=${vivianReleaseBoundChecks}, vivianReleasePruned=${vivianReleasePruned}, fioniReleaseChecks=${fioniReleaseBoundChecks}, fioniReleasePruned=${fioniReleasePruned})`)

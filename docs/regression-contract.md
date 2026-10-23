@@ -118,7 +118,7 @@
   维琳娜采用专用 `releaseSource`，固定风化基底并在保存时移除冗余的通用来源字段，详见[风属性专题](wind-anomaly-modeling.md)；
   新保存不得出现 `anomalyVariant: "release"` 或普通异常触发次数，旧事件与旧纯异放规则必须自动升级。当前角色作为来源时实时读取面板，外部来源必须使用含角色、配置哈希、捕获时间、面板和修正参数的冻结快照，只有刷新才更新；
   敌人防御、抗性和事件失衡状态保持实时。触发者只有明确指向异放结算的规则参与专属乘区，外部来源快照在优化期间固定，且不得实现 A+B 联合驱动盘搜索。固定套装异放评分内核只有在区间上界已经实现时才能声明 `releaseIntervalBound: true`，该安全标记必须由 `compileForSetCounts()` 原样透传给严格优化器；
-  缺少标记的回退路径必须继续返回无限上界并禁止剪枝，不能以性能为由牺牲精确性。
+  缺少标记的回退路径必须继续返回无限上界并禁止剪枝，不能以性能为由牺牲精确性。初始异常掌控→异常暴击率的同类 clamp 公式在由白名单解析器证明单调性后可参与固定套装 objective 区间上界；其他动态公式或无法证明的区间必须继续返回无限上界并禁止剪枝。
 
 - 菲欧妮的异放必须从她自身的 `releaseSkillRef` 读取当前技能等级的 `releaseMultiplier` 行；焚罪和烬火追魂分别保持独立倍率方案，影画4的固定600%方案不继承主要异放的额外异常暴伤。
   两项主异放的额外异常暴伤由默认开启的技能来源 Buff 提供，规则使用 `target.releaseTargets` 指向焚罪与烬火追魂方案；关闭该 Buff 后主异放各减少40个百分点，影画4额外异放、普通属性异常、乱流和紊乱不得受影响。
@@ -366,11 +366,14 @@
 
 ## 优化器
 
-验证入口：[优化器](../tests/optimizer.test.js)、[fuzz](../tests/optimizer-fuzz.test.js)、[维琳娜优化](../tests/velina-optimizer.test.js)、[浏览器Worker](../webapp/e2e/velina-optimizer.e2e.ts)。
+验证入口：[优化器](../tests/optimizer.test.js)、[fuzz](../tests/optimizer-fuzz.test.js)、[维琳娜优化](../tests/velina-optimizer.test.js)、[菲欧妮优化](../tests/fioni-damage.test.js)、[浏览器Worker](../webapp/e2e/velina-optimizer.e2e.ts)。
 
 - 维琳娜核心被动的初始能量回复转换必须按每组候选驱动盘的局外面板求值，不得在编译 Buff 时以缺失面板的零值固化，也不得读取局内能量回复。快速评分只预编译可证明非负单调的阶梯封顶公式，保留原有 `floor`、覆盖率、单位和 Buff 修饰顺序；
   不支持的公式或条件必须拒绝快速目标并回退通用评分。掌控加成先进入面板，再执行掌控转精通及异放；固定套装缓存仅保存规则与静态加成。dense、固定套装、目标标量、异放区间上下界和最低面板约束必须一致；
   开启核心被动、专武及 6 影时仍需通过快速评分探测。精准优化器与关闭剪枝的穷举必须具有相同 Top 10 盘 ID、稳定顺序和容差内分数，逐分支上界不得低于真实后代最大伤害，真实浏览器 Worker 必须可取消并复用。
+
+- 菲欧妮异放 + 初始异常掌控→异常暴击率 clamp 公式经白名单解析器证明单调并纳入固定套装 objective 区间上界后，严格优化器必须报告 `releaseIntervalBoundEnabled: true` 且 `releaseBoundFallbackReason: null`；Top 10 驱动盘 ID/分数必须与关闭剪枝的 `exact-legacy` 完全一致，且 `scoredCombinationCount + prunedBySuperBound === estimatedCombinationCount`。
+  其他动态公式、动态局外属性要求或无法证明的区间必须继续回退无限上界，以 `releaseBoundFallbackReason` 标明 `fixed-kernel-unavailable`、`dynamic-formula-unsupported`、`dynamic-out-of-combat-requirement` 或 `interval-bound-unsafe`，并禁止剪枝；该性能修复不得改变伤害语义。
 
 - 默认算法为 `exact-super-bound`，公开算法名、输入输出、进度和取消数据结构保持兼容。
 

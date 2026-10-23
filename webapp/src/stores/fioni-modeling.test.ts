@@ -19,7 +19,8 @@ it('initializes one Fire release at C0/F/Lv12 and preserves custom C4 through re
  expect(store.activeBuffIds(meta)).toContain('agent:fioni.additionalAbility')
  expect(store.activeBuffIds(meta)).toContain('agent:fioni.skill.release_crit_dmg')
  store.setCinemaLevel(4,meta)
- expect(store.skillLevels.basic).toBe(14)
+ // C3/C5 skill-level bonuses are intentionally outside the current Fioni model.
+ expect(store.skillLevels.basic).toBe(12)
  const event={...store.damageConfig.events[0],anomalyEffect:'shock',critMode:'crit',triggerActorRef:{agentId:'fioni',profileId:'fioni_c4_extra_release'}}
  store.setDamageConfig({...store.damageConfig,mode:'custom',events:[event]},agent)
  await store.persist();setActivePinia(createPinia());const restored=useBuildStore();restored.initialize({},meta)

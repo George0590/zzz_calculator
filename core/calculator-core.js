@@ -83,6 +83,7 @@ import {
 } from "./shared-combat.js"
 import {
     compileInitialEnergyFormula,
+    compileInitialMasteryAnomalyCritFormula,
     evaluateInCombatFormulaRule,
     formulaParameterValues,
     formulaSourceValue,
@@ -1608,16 +1609,40 @@ function compileDenseCombatEffectEntry({
         sourceKey: key,
         sourceType,
     }))
-    const dynamicFormulas = normalized.dynamicFormulas.map(rule => ({
-        rule,
-        effect,
-        runtimeInput,
-        sourceKey: key,
-        sourceType,
-        sourceName: effect?.name ?? null,
-        buffModifiers,
-        agent,
-    }))
+    const dynamicFormulas = normalized.dynamicFormulas.map(rule => {
+        let initialMasteryCrit = null
+        const supportedRule = isInitialMasteryAnomalyCritRule(rule)
+            && !rule?.requirement
+            && !rule?.condition
+            && isAllowedInCombatFormulaSourceType(sourceType)
+            && isAllowedInCombatFormulaSourceStat(rule?.source?.stat)
+        if (supportedRule) {
+            const evaluate = compileInitialMasteryAnomalyCritFormula(rule)
+            if (evaluate) {
+                const coverage = coverageFromRuntime(rule, effect, runtimeInput)
+                const modifierFactor = applyBuffModifiersToResolvedRule(
+                    { value: 1 },
+                    rule,
+                    { sourceKey: key, buffModifiers },
+                ).value
+                if (Number.isFinite(coverage) && coverage >= 0
+                    && Number.isFinite(modifierFactor) && modifierFactor >= 0) {
+                    initialMasteryCrit = { evaluate, coverage, modifierFactor }
+                }
+            }
+        }
+        return {
+            rule,
+            effect,
+            runtimeInput,
+            sourceKey: key,
+            sourceType,
+            sourceName: effect?.name ?? null,
+            buffModifiers,
+            agent,
+            initialMasteryCrit,
+        }
+    })
     return {
         key,
         sourceType,
@@ -9126,7 +9151,7 @@ export function createInCombatPanelCalculator(catalog, input) {
         function compileFixedDirectScoreKernel(fixedOutOfCombatTarget, fixedCombatValues, fixedEntryFlags) {
             const events = compiledDamageTarget.events ?? []
             if (!events.length
-                || dynamicFormulaEntries.length
+                || dynamicFormulaEntries.some(({ rule }) => !isInitialMasteryAnomalyCritRule(rule))
                 || events.some(event => event.kind !== "direct" || event.damageBasis === "anomalyProficiency")
                 || typeof fixedOutOfCombatTarget.panelValue !== "function") {
                 return null
@@ -9409,8 +9434,9 @@ export function createInCombatPanelCalculator(catalog, input) {
 
         function compileFixedNonDirectObjectiveKernel(fixedOutOfCombatTarget, fixedCombatValues, fixedEntryFlags) {
             const events = compiledDamageTarget.events ?? []
+            const activeDynamicFormulaEntries = dynamicFormulaEntries.filter(entry => fixedEntryFlags[entry.entryIndex])
             if (!events.length
-                || dynamicFormulaEntries.length
+                || activeDynamicFormulaEntries.some(entry => !entry.initialMasteryCrit)
                 || events.every(event => event.kind === "direct")
                 || events.some(event => !["direct", "anomaly", "disorder", "sheer", "sharp"].includes(event.kind))
                 || events.some(event => event.isLuminescence)
@@ -9544,6 +9570,25 @@ export function createInCombatPanelCalculator(catalog, input) {
                         stunDmgMultiplierBonusAlways: denseModifierSum(sums, "stunDmgMultiplierBonusAlways"),
                         stunDmgMultiplierBonusCapAlways: denseModifierSum(sums, "stunDmgMultiplierBonusCapAlways"),
                     }),
+                }
+            })
+            const dynamicCritSources = activeDynamicFormulaEntries.map(entry => {
+                const rule = entry.rule ?? {}
+                const modifier = {
+                    kind: "anomalyCritRate",
+                    target: rule.target ?? null,
+                    appliesTo: dynamicFormulaTargetAppliesTo(rule),
+                    requirement: rule.requirement ?? null,
+                    value: 1,
+                }
+                return {
+                    coverage: entry.initialMasteryCrit.coverage,
+                    modifierFactor: entry.initialMasteryCrit.modifierFactor,
+                    evaluate: entry.initialMasteryCrit.evaluate,
+                    hitByEvent: events.map(event => damageModifierAppliesToCompiledEvent(
+                        modifier,
+                        event.event ?? event,
+                    )),
                 }
             })
             const needsSheer = compiledEvents.some(event => event.kind === "sheer")
@@ -9699,7 +9744,10 @@ export function createInCombatPanelCalculator(catalog, input) {
                         }
                     },
                 })
-                for (const event of compiledEvents) {
+                const dynamicCritValues = dynamicCritSources.map(source =>
+                    ((source.evaluate(outPanelValue("anomalyMastery")) * source.coverage) * source.modifierFactor))
+                for (let eventIndex = 0; eventIndex < compiledEvents.length; eventIndex += 1) {
+                    const event = compiledEvents[eventIndex]
                     const elementDmg = outPanelValue(event.damageKey) + denseCombatValue(fixedCombatValues, event.damageKey)
                     const resIgnore = event.resistanceFixedOne
                         ? 0
@@ -9837,8 +9885,14 @@ export function createInCombatPanelCalculator(catalog, input) {
                                 }).max)
                                 : releaseCritRateBonusForEvent(event, formulaInCombatPanel, formulaOutOfCombatPanel)
                             : 0
+                    let dynamicCritRate = 0
+                    for (let sourceIndex = 0; sourceIndex < dynamicCritSources.length; sourceIndex += 1) {
+                        if (dynamicCritSources[sourceIndex].hitByEvent[eventIndex]) {
+                            dynamicCritRate += dynamicCritValues[sourceIndex]
+                        }
+                    }
                     const anomalyCritMultiplier = anomalyCritMultiplierForMode(
-                        event.anomalyCritRate + releaseMasteryCritRate,
+                        event.anomalyCritRate + releaseMasteryCritRate + dynamicCritRate,
                         event.anomalyCritDmg,
                         event.critMode,
                         !event.isDisorder,
@@ -9909,9 +9963,22 @@ export function createInCombatPanelCalculator(catalog, input) {
                 const fixedObjectiveKernel = fixedDirectKernel ?? (fixedOutOfCombatTarget && !hasDynamicOutOfCombatRequirements
                     ? compileFixedNonDirectObjectiveKernel(fixedOutOfCombatTarget, fixedCombatValues, fixedEntryFlags)
                     : null)
+                const hasReleaseEvent = (compiledDamageTarget.events ?? []).some(event => event.isRelease)
+                const activeDynamicFormulaEntries = dynamicFormulaEntries
+                    .filter(entry => fixedEntryFlags[entry.entryIndex])
+                const releaseIntervalBoundReason = !hasReleaseEvent || fixedObjectiveKernel?.releaseIntervalBound === true
+                    ? null
+                    : fixedObjectiveKernel
+                        ? "interval-bound-unsafe"
+                        : hasDynamicOutOfCombatRequirements
+                            ? "dynamic-out-of-combat-requirement"
+                            : activeDynamicFormulaEntries.some(entry => !entry.initialMasteryCrit)
+                                ? "dynamic-formula-unsupported"
+                                : "fixed-kernel-unavailable"
                 return {
                     scoreKernel: fixedObjectiveKernel ? "compiled-objective-fixed-sets" : "compiled-dense-fixed-sets",
                     releaseIntervalBound: fixedObjectiveKernel?.releaseIntervalBound === true,
+                    releaseIntervalBoundReason,
                     scoreObjectiveScalar: fixedObjectiveKernel?.scoreObjectiveScalar,
                     scoreCombinedScalar: fixedObjectiveKernel?.scoreCombinedScalar,
                     scoreScalar(statValues = []) {

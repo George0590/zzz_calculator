@@ -103,4 +103,9 @@ test("built Worker matches the Fioni optimizer oracle", async ({ page }) => {
   }, { url: `/static/app/${asset}`, serialized, input, store })
   expect(result.results.map((item: any) => item.driveDiscIdsBySlot)).toEqual(truth.results.map(item => item.driveDiscIdsBySlot))
   result.results.forEach((item: any, index: number) => expect(item.score).toBeCloseTo(truth.results[index].score, 6))
+  const metrics = result.metrics
+  expect(metrics.superBoundChecks).toBeGreaterThan(0)
+  expect(metrics.prunedBySuperBound).toBeGreaterThan(0)
+  expect(metrics.scoredCombinationCount + metrics.prunedBySuperBound).toBe(metrics.estimatedCombinationCount)
+  expect(metrics.releaseIntervalBoundEnabled).toBe(true)
 })

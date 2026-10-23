@@ -1,6 +1,6 @@
 # 菲欧妮建模说明
 
-资料核对日期：2026-10-17；本分支实现复核：2026-10-20。角色 ID：`fioni`，游戏 ID：`1641`。
+资料核对日期：2026-10-17；本分支实现复核：2026-10-24。角色 ID：`fioni`，游戏 ID：`1641`。
 
 ## 来源与取值边界
 
@@ -31,6 +31,12 @@
 异常 Buff 的 `target.releaseTargets` 是通用的具体异放筛选，目标由触发角色 `agentId` 与异放方案 `profileId` 组成；留空表示该规则作用于所选结算类型的全部异放，非空目标只能用于纯异放规则。
 
 默认循环是一次火属性灼烧异放，来源为焚罪，普通攻击等级 12，因此默认异放倍率为 `445%`。默认配置为 C0、核心 F、额外能力开启；C3/C5 通过默认配置的最终技能等级变体表达，不重复叠加技能等级。
+
+## 优化器
+
+精准优化（`exact-super-bound`）遇到异放事件时，必须使用固定套装 objective 内核的可证明区间上界。核心被动的灼蚀异常暴击率公式 `clamp(30 + max(初始异常掌控 - 155, 0) × 0.7, 0, 100)` 单调非减且有上界，由白名单解析器 `compileInitialMasteryAnomalyCritFormula` 编译：只接受 `clamp(base + max(x - threshold, 0) * rate, 0, cap)` 这一形状，`base`/`threshold`/`rate`/`cap` 可为字面量或目录参数，要求 `rate`、`cap` 非负，并逐点与通用表达式求值核对。编译成功时按初始异常掌控的区间上界求值，纳入固定套装 objective 内核后 `releaseIntervalBound` 才允许为 true，默认单次异放的精准优化因此恢复剪枝。
+
+其他动态公式或无法证明的区间仍使固定内核返回无限上界并继续全枚举。严格优化器在需要异放区间上界时以 `releaseIntervalBoundEnabled` 和 `releaseBoundFallbackReason` 报告状态，后者取 `fixed-kernel-unavailable`、`dynamic-formula-unsupported`、`dynamic-out-of-combat-requirement` 或 `interval-bound-unsafe` 之一。该修复不改变伤害语义：公式仍按通用求值路径结算，区间上界只服务剪枝，Top 10 必须与关闭剪枝的 `exact-legacy` 一致。
 
 ## 未自动模拟的机制
 
