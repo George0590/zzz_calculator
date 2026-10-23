@@ -1,3 +1,4 @@
+import { expectNavigationFits } from "./navigation-assertions"
 import { expect, test, type Page } from "@playwright/test"
 
 const uid = "1302309616"
@@ -82,10 +83,11 @@ async function mockAppConfig(page: Page, enkaImportEnabled: boolean) {
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
+  await expectNavigationFits(page)
   const readMetrics = () => page.evaluate(() => ({
     viewportWidth: window.innerWidth,
     scrollWidth: document.documentElement.scrollWidth,
-    clipped: Array.from(document.querySelectorAll<HTMLElement>(".nav, .nav a, .nav a span"))
+    clipped: Array.from(document.querySelectorAll<HTMLElement>(".nav a, .nav a span"))
       .filter(element => element.scrollWidth > element.clientWidth + 1)
       .map(element => ({
         text: element.textContent?.trim(),
