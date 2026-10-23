@@ -4,9 +4,8 @@ import { driveDiscImportFingerprint, pendingDriveDiscImportOwners } from "@core/
 
 const FORMAT = "zzz-calculator-personal-backup"
 const FALLBACK = "zzz-calculator.userStore.v1"
-const EXCLUDED_KEYS = new Set(["zzz-calculator.calculation-presets.v1"])
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
-const appKey = (key: string) => key !== FALLBACK && !EXCLUDED_KEYS.has(key)
+const appKey = (key: string) => key !== FALLBACK
   && (key.startsWith("zzz-calculator.") || key.startsWith("zzz_maintenance_vue_draft_"))
 
 type Snapshot = { inventory: any, localStorage: Array<{ key: string, value: string }>, unreadableFallback?: string }
