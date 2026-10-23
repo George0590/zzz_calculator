@@ -1126,6 +1126,7 @@ function normalizedRuleTarget(rule = {}) {
             settlementType: settlementTypes.length === 1 ? settlementTypes[0] : null,
             anomalyEffects: Array.isArray(target.anomalyEffects) ? target.anomalyEffects : [],
             anomalyVariants: Array.isArray(target.anomalyVariants) ? target.anomalyVariants : [],
+            releaseTargets: Array.isArray(target.releaseTargets) ? target.releaseTargets : [],
         }
     }
     return { kind: "default" }
@@ -1143,6 +1144,7 @@ function hasEventAppliesToFilters(rule = {}) {
         appliesTo.anomalyEffects,
         appliesTo.anomalyVariants,
         appliesTo.elements,
+        appliesTo.releaseTargets,
         appliesTo.skillTargets,
     ].some(values => Array.isArray(values) && values.length > 0)
 }
@@ -1419,6 +1421,7 @@ function resolveEffectDamageModifiers(effect, runtimeInput = {}, modifierContext
                         settlementTypes: target.settlementTypes,
                         ...(target.anomalyEffects.length ? { anomalyEffects: target.anomalyEffects } : {}),
                         ...(target.anomalyVariants.length ? { anomalyVariants: target.anomalyVariants } : {}),
+                        ...(target.releaseTargets.length ? { releaseTargets: target.releaseTargets } : {}),
                     }
                     : rule.appliesTo ?? null
             return {
@@ -2745,6 +2748,7 @@ function dynamicFormulaTargetAppliesTo(rule = {}) {
             settlementTypes: target.settlementTypes,
             ...(target.anomalyEffects.length ? { anomalyEffects: target.anomalyEffects } : {}),
             ...(target.anomalyVariants.length ? { anomalyVariants: target.anomalyVariants } : {}),
+            ...(target.releaseTargets.length ? { releaseTargets: target.releaseTargets } : {}),
         }
     }
     return rule.appliesTo ?? null
@@ -4138,6 +4142,16 @@ export function damageModifierAppliesTo(modifier, event) {
         && !appliesTo.anomalyVariants.includes(matchingEvent.anomalyVariant ?? "normal")) {
         return false
     }
+    if (Array.isArray(appliesTo.releaseTargets) && appliesTo.releaseTargets.length) {
+        const actorId = String(matchingEvent.triggerActorRef?.agentId ?? "")
+        const profileId = String(matchingEvent.triggerActorRef?.profileId
+            ?? matchingEvent.releaseProfile?.id ?? "")
+        if (!appliesTo.releaseTargets.some(target =>
+            String(target?.agentId ?? "") === actorId
+            && String(target?.profileId ?? "") === profileId)) {
+            return false
+        }
+    }
     if (Array.isArray(appliesTo.elements) && appliesTo.elements.length && !appliesTo.elements.includes(matchingEvent.damageElement)) {
         return false
     }
@@ -4155,6 +4169,7 @@ const DAMAGE_MODIFIER_FILTER_KEYS = [
     "anomalyEffects",
     "anomalyVariants",
     "elements",
+    "releaseTargets",
     "skillTargets",
 ]
 

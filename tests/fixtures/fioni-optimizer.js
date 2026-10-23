@@ -2,7 +2,7 @@ export function fioniOptimizerInput() {
     return {
         agentId: "fioni", coreSkillLevel: "F", cinemaLevel: 0,
         wEngineId: "zzz_wiki_154", wEngineModificationLevel: 1,
-        combatBuffs: { activeBuffIds: ["agent:fioni.corePassive", "agent:fioni.additionalAbility", "driveDisc4pc:phaethons_melody.self"] },
+        combatBuffs: { activeBuffIds: ["agent:fioni.corePassive", "agent:fioni.additionalAbility", "agent:fioni.skill.release_crit_dmg", "driveDisc4pc:phaethons_melody.self"] },
         damage: { mode: "custom", agentLevel: 60, skillLevelsByCategory: { basic: 12, chain: 12 },
             selectedEventId: "release", events: [{ id: "release", kind: "anomaly", settlementType: "release",
                 anomalyEffect: "burn", count: 1, stunned: true, critMode: "expected",

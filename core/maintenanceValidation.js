@@ -865,6 +865,38 @@ function validateEffectRule(errors, rule = {}, path, sourceType = "manual", scop
                 )
             }
         }
+        if (target.releaseTargets !== undefined) {
+            if (!Array.isArray(target.releaseTargets) || !target.releaseTargets.length) {
+                add(errors, `${path}.target.releaseTargets`, "指定异放至少需要一个目标。")
+            } else if (settlementTypes.length !== 1 || settlementTypes[0] !== "release") {
+                add(errors, `${path}.target.releaseTargets`, "指定异放只能用于纯异放结算。")
+            } else {
+                const seenReleaseTargets = new Set()
+                const agents = Array.isArray(context.agents) ? context.agents : []
+                target.releaseTargets.forEach((releaseTarget, index) => {
+                    const targetPath = `${path}.target.releaseTargets[${index}]`
+                    const agentId = String(releaseTarget?.agentId ?? "").trim()
+                    const profileId = String(releaseTarget?.profileId ?? "").trim()
+                    if (!agentId) add(errors, `${targetPath}.agentId`, "异放角色不能为空。")
+                    if (!profileId) add(errors, `${targetPath}.profileId`, "异放方案不能为空。")
+                    const key = `${agentId}\u0000${profileId}`
+                    if (seenReleaseTargets.has(key)) add(errors, targetPath, "指定异放不能重复。")
+                    seenReleaseTargets.add(key)
+                    // Skill-source rules carry the edited agent on `agent`; keep the
+                    // roster as the general source for cross-agent targets.
+                    const agent = String(context.agent?.id ?? "") === agentId
+                        ? context.agent
+                        : String(context.currentAgent?.id ?? "") === agentId
+                            ? context.currentAgent
+                            : agents.find(item => String(item?.id ?? "") === agentId)
+                    if (!agent) {
+                        add(errors, `${targetPath}.agentId`, "异放角色不存在。")
+                    } else if (!(agent.anomalyReleaseProfiles ?? []).some(profile => String(profile?.id ?? "") === profileId)) {
+                        add(errors, `${targetPath}.profileId`, "异放方案不存在。")
+                    }
+                })
+            }
+        }
         if (!ANOMALY_TARGET_STAT_VALUES.has(rule.stat)) {
             add(errors, `${path}.stat`, "异常增幅对象不支持该增幅类型。")
         }

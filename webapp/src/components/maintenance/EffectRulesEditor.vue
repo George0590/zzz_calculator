@@ -220,11 +220,51 @@ function changeAnomalySettlements(rule: any, values: unknown) {
   }
   delete rule.target.anomalyEffects
   if (nextTypes.length !== 1 || nextTypes[0] !== "attribute") delete rule.target.anomalyVariants
+  if (nextTypes.length !== 1 || nextTypes[0] !== "release") delete rule.target.releaseTargets
   const allowedStats = statOptions(props.catalog, "anomaly", settlementTypeForOptions(rule))
   if (!allowedStats.some(item => item.value === rule.stat)) {
     rule.stat = String(allowedStats[0]?.value ?? "anomalyDamageBonus")
     syncMode(rule)
   }
+  emit("change")
+}
+
+function releaseTargetKey(target: any) {
+  return `${String(target?.agentId ?? "")}\u0000${String(target?.profileId ?? "")}`
+}
+
+function releaseTargetOptions() {
+  const agents = Array.isArray(props.catalog?.agents) ? props.catalog.agents : props.catalog?.agents?.agents ?? []
+  return agents
+    .map((agent: any) => ({
+      type: "group",
+      label: textOf(agent.name) || agent.id,
+      key: String(agent.id),
+      children: (agent.anomalyReleaseProfiles ?? []).map((profile: any) => ({
+        label: textOf(profile.name) || profile.id,
+        value: `${String(agent.id)}\u0000${String(profile.id)}`,
+      })),
+    }))
+    .filter((group: any) => group.children.length)
+}
+
+function releaseTargetValues(rule: any) {
+  return (Array.isArray(rule.target?.releaseTargets) ? rule.target.releaseTargets : [])
+    .map(releaseTargetKey)
+}
+
+function changeReleaseTargets(rule: any, values: unknown) {
+  const selected = Array.isArray(values) ? values.map(String) : []
+  const options = releaseTargetOptions().flatMap((group: any) => group.children ?? [])
+  const allowed = new Set(options.map((item: any) => String(item.value)))
+  const targets = [...new Set(selected)]
+    .filter(value => allowed.has(value))
+    .map(value => {
+      const [agentId, profileId] = value.split("\u0000")
+      return { agentId, profileId }
+    })
+  if (targets.length) rule.target.releaseTargets = targets
+  else delete rule.target.releaseTargets
   emit("change")
 }
 
@@ -735,6 +775,7 @@ function setRuleLabel(rule: any, value: string) {
       <div v-if="rule.target?.kind === 'anomaly'" class="maintenance-nested-panel maintenance-grid">
         <label class="maintenance-field maintenance-field-wide"><span>结算类型</span><NSelect multiple :value="settlementTypesForRule(rule)" :options="settlementOptionsForRule(rule)" :disabled="disabled" @update:value="changeAnomalySettlements(rule, $event)" /></label>
         <label v-if="!settlementTypesForRule(rule).includes('luminescence')" class="maintenance-field maintenance-field-wide"><span>{{ settlementTypesForRule(rule).some(type => ['turbulence', 'release'].includes(type)) ? '异常类型 / 原异常（留空为全部）' : '异常类型（留空为全部）' }}</span><NSelect multiple filterable clearable :value="rule.target.anomalyEffects ?? []" :options="anomalyTargetOptions(rule)" :placeholder="anomalyTargetPlaceholder(rule)" :disabled="disabled" @update:value="changeAnomalyEffects(rule, $event)" /></label>
+        <label v-if="settlementTypesForRule(rule).length === 1 && settlementTypesForRule(rule)[0] === 'release'" class="maintenance-field maintenance-field-wide"><span>指定异放（留空为全部）</span><NSelect multiple filterable clearable :value="releaseTargetValues(rule)" :options="releaseTargetOptions()" placeholder="全部异放" :disabled="disabled" @update:value="changeReleaseTargets(rule, $event)" /></label>
         <label v-if="settlementTypesForRule(rule).length === 1 && settlementTypesForRule(rule)[0] === 'attribute'" class="maintenance-field maintenance-field-wide"><span>异常形态（留空为全部）</span><NSelect multiple clearable :value="rule.target.anomalyVariants ?? []" :options="ANOMALY_VARIANT_OPTIONS" :disabled="disabled" @update:value="changeAnomalyVariants(rule, $event)" /></label>
         <div v-if="settlementTypesForRule(rule).length > 1" class="maintenance-field-wide maintenance-rule-summary">命中：{{ settlementTypesForRule(rule).map(type => ({ attribute: '属性异常', turbulence: '乱流', release: '异放', disorder: '紊乱', luminescence: '耀变' } as Record<string, string>)[type] ?? type).join('、') }} · {{ (rule.target.anomalyEffects ?? []).length ? (rule.target.anomalyEffects ?? []).join('、') : anomalyTargetPlaceholder(rule) }}</div>
       </div>

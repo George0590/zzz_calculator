@@ -8312,7 +8312,11 @@
               },
               "target": {
                 "kind": "anomaly",
-                "settlementTypes": ["attribute", "turbulence", "release"],
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8333,7 +8337,11 @@
               "allowExtendedPanelFormula": true,
               "target": {
                 "kind": "anomaly",
-                "settlementTypes": ["attribute", "turbulence", "release"],
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8375,7 +8383,11 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementTypes": ["attribute", "turbulence", "release"],
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8416,7 +8428,11 @@
               },
               "target": {
                 "kind": "anomaly",
-                "settlementTypes": ["attribute", "turbulence", "release"],
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -8499,7 +8515,11 @@
                 "mode": "flat",
                 "target": {
                   "kind": "anomaly",
-                  "settlementTypes": ["attribute", "turbulence", "release"],
+                  "settlementTypes": [
+                    "attribute",
+                    "turbulence",
+                    "release"
+                  ],
                   "anomalyEffects": [
                     "assault"
                   ]
@@ -8519,7 +8539,11 @@
                 "mode": "flat",
                 "target": {
                   "kind": "anomaly",
-                  "settlementTypes": ["attribute", "turbulence", "release"],
+                  "settlementTypes": [
+                    "attribute",
+                    "turbulence",
+                    "release"
+                  ],
                   "anomalyEffects": [
                     "assault"
                   ]
@@ -11196,7 +11220,7 @@
             "zhCN": "核心被动：涅槃"
           },
           "description": {
-            "zhCN": "核心被动：涅槃\n菲欧妮的异常精通提升43点；\n队伍中任意角色对敌人造成属性异常伤害时，会使其陷入[灼蚀]状态，持续20秒，重复触发刷新持续时间；[灼蚀]状态下的敌人受到属性异常伤害时有概率触发暴击，基础暴击率为30%，暴击伤害为12.5%，若菲欧妮的初始异常掌控大于155点，每点超过的异常掌控会使得该效果的暴击率额外提升0.7%；\n当菲欧妮的初始异常掌控达到255点时，[灼蚀]状态下的敌人受到属性异常伤害的暴击率达到最大值；\n[灼蚀]状态下的敌人每8秒受到菲欧妮25%攻击力的火属性伤害，该伤害视为[强化特殊技]伤害；\n建模：初始/A-F异常精通43/50/57/64/71/78/85；灼蚀异常暴伤12.5%→25%，周期火伤25%→50%，中间档按线性精度。灼蚀作为自身Buff，默认条件已满足；只影响自身属性异常和异放。"
+            "zhCN": "核心被动：涅槃\n菲欧妮的异常精通提升43/50/57/64/71/78/85点；\n队伍中任意角色对敌人造成属性异常伤害时，会使其陷入[灼蚀]状态，持续20秒，重复触发刷新持续时间；[灼蚀]状态下的敌人受到属性异常伤害时有概率触发暴击，基础暴击率为30%，暴击伤害为12.5%/14.6%/16.7%/18.8%/20.8%/22.9%/25%，若菲欧妮的初始异常掌控大于155点，每点超过的异常掌控会使得该效果的暴击率额外提升0.7%；\n当菲欧妮的初始异常掌控达到255点时，[灼蚀]状态下的敌人受到属性异常伤害的暴击率达到最大值；\n[灼蚀]状态下的敌人每8秒受到菲欧妮25%/29.2%/33.3%/37.5%/41.7%/45.8%/50%攻击力的火属性伤害，该伤害视为[强化特殊技]伤害。"
           },
           "effects": [
             {
@@ -11221,7 +11245,11 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementTypes": ["attribute", "turbulence", "release"]
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ]
               },
               "source": {
                 "kind": "outOfCombatStat",
@@ -11236,7 +11264,7 @@
                 "expression": "clamp(30 + max(x - 155, 0) * 0.7, 0, 100)",
                 "valueUnit": "storedPercent"
               }
-          },
+            },
             {
               "id": "fioni-sear-crit-dmg-attribute",
               "type": "fixed",
@@ -11245,7 +11273,11 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementTypes": ["attribute", "turbulence", "release"]
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ]
               },
               "valueSource": {
                 "kind": "corePassiveScaling",
@@ -11273,13 +11305,59 @@
               "mode": "flat",
               "target": {
                 "kind": "anomaly",
-                "settlementTypes": ["attribute", "turbulence", "release"]
+                "settlementTypes": [
+                  "attribute",
+                  "turbulence",
+                  "release"
+                ]
               }
             }
           ],
           "buffModifiers": [],
           "defaultChecked": true
         },
+        "skillBuffs": [
+          {
+            "id": "release_crit_dmg",
+            "scope": "inCombat",
+            "sourceSkillRef": {
+              "agentSkillId": "fioni",
+              "categoryId": "basic",
+              "moveId": "basic_purifying_flame"
+            },
+            "name": {
+              "zhCN": "焚罪／烬火追魂｜异放额外暴伤"
+            },
+            "description": {
+              "zhCN": "焚罪与烬火追魂触发的异放暴击时，异常暴击伤害额外提升40%。"
+            },
+            "effects": [
+              {
+                "id": "fioni-release-crit-dmg",
+                "type": "fixed",
+                "stat": "anomalyCritDmg",
+                "value": 40,
+                "mode": "flat",
+                "target": {
+                  "kind": "anomaly",
+                  "settlementType": "release",
+                  "releaseTargets": [
+                    {
+                      "agentId": "fioni",
+                      "profileId": "fioni_purifying_flame_release"
+                    },
+                    {
+                      "agentId": "fioni",
+                      "profileId": "fioni_soul_searching_blaze_release"
+                    }
+                  ]
+                }
+              }
+            ],
+            "buffModifiers": [],
+            "defaultChecked": true
+          }
+        ],
         "cinemaBuffs": [
           {
             "cinemaLevel": 1,
@@ -11303,7 +11381,11 @@
                 "mode": "flat",
                 "target": {
                   "kind": "anomaly",
-                  "settlementTypes": ["attribute", "turbulence", "release"]
+                  "settlementTypes": [
+                    "attribute",
+                    "turbulence",
+                    "release"
+                  ]
                 }
               }
             ],
@@ -11379,54 +11461,6 @@
             "buffModifiers": []
           },
           {
-            "cinemaLevel": 3,
-            "cinemaName": {
-              "zhCN": "稻草人症候群"
-            },
-            "name": {
-              "zhCN": "影画3｜稻草人症候群"
-            },
-            "description": {
-              "zhCN": "[普通攻击]、[闪避]、[支援技]、[特殊技]、[连携技]技能等级+2\n技能等级输入是最终等级，不重复加级。"
-            },
-            "scope": "inCombat",
-            "defaultChecked": false,
-            "effects": [],
-            "buffModifiers": []
-          },
-          {
-            "cinemaLevel": 4,
-            "cinemaName": {
-              "zhCN": "生命尽头与冷酷仙境"
-            },
-            "name": {
-              "zhCN": "影画4｜生命尽头与冷酷仙境"
-            },
-            "description": {
-              "zhCN": "[终结技：烬火追魂]以及[普通攻击：焚罪]终结一击命中处于异常状态的敌人时，\n额外触发一次[异放]效果，固定结算600%倍率的对应属性的属性异常伤害。\n使用独立600%异放事件手动加入，不自动叠加到默认单次异放；按约定不继承主异放的40%额外暴伤。"
-            },
-            "scope": "inCombat",
-            "defaultChecked": false,
-            "effects": [],
-            "buffModifiers": []
-          },
-          {
-            "cinemaLevel": 5,
-            "cinemaName": {
-              "zhCN": "狂欢马戏团"
-            },
-            "name": {
-              "zhCN": "影画5｜狂欢马戏团"
-            },
-            "description": {
-              "zhCN": "[普通攻击]、[闪避]、[支援技]、[特殊技]、[连携技]技能等级+2\n技能等级输入是最终等级，不重复加级。"
-            },
-            "scope": "inCombat",
-            "defaultChecked": false,
-            "effects": [],
-            "buffModifiers": []
-          },
-          {
             "cinemaLevel": 6,
             "cinemaName": {
               "zhCN": "禁闭室手记"
@@ -11464,8 +11498,7 @@
             ],
             "buffModifiers": []
           }
-        ],
-        "skillBuffs": []
+        ]
       },
       "cinemaDescriptions": [
         {
@@ -11714,7 +11747,6 @@
               "zhCN": "焚罪异放倍率"
             }
           },
-          "critDmgBonus": 0.4,
           "releaseSkillRef": {
             "agentSkillId": "fioni",
             "categoryId": "basic",
@@ -11744,7 +11776,6 @@
               "zhCN": "烬火追魂异放倍率"
             }
           },
-          "critDmgBonus": 0.4,
           "releaseSkillRef": {
             "agentSkillId": "fioni",
             "categoryId": "chain",
@@ -11856,7 +11887,7 @@
       "sources": [
         "https://baike.mihoyo.com/zzz/wiki/content/2216/detail?mhy_presentation_style=fullscreen",
         "https://zzz.nanoka.cc/character/1641",
-        "https://static.nanoka.cc/zzz/3.3.12+19629936/en/character/1641.json"
+        "https://static.nanoka.cc/zzz/3.3.12+19629936/en/character/1641.json "
       ],
       "officialEntryPageId": 2216,
       "officialEntryVersion": "1792158014",

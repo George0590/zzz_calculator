@@ -17,6 +17,7 @@ it('initializes one Fire release at C0/F/Lv12 and preserves custom C4 through re
  expect(store.damageConfig.events).toHaveLength(1)
  expect(store.damageConfig.events[0]).toMatchObject({settlementType:'release',anomalyEffect:'burn',releaseSkillRef:{categoryId:'basic'}})
  expect(store.activeBuffIds(meta)).toContain('agent:fioni.additionalAbility')
+ expect(store.activeBuffIds(meta)).toContain('agent:fioni.skill.release_crit_dmg')
  store.setCinemaLevel(4,meta)
  expect(store.skillLevels.basic).toBe(14)
  const event={...store.damageConfig.events[0],anomalyEffect:'shock',critMode:'crit',triggerActorRef:{agentId:'fioni',profileId:'fioni_c4_extra_release'}}

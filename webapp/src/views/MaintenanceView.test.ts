@@ -296,6 +296,40 @@ function agentWithTurbulenceEvent(anomalyEffect: string) {
   return agent
 }
 
+function agentWithSelfReleaseTarget() {
+  const agent = structuredClone(makeCatalog().agents.agents[0])
+  agent.anomalyReleaseProfiles = [{
+    id: "release_profile",
+    name: { zhCN: "测试异放" },
+    default: true,
+    supportedElements: ["physical"],
+    resultMode: "fixedAnomalyMultiplier",
+    expression: { kind: "constant", value: 100, unit: "percent", whiteBoxRole: "conversionSource" },
+  }]
+  agent.combatBuffs.skillBuffs = [{
+    id: "release_crit_dmg",
+    scope: "inCombat",
+    sourceSkillRef: { agentSkillId: "skills_a", categoryId: "basic", moveId: "move" },
+    name: { zhCN: "异放额外暴伤" },
+    description: { zhCN: "测试：指定异放命中时额外提升异常暴伤。" },
+    effects: [{
+      id: "release_crit_dmg_rule",
+      type: "fixed",
+      target: {
+        kind: "anomaly",
+        settlementType: "release",
+        releaseTargets: [{ agentId: "agent_a", profileId: "release_profile" }],
+      },
+      stat: "anomalyCritDmg",
+      mode: "flat",
+      value: 40,
+    }],
+    buffModifiers: [],
+    defaultChecked: true,
+  }]
+  return agent
+}
+
 const resourceLabels: Record<string, string> = {
   agents: "角色", "agent-skills": "角色技能", "w-engines": "音擎", "drive-disc-sets": "驱动盘套装",
   "anomaly-effects": "异常 / 紊乱", "teammate-buffs": "队友 Buff", "field-buffs": "场地 Buff", "boss-buffs": "Boss Buff",
@@ -769,6 +803,16 @@ describe("MaintenanceView structured editor", () => {
     expect(focusSpy.mock.contexts).toContain(field(wrapper, "本地图片路径").find("input").element)
     focusSpy.mockRestore()
     wrapper.element.remove()
+  })
+
+  it("validates self-referencing Release targets against the agent roster", async () => {
+    const { wrapper, fetchMock } = await mountView({ initialAgent: agentWithSelfReleaseTarget() })
+    expect(wrapper.text()).not.toContain("异放角色不存在")
+    expect(wrapper.text()).not.toContain("异放方案不存在")
+    await button(wrapper, "保存").trigger("click")
+    await vi.waitFor(() => expect(wrapper.text()).toContain("完整目录已刷新"))
+    expect(fetchMock.mock.calls.some(([url, init]) => url === "/api/maintenance/agents" && init?.method === "POST")).toBe(true)
+    expect(wrapper.find(".validation-summary").exists()).toBe(false)
   })
 
   it("uses the old calculation objectives and keeps custom selectable", async () => {

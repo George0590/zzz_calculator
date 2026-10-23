@@ -91,6 +91,21 @@ function nonEmptyArray(value) {
     return Array.isArray(value) ? [...new Set(value.filter(Boolean).map(String))] : []
 }
 
+function normalizedReleaseTargets(value) {
+    if (!Array.isArray(value)) return []
+    const seen = new Set()
+    return value
+        .filter(item => item && typeof item === "object" && !Array.isArray(item))
+        .map(item => ({ agentId: String(item.agentId ?? "").trim(), profileId: String(item.profileId ?? "").trim() }))
+        .filter(item => item.agentId && item.profileId)
+        .filter(item => {
+            const key = `${item.agentId}\u0000${item.profileId}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+        })
+}
+
 function explicitStatsForElements(stat, elements) {
     const mapping = stat === "dmgBonus"
         ? ELEMENT_DAMAGE_STAT_BY_ELEMENT
@@ -113,7 +128,7 @@ function normalizedAppliesTo(rule) {
         return null
     }
     const appliesTo = { ...rule.appliesTo }
-    for (const key of ["damageKinds", "settlementTypes", "anomalyEffects", "anomalyVariants", "elements", "skillTargets"]) {
+    for (const key of ["damageKinds", "settlementTypes", "anomalyEffects", "anomalyVariants", "elements", "releaseTargets", "skillTargets"]) {
         if (Array.isArray(appliesTo[key]) && !appliesTo[key].length) {
             delete appliesTo[key]
         }
@@ -192,6 +207,9 @@ export function normalizeEffectRuleTarget(rule = {}) {
     if (Array.isArray(rule.target.anomalyEffects) && rule.target.anomalyEffects.length === 0) {
         delete rule.target.anomalyEffects
     }
+    const releaseTargets = normalizedReleaseTargets(rule.target.releaseTargets)
+    if (releaseTargets.length) rule.target.releaseTargets = releaseTargets
+    else delete rule.target.releaseTargets
 
     if (rule.target.settlementType === "luminescence"
         && Array.isArray(rule.target.anomalyVariants)
