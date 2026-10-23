@@ -868,13 +868,13 @@ textarea {
 @media (max-width: 480px) {
   .nav {
     gap: 2px;
-    overflow: hidden;
+    overflow-x: auto;
   }
 
   .nav a {
     flex: 1 1 0;
     justify-content: center;
-    min-width: 0;
+    min-width: max-content;
     gap: 3px;
     padding: 0 2px;
     font-size: 12px;
