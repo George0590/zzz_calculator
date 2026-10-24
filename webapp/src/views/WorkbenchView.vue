@@ -72,7 +72,19 @@ const buffPickerResetNotice = ref("")
 const teammateSources = ref<TeammateSources>()
 let buffSession: { context: Awaited<ReturnType<typeof readTeammateSources>>, state: string, agentId: string } | null = null
 let disposed = false
-onBeforeUnmount(() => { disposed = true })
+let optimizationRequest = 0
+function invalidateOptimization() {
+  optimizationRequest++
+  optimizerStore.reset()
+}
+watch(() => [accountStore.currentOwnerId, buildStore.agentId], invalidateOptimization, { flush: "sync" })
+onBeforeUnmount(() => {
+  disposed = true
+  optimizationRequest++
+  // Leaving the page must settle a running task, but a completed result should
+  // stay available when the user navigates back within the same session.
+  if (optimizerStore.isBusy) optimizerStore.reset()
+})
 
 function currentBuffPayload() {
   return { selectedBuffIds: buildStore.activeBuffIds(catalogStore.meta), addedBuffs: buildStore.addedBuffs,
@@ -374,7 +386,8 @@ const selectedSchemeInventoryDiscs = computed(() => {
     return disc && Number(disc.partition) === row.slot ? disc : null
   })
 })
-const selectedSchemeCanBeLocked = computed(() => buildStore.discMode === "optimized"
+const selectedSchemeCanBeLocked = computed(() => !optimizerStore.resultsAreProvisional
+  && buildStore.discMode === "optimized"
   && Boolean(buildStore.agentId)
   && accountStore.currentOwnerId === inventoryStore.store?.currentOwnerId
   && selectedSchemeInventoryDiscs.value.every(disc => Boolean(disc?.id))
@@ -486,7 +499,7 @@ const canSaveCurrentScheme = computed(() => {
     return selectedDriveDiscs.value.length > 0
   }
   if (buildStore.discMode === "optimized") {
-    return Boolean(selectedOptimizedScheme.value?.driveDiscs?.length)
+    return !optimizerStore.resultsAreProvisional && Boolean(selectedOptimizedScheme.value?.driveDiscs?.length)
   }
   return false
 })
@@ -656,7 +669,9 @@ const optimizerStatusSummary = computed(() => {
     return optimizerPrepareStageLabel.value || "正在准备候选数据"
   }
   if (["preview", "running"].includes(optimizerUiStatus.value)) {
-    return "正在优化"
+    return optimizerStore.resultsAreProvisional
+      ? `正在优化 · 已找到 ${optimizerStore.resultSchemes.length} 套临时方案`
+      : "正在优化"
   }
   if (optimizerUiStatus.value === "cancelling") {
     return "正在取消优化"
@@ -875,7 +890,18 @@ function optimizerInput(ownerId = inventoryStore.store?.currentOwnerId ?? accoun
 }
 
 async function runOptimization() {
-  await inventoryStore.load()
+  const request = ++optimizationRequest
+  const requestedOwnerId = accountStore.currentOwnerId
+  const requestedAgentId = buildStore.agentId
+  const isCurrent = () => !disposed && request === optimizationRequest
+    && requestedOwnerId === accountStore.currentOwnerId && requestedAgentId === buildStore.agentId
+  try {
+    await inventoryStore.load()
+  } catch (error) {
+    if (isCurrent()) optimizerStore.failBeforeRun(error instanceof Error ? error.message : String(error), optimizerStore.settings)
+    return
+  }
+  if (!isCurrent()) return
   const ownerId = inventoryStore.store?.currentOwnerId ?? accountStore.currentOwnerId ?? "default"
   const owner = (inventoryStore.store?.owners ?? accountStore.owners ?? []).find((item: any) => item.id === ownerId)
   if (!luminescenceParametersValid.value) {
@@ -903,7 +929,7 @@ async function runOptimization() {
     return
   }
   await optimizerStore.run(catalogStore.catalog, inventoryStore.store, input)
-  if (optimizerStore.resultSchemes[0]) {
+  if (isCurrent() && optimizerStore.status === "done" && optimizerStore.resultSchemes[0]) {
     buildStore.selectOptimizedRank(Number(optimizerStore.resultSchemes[0].rank))
   }
 }
@@ -960,6 +986,7 @@ function openSaveManualLoadout() {
 }
 
 function openSaveOptimizedLoadout() {
+  if (optimizerStore.resultsAreProvisional) return
   const scheme = selectedOptimizedScheme.value
   if (!scheme?.driveDiscs?.length) {
     return
@@ -1718,6 +1745,13 @@ function formatPercentValue(value: any) {
             </div>
           </div>
 
+          <NAlert v-if="optimizerStore.resultsAreProvisional" type="info" :show-icon="false" data-testid="optimizer-provisional-notice">
+            {{ optimizerStore.isBusy ? '搜索仍在进行' : '搜索未完成' }}，以下为当前已找到的方案，尚未确认最终最优。完整结果出来后可保存或锁定。
+            <NButton v-if="buildStore.discMode !== 'optimized'" text type="primary" @click="buildStore.selectOptimizedRank(1)">
+              查看当前方案
+            </NButton>
+          </NAlert>
+
           <div v-if="buildStore.discMode === 'loadout'" class="drive-disc-mode-control">
             <NSelect
               :value="selectedLoadout?.id ?? ''"
@@ -1753,7 +1787,7 @@ function formatPercentValue(value: any) {
                 secondary
                 data-testid="lock-optimized-scheme"
                 :loading="schemeReservationBusy"
-                :disabled="!selectedSchemeCanBeLocked || schemeReservationBusy"
+                :disabled="optimizerStore.resultsAreProvisional || !selectedSchemeCanBeLocked || schemeReservationBusy"
                 :title="selectedSchemeIsLocked ? '解除当前方案六张盘对当前角色的专属锁定' : '将当前方案六张盘锁定给当前角色'"
                 @click="toggleSelectedSchemeReservation"
               >

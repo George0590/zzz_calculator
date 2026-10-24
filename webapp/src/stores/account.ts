@@ -23,6 +23,21 @@ const summaryGenerations = new WeakMap<object, number>()
 
 class AccountSummaryApplyError extends Error {}
 
+async function mutateAccount(store: any, operation: string, task: () => Promise<void>) {
+  if (store.operation) throw new Error("账号操作执行中，请稍候。")
+  store.operation = operation
+  store.operationError = ""
+  summaryGenerations.set(store, (summaryGenerations.get(store) ?? 0) + 1)
+  try {
+    await task()
+  } catch (error) {
+    store.operationError = accountErrorMessage(error)
+    throw error
+  } finally {
+    store.operation = ""
+  }
+}
+
 function accountErrorMessage(error: unknown) {
   if (error && typeof error === "object" && "message" in error) {
     const message = String((error as { message?: unknown }).message ?? "").trim()
@@ -68,6 +83,8 @@ export const useAccountStore = defineStore("account", {
     summary: null as any,
     loadState: "idle" as AccountLoadState,
     error: "",
+    operation: "",
+    operationError: "",
   }),
   getters: {
     owners: state => state.summary?.owners ?? [],
@@ -95,11 +112,18 @@ export const useAccountStore = defineStore("account", {
       this.error = ""
       const generation = summaryGenerations.get(this) ?? 0
       const request = accountSummary()
-        .then(summary => (summaryGenerations.get(this) ?? 0) === generation
-          ? applyAccountSummary(this, summary)
-          : this.summary)
+        .then(summary => {
+          if ((summaryGenerations.get(this) ?? 0) === generation) return applyAccountSummary(this, summary)
+          // A newer account mutation already settled the state; do not leave
+          // the view stuck on "loading" just because this stale read returned.
+          this.loadState = "ready"
+          this.error = ""
+          return this.summary
+        })
         .catch(error => {
           if ((summaryGenerations.get(this) ?? 0) !== generation && !(error instanceof AccountSummaryApplyError)) {
+            this.loadState = "ready"
+            this.error = ""
             return this.summary
           }
           this.loadState = "error"
@@ -116,37 +140,45 @@ export const useAccountStore = defineStore("account", {
       return this.ensureLoaded({ force: true })
     },
     async create(label: string) {
-      applyAccountSummary(this, await createAccount({ label }))
+      return mutateAccount(this, "create", async () => {
+        applyAccountSummary(this, await createAccount({ label }))
+      })
     },
     async rename(id: string, label: string) {
-      applyAccountSummary(this, await updateAccount(id, { label }))
+      return mutateAccount(this, "rename", async () => {
+        applyAccountSummary(this, await updateAccount(id, { label }))
+      })
     },
     async switchTo(id: string) {
-      await recoverPendingEnkaImport(id)
-      applyAccountSummary(this, await switchAccount(id))
+      return mutateAccount(this, "switch", async () => {
+        await recoverPendingEnkaImport(id)
+        applyAccountSummary(this, await switchAccount(id))
+      })
     },
     async remove(id: string) {
-      await recoverPendingEnkaImport(id)
-      const store = await loadUserDriveDiscStoreFresh()
-      const deletion = planDeleteInventoryAccount(store, id)
-      const buildSelection = readBuildSelectionDocument()
-      const legacySelection = readLegacySelectionDocument()
-      const nextOwnerId = String(deletion.nextStore.currentOwnerId ?? "default")
-      const transactionId = String(globalThis.crypto?.randomUUID?.() ?? `account-delete-${Date.now()}`)
-      const plan = buildDriveDiscImportTransactionPlan({
-        kind: "account-delete",
-        ownerId: id,
-        transactionId,
-        store,
-        nextStore: deletion.nextStore,
-        buildSelection,
-        legacySelection,
-        nextBuildSelection: withoutOwnerSelection(buildSelection, id, nextOwnerId),
-        nextLegacySelection: withoutOwnerSelection(legacySelection, id, nextOwnerId),
-        metadata: { deletedOwnerId: id },
+      return mutateAccount(this, "remove", async () => {
+        await recoverPendingEnkaImport(id)
+        const store = await loadUserDriveDiscStoreFresh()
+        const deletion = planDeleteInventoryAccount(store, id)
+        const buildSelection = readBuildSelectionDocument()
+        const legacySelection = readLegacySelectionDocument()
+        const nextOwnerId = String(deletion.nextStore.currentOwnerId ?? "default")
+        const transactionId = String(globalThis.crypto?.randomUUID?.() ?? `account-delete-${Date.now()}`)
+        const plan = buildDriveDiscImportTransactionPlan({
+          kind: "account-delete",
+          ownerId: id,
+          transactionId,
+          store,
+          nextStore: deletion.nextStore,
+          buildSelection,
+          legacySelection,
+          nextBuildSelection: withoutOwnerSelection(buildSelection, id, nextOwnerId),
+          nextLegacySelection: withoutOwnerSelection(legacySelection, id, nextOwnerId),
+          metadata: { deletedOwnerId: id },
+        })
+        await commitDriveDiscImportPlan(plan)
+        applyAccountSummary(this, await accountSummary())
       })
-      await commitDriveDiscImportPlan(plan)
-      applyAccountSummary(this, await accountSummary())
     },
   },
 })

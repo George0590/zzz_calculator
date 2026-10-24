@@ -3544,6 +3544,14 @@ function progressFromState(state, status = "running") {
         evaluated: processedCombinationCount(metrics),
         estimatedCombinationCount: Number(metrics?.estimatedCombinationCount ?? 0),
         percent: percentForMetrics(metrics, status),
+        // Provisional top results let the browser show "read-only" candidates
+        // while the search is still running; full results still replace them.
+        currentResults: (state.results ?? []).slice(0, RESULT_LIMIT).map((result, index) => ({
+            rank: index + 1,
+            score: result?.score,
+            fourPieceSetId: result?.fourPieceSetId,
+            driveDiscs: result?.driveDiscs ?? [],
+        })),
     }
 }
 
