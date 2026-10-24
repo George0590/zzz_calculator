@@ -34,6 +34,7 @@ let activeRunResolve: (() => void) | null = null
 let activeWatchdogTimer: ReturnType<typeof setInterval> | null = null
 let lastWorkerMessageAt = 0
 let activeWorkerCatalog: any = null
+let activeWorkerCatalogFingerprint = ""
 
 function clearActiveRun() {
   if (activeWatchdogTimer) {
@@ -45,11 +46,26 @@ function clearActiveRun() {
   lastWorkerMessageAt = 0
 }
 
+// Provisional (in-progress) results are display-only. Cancellation, failure,
+// reset and worker termination must drop them so they can never be saved.
+function clearPartialResultState(store: any) {
+  store.resultsAreProvisional = false
+  store.results = []
+  store.resultSchemes = []
+  store.completedSettings = null
+  store.completedSettingsFingerprint = ""
+  store.completedInventoryFingerprint = ""
+  store.completedCalculationInputFingerprint = ""
+}
+
 function disposeWorker() {
+  const resolve = activeRunResolve
   clearActiveRun()
   activeWorker?.terminate()
   activeWorker = null
   activeWorkerCatalog = null
+  activeWorkerCatalogFingerprint = ""
+  resolve?.()
 }
 
 function reusableWorker() {
@@ -62,10 +78,13 @@ function reusableWorker() {
 
 function catalogForWorker(catalog: any) {
   const rawCatalog = toRaw(catalog)
-  if (rawCatalog === activeWorkerCatalog) {
+  const fingerprint = JSON.stringify(rawCatalog, (_key, value) => value instanceof Map
+    ? { mapEntries: [...value] } : value instanceof Set ? { setValues: [...value] } : value)
+  if (rawCatalog === activeWorkerCatalog && fingerprint === activeWorkerCatalogFingerprint) {
     return undefined
   }
   activeWorkerCatalog = rawCatalog
+  activeWorkerCatalogFingerprint = fingerprint
   return cloneWorkerPayload(catalog)
 }
 
@@ -540,6 +559,7 @@ export const useOptimizerStore = defineStore("optimizer", {
     progress: null as any,
     results: [] as any[],
     resultSchemes: [] as any[],
+    resultsAreProvisional: false,
     completedSettings: null as any,
     completedSettingsFingerprint: "",
     completedInventoryFingerprint: "",
@@ -701,6 +721,8 @@ export const useOptimizerStore = defineStore("optimizer", {
       this.persistSettings()
     },
     reset() {
+      disposeWorker()
+      this.resultsAreProvisional = false
       this.status = "idle"
       this.metrics = null
       this.progressMetrics = null
@@ -718,6 +740,7 @@ export const useOptimizerStore = defineStore("optimizer", {
       disposeWorker()
     },
     failBeforeRun(message: string, settings: any = null) {
+      this.resultsAreProvisional = false
       disposeWorker()
       this.status = "error"
       this.error = message
@@ -768,13 +791,15 @@ export const useOptimizerStore = defineStore("optimizer", {
       }
       const worker = reusableWorker()
       const id = runId()
+      activeRunId = id
       const workerInput = this.inputWithSettings(input, store)
       const workerStore = optimizerStorePayload(store, workerInput.ownerId)
       const workerCatalog = catalogForWorker(catalog)
       return new Promise(resolve => {
+        activeRunResolve = () => resolve(null)
         worker.onmessage = event => {
           const message = event.data ?? {}
-          if (message.runId !== id) {
+          if (message.runId !== id || activeRunId !== id || activeWorker !== worker) {
             return
           }
           if (message.type === "preview") {
@@ -787,6 +812,7 @@ export const useOptimizerStore = defineStore("optimizer", {
               percent: 0,
             })
             this.status = "idle"
+            clearActiveRun()
             resolve(message.preview)
           } else {
             this.error = message.error ?? "预估失败"
@@ -796,6 +822,7 @@ export const useOptimizerStore = defineStore("optimizer", {
           }
         }
         worker.onerror = event => {
+          if (activeRunId !== id || activeWorker !== worker) return
           this.error = event.message
           this.status = "error"
           disposeWorker()
@@ -822,6 +849,7 @@ export const useOptimizerStore = defineStore("optimizer", {
         disposeWorker()
       }
       this.status = "preparing"
+      this.resultsAreProvisional = false
       this.error = ""
       this.results = []
       this.resultSchemes = []
@@ -839,7 +867,8 @@ export const useOptimizerStore = defineStore("optimizer", {
         percent: 0,
         elapsedMs: 0,
       })
-      activeRunId = runId()
+      const id = runId()
+      activeRunId = id
       lastWorkerMessageAt = Date.now()
       const worker = reusableWorker()
       const workerInput = this.inputWithSettings(input, store)
@@ -867,6 +896,7 @@ export const useOptimizerStore = defineStore("optimizer", {
         const failStalledRun = () => {
           this.error = "优化 Worker 长时间没有返回进度，已自动停止。通常是候选数据准备或剪枝计划构建过重，请先限定 2 件套或 4/5/6 号位主词条后重试。"
           this.status = "error"
+          clearPartialResultState(this)
           this.applyProgress({
             status: "error",
             percent: this.progress?.percent ?? 0,
@@ -885,7 +915,7 @@ export const useOptimizerStore = defineStore("optimizer", {
 
         worker.onmessage = event => {
           const message = event.data ?? {}
-          if (message.runId !== activeRunId) {
+          if (message.runId !== id || activeRunId !== id || activeWorker !== worker) {
             return
           }
           lastWorkerMessageAt = Date.now()
@@ -921,9 +951,14 @@ export const useOptimizerStore = defineStore("optimizer", {
               this.status = message.job?.status === "preparing" ? "preparing" : "running"
             }
             this.applyProgress(message.job ?? {})
+            if (message.job?.currentResults?.length && !this.cancelRequested) {
+              this.resultsAreProvisional = true
+              this.resultSchemes = message.job.currentResults.map((row: any) => ({ ...row, driveDiscs: row.driveDiscs ?? [] }))
+            }
             return
           }
           if (message.type === "complete") {
+            this.resultsAreProvisional = false
             const result = message.result ?? message.job?.result ?? {}
             const metrics = result.metrics ?? {}
             const results = result.results ?? []
@@ -966,12 +1001,14 @@ export const useOptimizerStore = defineStore("optimizer", {
               elapsedMs: this.progress?.elapsedMs ?? 0,
             })
             this.status = "cancelled"
+            clearPartialResultState(this)
             finishRun(true)
             return
           }
           if (message.type === "error") {
             this.error = message.error ?? "优化失败"
             this.status = "error"
+            clearPartialResultState(this)
             this.applyProgress({
               status: "error",
               percent: this.progress?.percent ?? 0,
@@ -981,8 +1018,10 @@ export const useOptimizerStore = defineStore("optimizer", {
           }
         }
         worker.onerror = event => {
+          if (activeRunId !== id || activeWorker !== worker) return
           this.error = event.message
           this.status = "error"
+          clearPartialResultState(this)
           this.applyProgress({
             status: "error",
             percent: this.progress?.percent ?? 0,
@@ -1005,6 +1044,7 @@ export const useOptimizerStore = defineStore("optimizer", {
         } catch (error) {
           this.error = error instanceof Error ? error.message : String(error)
           this.status = "error"
+          clearPartialResultState(this)
           this.applyProgress({
             status: "error",
             percent: this.progress?.percent ?? 0,
@@ -1015,12 +1055,13 @@ export const useOptimizerStore = defineStore("optimizer", {
       })
     },
     cancel() {
-      if (!["preparing", "running", "cancelling"].includes(this.status)) {
+      if (!["estimating", "preparing", "running", "cancelling"].includes(this.status)) {
         return
       }
       const resolve = activeRunResolve
       this.cancelRequested = true
       this.status = "cancelled"
+      clearPartialResultState(this)
       this.applyProgress({
         status: "cancelled",
         percent: this.progress?.percent ?? 0,

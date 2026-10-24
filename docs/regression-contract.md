@@ -340,6 +340,13 @@
 
 验证入口：[完整备份](../webapp/src/runtime/personal-backup.test.ts)、[存储兼容](../webapp/src/stores/local-store-indexeddb-compat.test.ts)、[导入事务](../tests/drive-disc-import-transaction.test.js)、[撤销](../webapp/src/runtime/drive-disc-import-transaction.test.ts)、[配装保存锁](../webapp/e2e/drive-disc-loadout-save-lock.e2e.ts)。
 
+本地可靠性扩展（2026-10-22）：账号新建、改名、切换和删除必须防止重复提交；失败时保留名称草稿或删除确认，
+并且旧账号列表加载结果不得覆盖后发操作；陈旧账号读取返回后必须落定加载状态，不能把界面卡在加载中。
+工作台优化任务必须绑定账号、角色、请求代号和目录内容指纹；切换上下文、重置、取消、错误或 Worker 终止后，
+旧任务的成功、错误、进度和预估消息都必须丢弃，等待中的 Promise 必须结算，临时结果不得保留或写入缓存。
+搜索进度可携带当前 Top 10 快照，临时结果只能展示，不能保存或锁定；只有完整结果才可自动选中方案。
+离开工作台时仅在仍有进行中任务时终止并结算，已完成结果可在本次会话内保留。
+
 - 库存 localStorage fallback、构筑选择、账号选择和优化设置的 JSON 解析失败必须保留原始内容并阻止相关保存；键不存在时才使用默认值。页面提供原始内容导出入口，不能自动猜测或修补损坏内容。扫描器偏好和维护草稿沿用各自的读取与恢复边界，不属于本保护条款。
 
 - 账号、当前账号、驱动盘、导入记录和套装预设继续使用既有 IndexedDB `zzz-calculator-user-store` 与 localStorage fallback `zzz-calculator.userStore.v1`，不迁移存储结构或键名。
@@ -414,6 +421,9 @@
 
 - Node 适配器保留 `worker_threads` 并行；浏览器适配器只允许一个控制 Worker，禁止创建嵌套任务 Worker，并保留事件循环让步和准备阶段进度。
   历史 `exact-super-bound-parallel` 浏览器设置必须静默迁移为 `exact-super-bound`。
+
+- 搜索进度可携带当前 Top 10 快照，界面必须明确标示尚未完成最优性验证；临时结果不得保存或锁定，完整结果到达后才替换为最终结果。
+  Worker 只复用内容指纹仍一致的目录数据；账号、库存、限制、计算输入或目录变化会使缓存失效，取消、错误和部分结果不得写入缓存。
 
 - 状态机必须区分准备、运行、取消中、已取消、完成和错误；进入取消中后不得保留可重复点击的取消操作。
 

@@ -955,6 +955,16 @@ assert.deepEqual(
 assert.ok(ordinaryHeuristic.results[0].driveDiscs.every(item => item.id.startsWith("soldier-atk-")))
 assert.ok(Math.abs(ordinaryHeuristic.results[0].score - ordinaryExact.results[0].score) < 1e-9)
 
+const asyncProgressSnapshots = []
+const progressProbe = await optimizeDriveDiscsAsync(catalog, store, optimizerInput(), {
+    onProgress: progress => asyncProgressSnapshots.push(progress),
+})
+assert.ok(progressProbe.results.length > 0)
+const provisionalTop = asyncProgressSnapshots.find(progress => Array.isArray(progress.currentResults) && progress.currentResults.length)
+assert.ok(provisionalTop, "async progress must expose the current top results")
+assert.ok(provisionalTop.currentResults.every(row => Array.isArray(row.driveDiscs)), "provisional top results must include drive disc snapshots")
+assert.ok(provisionalTop.currentResults[0].rank >= 1)
+
 const parallel = await optimizeDriveDiscsAsync(catalog, store, optimizerInput({
     settings: {
         algorithm: "exact-super-bound-parallel",
