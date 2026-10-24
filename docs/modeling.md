@@ -92,7 +92,7 @@ effect mentioning a move.
 | Fixed, stacked, derived and formula rules | Reuse [shared effects](../core/shared-combat.js) and [formula evaluation](../core/effectFormula.js); reference Core/Potential scaling |
 | General panel/global effects | Use the default target and correct scope/stat semantics |
 | Skill targets | Explicit skill type, legal tags, or character/category/move/row; `ultimate` differs from `chain` even when they share a level table |
-| Anomaly targets | Specify settlement; omitted/empty effect whitelist means all effects of that settlement, and canonical saves omit empty whitelists |
+| Anomaly targets | Specify one or more settlement types; `attribute`, `turbulence`, and `release` may share a rule, while omitted/empty effect whitelist means all effects of the selected settlements and canonical saves omit empty whitelists |
 | Requirements | Attribute, specialty, exclusions, agent identity and event conditions restrict only their rule |
 | Coverage | Per effect rule; catalog/runtime `0..1`, maintenance percentages. Absent coverage means 100% and ignores injected overrides |
 | Stacks | Shared controls retain shared identity; `activationStacks` thresholds are not extra unconditional effects |

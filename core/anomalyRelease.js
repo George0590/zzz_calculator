@@ -1,7 +1,9 @@
+import { defaultSkillLevel, isCoreSkillLevelScale, isValidSkillLevel, skillLevelLabel, skillRowValue } from "./skillMultiplierCandidates.js"
+
 const RELEASE_RESULT_MODES = new Set(["originalAnomalyRatio", "fixedAnomalyMultiplier"])
 const RELEASE_UNITS = new Set(["raw", "percent", "decimal"])
 const RELEASE_OPERATIONS = new Set(["add", "subtract", "multiply", "divide", "max", "min", "clamp", "floor"])
-const RELEASE_LEAF_KINDS = new Set(["constant", "triggerStat", "coreSkillScaling", "condition", "releaseModifier"])
+const RELEASE_LEAF_KINDS = new Set(["constant", "triggerStat", "coreSkillScaling", "skillMultiplier", "condition", "releaseModifier"])
 const RELEASE_TRIGGER_STATS = new Set(["atk", "anomalyProficiency", "anomalyMastery"])
 const RELEASE_MODIFIER_KEYS = new Set(["releaseProficiencyYieldBonus"])
 const RELEASE_MODIFIER_LABELS = {
@@ -164,6 +166,9 @@ function evaluateLeaf(node, context) {
         }
         rawValue = finiteNumber(value, `核心技倍率 ${field}`)
         sourceLabel = expressionLabel(node, "核心技倍率")
+    } else if (node.kind === "skillMultiplier") {
+        rawValue = finiteNumber(context?.releaseSkillMultiplier, "异放来源技能倍率")
+        sourceLabel = expressionLabel(node, "来源技能异放倍率")
     } else if (node.kind === "condition") {
         if (node.condition !== "stunned") {
             throw new Error(`异放公式使用了不支持的条件：${node.condition ?? ""}`)
@@ -277,12 +282,67 @@ function evaluateOperation(node, context) {
     }
 }
 
+export function resolveReleaseSkillRef(catalog, agent, skillRef = null, options = {}) {
+    if (!skillRef || typeof skillRef !== "object") return null
+    const agentSkillId = String(skillRef.agentSkillId ?? "").trim()
+    const skillSets = Array.isArray(catalog.agentSkills) ? catalog.agentSkills : catalog.agentSkills?.agentSkills ?? []
+    const skillSet = (typeof catalog.agentSkillsMap?.get === "function" ? catalog.agentSkillsMap.get(agentSkillId) : null)
+        ?? skillSets.find(item => item.id === agentSkillId)
+    if (!skillSet || skillSet.agentId !== agent.id) {
+        throw new Error(`Unknown release skill catalog: ${agentSkillId || agent.id}`)
+    }
+    const categoryId = String(skillRef.categoryId ?? "").trim()
+    const moveId = String(skillRef.moveId ?? "").trim()
+    const rowId = String(skillRef.rowId ?? "").trim()
+    const category = (skillSet.categories ?? []).find(item => item.id === categoryId)
+    const move = category?.moves?.find(item => item.id === moveId)
+    const row = move?.rows?.find(item => item.id === rowId)
+    if (!category || !move || !row || row.kind !== "releaseMultiplier") {
+        throw new Error(`Unknown release skill multiplier row: ${skillSet.id}.${categoryId}.${moveId}.${rowId}`)
+    }
+    const defaultLevel = defaultSkillLevel(category, move, row)
+    const rawRequestedLevel = (isCoreSkillLevelScale(category) ? options.coreSkillLevel : options.skillLevelsByCategory?.[categoryId]) ?? skillRef.level ?? defaultLevel
+    const requestedLevel = isCoreSkillLevelScale(category)
+        ? (String(rawRequestedLevel ?? "").trim() === "" || rawRequestedLevel === "none" ? "0" : String(rawRequestedLevel).trim())
+        : Number(rawRequestedLevel)
+    if (!isValidSkillLevel(category, move, row, requestedLevel)) {
+        throw new Error(`Release skill level out of range for ${skillSet.id}.${categoryId}.${moveId}.${rowId}: ${rawRequestedLevel}`)
+    }
+    const rawValue = skillRowValue(category, move, row, requestedLevel)
+    if (!Number.isFinite(rawValue)) throw new Error(`Missing release multiplier for ${skillSet.id}.${categoryId}.${moveId}.${rowId}`)
+    return {
+        releaseSkillRef: {
+            agentSkillId: skillSet.id,
+            categoryId,
+            moveId,
+            rowId,
+            level: requestedLevel,
+        },
+        // Release formulas with unit "percent" consume the catalog's displayed
+        // percentage value (445 means 445%), so keep the raw skill-row value.
+        releaseSkillMultiplier: rawValue,
+        releaseSkillSource: {
+            agentSkillId: skillSet.id,
+            categoryId,
+            moveId,
+            rowId,
+            level: requestedLevel,
+            levelLabel: skillLevelLabel(category, requestedLevel),
+            label: [localizedText(category.name, category.id), localizedText(move.name, move.id), localizedText(row.label, row.id)].join(" / "),
+            value: rawValue,
+        },
+    }
+}
+
+
 export function isReleaseSettlement(event = {}) {
     return event?.settlementType === "release" || event?.anomalyVariant === "release"
 }
 
-export function anomalyReleaseProfiles(agent = {}) {
-    return Array.isArray(agent?.anomalyReleaseProfiles) ? agent.anomalyReleaseProfiles : []
+export function anomalyReleaseProfiles(agent = {}, cinemaLevel = 0) {
+    const level = Math.max(0, Math.min(6, Math.trunc(Number(cinemaLevel ?? 0))))
+    return (Array.isArray(agent?.anomalyReleaseProfiles) ? agent.anomalyReleaseProfiles : [])
+        .filter(profile => Number(profile?.minimumCinemaLevel ?? 0) <= level)
 }
 
 export function isVelinaReleaseAgent(agent = {}) {
@@ -293,19 +353,19 @@ export function velinaReleaseSourceId(event = {}) {
     return String(event?.releaseSource ?? event?.triggerActorRef?.profileId ?? "").trim()
 }
 
-export function defaultAnomalyReleaseProfile(agent = {}, damageElement = "") {
-    const profiles = anomalyReleaseProfiles(agent)
+export function defaultAnomalyReleaseProfile(agent = {}, damageElement = "", cinemaLevel = 0) {
+    const profiles = anomalyReleaseProfiles(agent, cinemaLevel)
     return profiles.find(profile => profile?.default === true
         && (!damageElement || !profile.supportedElements?.length || profile.supportedElements.includes(damageElement)))
         ?? profiles.find(profile => !damageElement || !profile.supportedElements?.length || profile.supportedElements.includes(damageElement))
         ?? null
 }
 
-export function anomalyReleaseProfile(agent = {}, profileId = "", damageElement = "") {
+export function anomalyReleaseProfile(agent = {}, profileId = "", damageElement = "", cinemaLevel = 0) {
     const id = String(profileId ?? "").trim()
     const profile = id
-        ? anomalyReleaseProfiles(agent).find(item => item?.id === id)
-        : defaultAnomalyReleaseProfile(agent, damageElement)
+        ? anomalyReleaseProfiles(agent, cinemaLevel).find(item => item?.id === id)
+        : defaultAnomalyReleaseProfile(agent, damageElement, cinemaLevel)
     if (!profile) {
         return null
     }
@@ -320,7 +380,15 @@ export function isAriaReleaseSourceLocked(agent = {}) {
     return String(agent?.id ?? "") === "aria"
 }
 
-export function normalizeAnomalyReleaseEventForAgent(event = {}, agent = {}) {
+export function expressionUsesSkillMultiplier(node = {}) {
+    return node?.kind === "skillMultiplier" || (node?.args ?? []).some(expressionUsesSkillMultiplier)
+}
+
+export function isFioniReleaseSourceLocked(agent = {}) {
+    return String(agent?.id ?? "") === "fioni"
+}
+
+export function normalizeAnomalyReleaseEventForAgent(event = {}, agent = {}, options = {}) {
     if (!isReleaseSettlement(event)) {
         return event
     }
@@ -330,10 +398,11 @@ export function normalizeAnomalyReleaseEventForAgent(event = {}, agent = {}) {
     const requestedProfileId = velina
         ? velinaReleaseSourceId(event)
         : String(event?.triggerActorRef?.profileId ?? "").trim()
-    const profile = anomalyReleaseProfile(agent, requestedProfileId)
+    const cinemaLevel = Number(options.cinemaLevel ?? event?.cinemaLevel ?? 6)
+    const profile = anomalyReleaseProfile(agent, requestedProfileId, "", cinemaLevel)
         ?? (velina
-            ? anomalyReleaseProfile(agent, VELINA_DEFAULT_RELEASE_SOURCE)
-            : defaultAnomalyReleaseProfile(agent))
+            ? anomalyReleaseProfile(agent, VELINA_DEFAULT_RELEASE_SOURCE, "", cinemaLevel)
+            : defaultAnomalyReleaseProfile(agent, "", cinemaLevel))
     const source = event?.anomalySource && typeof event.anomalySource === "object"
         ? event.anomalySource
         : {}
@@ -342,10 +411,13 @@ export function normalizeAnomalyReleaseEventForAgent(event = {}, agent = {}) {
         : {}
     const sourceAgentId = String(sourceActorRef.agentId ?? agentId)
     const lockedToAria = isAriaReleaseSourceLocked(agent)
+    const lockedToFioni = isFioniReleaseSourceLocked(agent)
+    const lockedSource = lockedToAria || lockedToFioni
     const normalized = {
         ...event,
         kind: "anomaly",
         settlementType: "release",
+        ...(profile?.releaseSkillRef ? { releaseSkillRef: { ...profile.releaseSkillRef } } : {}),
         ...(lockedToAria ? { anomalyEffect: "corruption" } : {}),
         ...(velina
             ? {
@@ -357,7 +429,7 @@ export function normalizeAnomalyReleaseEventForAgent(event = {}, agent = {}) {
                     agentId,
                     profileId: String(profile?.id ?? event?.triggerActorRef?.profileId ?? ""),
                 },
-                anomalySource: lockedToAria
+                anomalySource: lockedSource
                     ? { actorRef: { agentId } }
                     : {
                         ...source,
@@ -368,6 +440,7 @@ export function normalizeAnomalyReleaseEventForAgent(event = {}, agent = {}) {
                     },
             }),
     }
+    if (profile && !profile.releaseSkillRef && !expressionUsesSkillMultiplier(profile.expression)) delete normalized.releaseSkillRef
     delete normalized.previousAnomalyEffect
     delete normalized.disorderType
     delete normalized.elapsedSeconds
@@ -415,6 +488,8 @@ export function evaluateReleaseExpressionInterval(node, context = {}) {
                 value = value?.[node.key === "eventElement" ? context?.eventElement : node.key]
             }
             raw = intervalOf(value, `核心技倍率 ${field}`)
+        } else if (node.kind === "skillMultiplier") {
+            raw = intervalOf(context?.releaseSkillMultiplier, "异放来源技能倍率")
         } else if (node.kind === "condition") {
             if (node.condition !== "stunned") {
                 throw new Error(`异放公式使用了不支持的条件：${node.condition ?? ""}`)
@@ -540,6 +615,7 @@ export function releaseFormulaStatDependencies(profile = {}) {
 export function validateAnomalyReleaseProfile(profile = {}) {
     const errors = []
     let conversionSourceCount = 0
+    if (profile.critDmgBonus !== undefined && (!Number.isFinite(Number(profile.critDmgBonus)) || Number(profile.critDmgBonus) < 0)) errors.push("异放附加异常暴伤必须是非负小数。")
     if (!String(profile.id ?? "").trim()) errors.push("异放倍率方案 ID 不能为空。")
     if (!RELEASE_RESULT_MODES.has(profile.resultMode)) errors.push("异放倍率方案的结果模式无效。")
     if (!Array.isArray(profile.supportedElements) || !profile.supportedElements.length) {
@@ -575,6 +651,10 @@ export function validateAnomalyReleaseProfile(profile = {}) {
         if (node.kind === "coreSkillScaling" && !String(node.field ?? "").trim()) {
             errors.push(`${path}.field 不能为空。`)
         }
+        if (node.kind === "skillMultiplier"
+            && profile.releaseSkillRef !== undefined && (!profile.releaseSkillRef || !["agentSkillId", "categoryId", "moveId", "rowId"].every(key => String(profile.releaseSkillRef?.[key] ?? "").trim()))) {
+            errors.push(`${path} 必须通过 releaseSkillRef 绑定有效异放技能倍率行。`)
+        }
         if (node.kind === "releaseModifier") {
             const modifier = releaseModifierKey(node)
             if (!RELEASE_MODIFIER_KEYS.has(modifier)) {
@@ -592,6 +672,7 @@ export function validateAnomalyReleaseProfile(profile = {}) {
         evaluateReleaseExpression(profile.expression, {
             trigger: { outOfCombatPanel: new Proxy({}, { get: () => 100 }), inCombatPanel: new Proxy({}, { get: () => 100 }) },
             coreScalingRow: new Proxy({}, { get: () => 100 }),
+            releaseSkillMultiplier: 445,
             event: { stunned: true },
             eventElement: profile.supportedElements?.[0] ?? "physical",
         })

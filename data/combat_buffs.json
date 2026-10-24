@@ -4159,7 +4159,7 @@
               "type": "formula",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": ["attribute", "turbulence", "release"],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -4191,7 +4191,7 @@
               "type": "fixed",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": ["attribute", "turbulence", "release"],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -4224,7 +4224,7 @@
               "type": "fixed",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": ["attribute", "turbulence", "release"],
                 "anomalyEffects": [
                   "assault"
                 ]
@@ -4244,7 +4244,7 @@
               "type": "fixed",
               "target": {
                 "kind": "anomaly",
-                "settlementType": "attribute",
+                "settlementTypes": ["attribute", "turbulence", "release"],
                 "anomalyEffects": [
                   "assault"
                 ]

@@ -595,7 +595,7 @@ function calculationAgentFor(metaAgent: any = null, catalog: any = null, agentId
   return metaAgent ?? catalogAgent
 }
 
-function normalizeDamageEvent(event: any, index = 0, fallbackStunned = true, agent: any = null) {
+function normalizeDamageEvent(event: any, index = 0, fallbackStunned = true, agent: any = null, cinemaLevel = 0) {
   event = cleanStoredReactiveEvent(event, agent)
   if (!event) return null
   const stunned = event?.stunned === undefined ? fallbackStunned : Boolean(event.stunned)
@@ -643,7 +643,7 @@ function normalizeDamageEvent(event: any, index = 0, fallbackStunned = true, age
     }
   }
   if (kind === "anomaly" && isReleaseSettlement(normalized)) {
-    return normalizeAnomalyReleaseEventForAgent(normalized, agent)
+    return normalizeAnomalyReleaseEventForAgent(normalized, agent, { cinemaLevel })
   }
   return normalized
 }
@@ -697,11 +697,11 @@ function normalizeDamageConfig(value: any, agent: any = null, cinemaLevel = 0, p
       })
     : modeAllowed && savedEvents.length ? savedEvents : eventFallback.events
   let events = Array.isArray(eventSource) && eventSource.length
-    ? eventSource.map((event: any, index: number) => normalizeDamageEvent(event, index, fallbackStunned, agent))
-    : eventFallback.events.map((event: any, index: number) => normalizeDamageEvent(event, index, fallbackStunned, agent))
+    ? eventSource.map((event: any, index: number) => normalizeDamageEvent(event, index, fallbackStunned, agent, cinemaLevel))
+    : eventFallback.events.map((event: any, index: number) => normalizeDamageEvent(event, index, fallbackStunned, agent, cinemaLevel))
   events = events.filter(Boolean)
   if (!events.length) {
-    events = eventFallback.events.map((event: any, index: number) => normalizeDamageEvent(event, index, fallbackStunned, agent)).filter(Boolean)
+    events = eventFallback.events.map((event: any, index: number) => normalizeDamageEvent(event, index, fallbackStunned, agent, cinemaLevel)).filter(Boolean)
     if (!events.length) events = primaryDamageConfigForAgent(agent).events
   }
   const selectedEventId = events.some((event: any) => event.id === value?.selectedEventId)

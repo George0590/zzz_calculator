@@ -42,9 +42,9 @@ function input(settlementType, critMode, enabled = true) {
         combatBuffs: {
             activeBuffIds: enabled ? release ? ["agent:aria.cinema.1"] : settlementType === "attribute" ? ["jane_doe.core_insight"] : [] : [],
             runtimeInputs: { "jane_doe.core_insight": { effects: { jane_doe_core_assault_crit_rate: { sourceValue: 200 } } } },
-            manualEffects: enabled && settlementType === "turbulence" ? [{ id: "turbulence-crit", effects: [
-                { id: "rate", type: "fixed", stat: "anomalyCritRate", value: 72, mode: "flat", target: { kind: "anomaly", settlementType: "turbulence", anomalyEffects: ["assault"] } },
-                { id: "damage", type: "fixed", stat: "anomalyCritDmg", value: 50, mode: "flat", target: { kind: "anomaly", settlementType: "turbulence", anomalyEffects: ["assault"] } },
+        manualEffects: enabled && settlementType === "turbulence" ? [{ id: "turbulence-crit", effects: [
+                { id: "rate", type: "fixed", stat: "anomalyCritRate", value: 72, mode: "flat", target: { kind: "anomaly", settlementTypes: ["attribute", "turbulence", "release"], anomalyEffects: ["assault"] } },
+                { id: "damage", type: "fixed", stat: "anomalyCritDmg", value: 50, mode: "flat", target: { kind: "anomaly", settlementTypes: ["attribute", "turbulence", "release"], anomalyEffects: ["assault"] } },
             ] }] : [],
         },
         damage: { events: [event], agentLevel: 60, target: { defense: 0, resistanceByElement: { physical: 0, ether: 0 } } },
@@ -113,11 +113,15 @@ for (const settlement of ["attribute", "turbulence", "release"]) {
 }
 
 for (const [settlement, effect] of [["attribute", "shock"], ["turbulence", "assault"], ["disorder", "flinch"]]) {
-    const request = input("attribute", "crit")
+    const request = input("attribute", "crit", false)
+    request.combatBuffs.manualEffects = [{ id: "common-assault-crit", effects: [
+        { id: "rate", type: "fixed", stat: "anomalyCritRate", value: 72, mode: "flat", target: { kind: "anomaly", settlementTypes: ["attribute", "turbulence", "release"], anomalyEffects: ["assault"] } },
+        { id: "damage", type: "fixed", stat: "anomalyCritDmg", value: 50, mode: "flat", target: { kind: "anomaly", settlementTypes: ["attribute", "turbulence", "release"], anomalyEffects: ["assault"] } },
+    ] }]
     Object.assign(request.damage.events[0], { settlementType: settlement, anomalyEffect: effect })
     const event = calculateInCombatPanel(catalog, request).damage.events[0]
-    assert.equal(event.critInfo.available, false, "Jane matching scope must remain unchanged")
-    assert.equal(event.damageVariants, undefined)
+    assert.equal(event.critInfo.available, settlement !== "disorder" && effect === "assault", "Common anomaly target matching")
+    assert.equal(event.damageVariants === undefined, !(settlement !== "disorder" && effect === "assault"))
 }
 
 for (const mode of modes) {

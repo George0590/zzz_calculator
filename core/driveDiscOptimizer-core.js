@@ -1961,6 +1961,10 @@ function compileSpecializedPlanScoreKernel(state, setCountValues, orderedSlots) 
     }
     try {
         const baseCompiled = target.compileForSetCounts(setCountValues)
+        if (state.optimizerStatMetadata?.requiresReleaseIntervalBound) {
+            state.metrics.releaseIntervalBoundEnabled = baseCompiled?.releaseIntervalBound === true
+            state.metrics.releaseBoundFallbackReason = baseCompiled?.releaseIntervalBoundReason ?? null
+        }
         if (typeof baseCompiled?.scoreScalar !== "function") {
             state.specializedScoreKernelCache?.set(cacheKey, null)
             return null
@@ -1983,7 +1987,7 @@ function compileSpecializedPlanScoreKernel(state, setCountValues, orderedSlots) 
             state.metrics.objectiveScalarFallbacks += 1
             state.metrics.objectiveScalarFallbackReason = state.minimumPanelChecks?.length
                 ? "minimum-panel"
-                : "unsupported-objective"
+                : (baseCompiled?.releaseIntervalBoundReason ?? "unsupported-objective")
         }
         const probes = [new Float64Array(state.statIds?.length ?? 0)]
         const representative = new Float64Array(state.statIds?.length ?? 0)
@@ -4343,6 +4347,12 @@ function addParallelMetricSnapshot(target, source) {
     }
     for (const key of PARALLEL_SUM_METRIC_KEYS) {
         target[key] = Number(target[key] ?? 0) + Number(source?.[key] ?? 0)
+    }
+    if (source?.releaseBoundFallbackReason && !target.releaseBoundFallbackReason) {
+        target.releaseBoundFallbackReason = source.releaseBoundFallbackReason
+    }
+    if (source?.releaseIntervalBoundEnabled === true) {
+        target.releaseIntervalBoundEnabled = true
     }
     return target
 }

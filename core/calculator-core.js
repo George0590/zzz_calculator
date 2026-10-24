@@ -30,6 +30,7 @@ import {
 } from "./damageWhiteBox.js"
 import {
     ANOMALY_SETTLEMENT_TYPE_VALUES,
+    anomalySettlementTypes,
     ELEMENT_CRIT_DMG_STAT_BY_ELEMENT,
     ELEMENT_CRIT_DMG_STATS,
     ELEMENT_DEF_IGNORE_STAT_BY_ELEMENT,
@@ -58,6 +59,7 @@ import {
 } from "./potentialVision.js"
 import {
     anomalyReleaseProfile,
+    resolveReleaseSkillRef,
     evaluateAnomalyReleaseProfile,
     evaluateAnomalyReleaseProfileInterval,
     evaluateReleaseExpression,
@@ -81,6 +83,7 @@ import {
 } from "./shared-combat.js"
 import {
     compileInitialEnergyFormula,
+    compileInitialMasteryAnomalyCritFormula,
     evaluateInCombatFormulaRule,
     formulaParameterValues,
     formulaSourceValue,
@@ -89,6 +92,7 @@ import {
     isAllowedInCombatFormulaSourceType,
     isInCombatFormulaRule,
     isOutOfCombatFormulaRule,
+    isInitialMasteryAnomalyCritRule,
     materializeFormulaRuleForModificationLevel,
     migrateLegacyBloodMarrowWEngine,
 } from "./effectFormula.js"
@@ -1116,14 +1120,14 @@ function normalizedRuleTarget(rule = {}) {
         }
     }
     if (target.kind === "anomaly") {
-        const settlementType = ANOMALY_SETTLEMENT_TYPE_VALUES.has(target.settlementType)
-            ? target.settlementType
-            : "attribute"
+        const settlementTypes = anomalySettlementTypes(target)
         return {
             kind: "anomaly",
-            settlementType,
+            settlementTypes,
+            settlementType: settlementTypes.length === 1 ? settlementTypes[0] : null,
             anomalyEffects: Array.isArray(target.anomalyEffects) ? target.anomalyEffects : [],
             anomalyVariants: Array.isArray(target.anomalyVariants) ? target.anomalyVariants : [],
+            releaseTargets: Array.isArray(target.releaseTargets) ? target.releaseTargets : [],
         }
     }
     return { kind: "default" }
@@ -1141,6 +1145,7 @@ function hasEventAppliesToFilters(rule = {}) {
         appliesTo.anomalyEffects,
         appliesTo.anomalyVariants,
         appliesTo.elements,
+        appliesTo.releaseTargets,
         appliesTo.skillTargets,
     ].some(values => Array.isArray(values) && values.length > 0)
 }
@@ -1157,7 +1162,7 @@ function isRuleEventModifier(rule = {}) {
 }
 
 function isDeferredInCombatFormula(rule = {}, effect = {}, scope = "outOfCombat") {
-    return scope === "inCombat" && isInCombatFormulaRule(rule)
+    return scope === "inCombat" && (isInCombatFormulaRule(rule) || isInitialMasteryAnomalyCritRule(rule))
         && effectRuleScope(rule, effect) === "inCombat"
 }
 
@@ -1409,12 +1414,15 @@ function resolveEffectDamageModifiers(effect, runtimeInput = {}, modifierContext
                 : target.kind === "anomaly"
                     ? {
                         ...(rule.appliesTo ?? {}),
-                        damageKinds: [target.settlementType === "disorder"
-                            ? "disorder"
-                            : target.settlementType === "turbulence" ? "turbulence" : "anomaly"],
-                        settlementTypes: [target.settlementType],
+                        damageKinds: [
+                            ...(target.settlementTypes.includes("disorder") ? ["disorder"] : []),
+                            ...(target.settlementTypes.some(type => type !== "disorder") ? ["anomaly"] : []),
+                            ...(target.settlementTypes.includes("turbulence") ? ["turbulence"] : []),
+                        ],
+                        settlementTypes: target.settlementTypes,
                         ...(target.anomalyEffects.length ? { anomalyEffects: target.anomalyEffects } : {}),
                         ...(target.anomalyVariants.length ? { anomalyVariants: target.anomalyVariants } : {}),
+                        ...(target.releaseTargets.length ? { releaseTargets: target.releaseTargets } : {}),
                     }
                     : rule.appliesTo ?? null
             return {
@@ -1577,6 +1585,7 @@ function compileDenseCombatEffectEntry({
     const outOfCombatFormulas = []
     for (const rule of effectRules(effect)) {
         if (!isOutOfCombatFormulaRule(rule)
+            || isInitialMasteryAnomalyCritRule(rule)
             || !effectRuleEnabled(rule, normalized.runtime)
             || !effectRuleMatchesScope(rule, effect, "inCombat")
             || !effectRuleRequirementMatches(rule, { agent, deferOutOfCombatStatRequirements: true })) continue
@@ -1600,16 +1609,40 @@ function compileDenseCombatEffectEntry({
         sourceKey: key,
         sourceType,
     }))
-    const dynamicFormulas = normalized.dynamicFormulas.map(rule => ({
-        rule,
-        effect,
-        runtimeInput,
-        sourceKey: key,
-        sourceType,
-        sourceName: effect?.name ?? null,
-        buffModifiers,
-        agent,
-    }))
+    const dynamicFormulas = normalized.dynamicFormulas.map(rule => {
+        let initialMasteryCrit = null
+        const supportedRule = isInitialMasteryAnomalyCritRule(rule)
+            && !rule?.requirement
+            && !rule?.condition
+            && isAllowedInCombatFormulaSourceType(sourceType)
+            && isAllowedInCombatFormulaSourceStat(rule?.source?.stat)
+        if (supportedRule) {
+            const evaluate = compileInitialMasteryAnomalyCritFormula(rule)
+            if (evaluate) {
+                const coverage = coverageFromRuntime(rule, effect, runtimeInput)
+                const modifierFactor = applyBuffModifiersToResolvedRule(
+                    { value: 1 },
+                    rule,
+                    { sourceKey: key, buffModifiers },
+                ).value
+                if (Number.isFinite(coverage) && coverage >= 0
+                    && Number.isFinite(modifierFactor) && modifierFactor >= 0) {
+                    initialMasteryCrit = { evaluate, coverage, modifierFactor }
+                }
+            }
+        }
+        return {
+            rule,
+            effect,
+            runtimeInput,
+            sourceKey: key,
+            sourceType,
+            sourceName: effect?.name ?? null,
+            buffModifiers,
+            agent,
+            initialMasteryCrit,
+        }
+    })
     return {
         key,
         sourceType,
@@ -2667,10 +2700,11 @@ function calculateCombatPanelFromTotals(agent, outOfCombat, bonusTotals) {
 
 function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
     const rule = entry?.rule
-    if (!isInCombatFormulaRule(rule)
+    const initialCrit = isInitialMasteryAnomalyCritRule(rule)
+    if ((!isInCombatFormulaRule(rule) && !initialCrit)
         || !isAllowedInCombatFormulaSourceType(entry?.sourceType)
         || !isAllowedInCombatFormulaSourceStat(rule?.source?.stat)
-        || !isAllowedInCombatFormulaOutput(rule, entry?.sourceType)) {
+        || (!initialCrit && !isAllowedInCombatFormulaOutput(rule, entry?.sourceType))) {
         return null
     }
     if (!effectRuleRequirementMatches(rule, {
@@ -2682,7 +2716,12 @@ function resolveDynamicCombatFormula(entry, panel, outOfCombatPanel) {
     const coverage = coverageFromRuntime(rule, entry.effect, entry.runtimeInput)
     let evaluated
     try {
-        evaluated = evaluateInCombatFormulaRule(rule, panel)
+        evaluated = initialCrit
+            ? resolveEffectRule(rule, entry.effect, entry.runtimeInput, {
+                agent: entry.agent, scope: "inCombat", outOfCombat: { panel: outOfCombatPanel },
+            })
+            : evaluateInCombatFormulaRule(rule, panel)
+        if (initialCrit) evaluated.value = Number(evaluated.formulaValue ?? 0) / 100
     } catch {
         return null
     }
@@ -2726,12 +2765,15 @@ function dynamicFormulaTargetAppliesTo(rule = {}) {
     if (target.kind === "anomaly") {
         return {
             ...(rule.appliesTo ?? {}),
-            damageKinds: [target.settlementType === "disorder"
-                ? "disorder"
-                : target.settlementType === "turbulence" ? "turbulence" : "anomaly"],
-            settlementTypes: [target.settlementType],
+            damageKinds: [
+                ...(target.settlementTypes.includes("disorder") ? ["disorder"] : []),
+                ...(target.settlementTypes.some(type => type !== "disorder") ? ["anomaly"] : []),
+                ...(target.settlementTypes.includes("turbulence") ? ["turbulence"] : []),
+            ],
+            settlementTypes: target.settlementTypes,
             ...(target.anomalyEffects.length ? { anomalyEffects: target.anomalyEffects } : {}),
             ...(target.anomalyVariants.length ? { anomalyVariants: target.anomalyVariants } : {}),
+            ...(target.releaseTargets.length ? { releaseTargets: target.releaseTargets } : {}),
         }
     }
     return rule.appliesTo ?? null
@@ -3436,7 +3478,8 @@ function generatedSharpDamageComponentEvents(event = {}) {
     })
 }
 
-function anomalyReleaseEventData(event = {}, agent = {}, damageElement = "physical", options = {}) {
+
+function anomalyReleaseEventData(event = {}, agent = {}, damageElement = "physical", options = {}, catalog = {}) {
     const velina = isVelinaReleaseAgent(agent)
     const requestedTriggerAgentId = velina
         ? String(agent.id ?? "")
@@ -3450,20 +3493,23 @@ function anomalyReleaseEventData(event = {}, agent = {}, damageElement = "physic
     if (velina && !VELINA_RELEASE_SOURCES.some(source => source.value === requestedProfileId)) {
         throw new Error("维琳娜异放来源不存在。")
     }
-    const profile = anomalyReleaseProfile(agent, requestedProfileId, damageElement)
+    const profile = anomalyReleaseProfile(agent, requestedProfileId, damageElement, options.cinemaLevel ?? 0)
     if (!profile) {
         throw new Error(`角色 ${agent.id ?? "unknown"} 暂不支持 ${damageElement} 属性异放。`)
     }
-    const sourceAgentId = velina
+    const sourceAgentId = (velina || agent.id === "fioni")
         ? String(agent.id ?? "")
         : String(event.anomalySource?.actorRef?.agentId ?? agent.id ?? "")
-    const sourceSnapshot = velina ? null : normalizeAnomalySourceSnapshot(event.anomalySource?.snapshot)
+    const sourceSnapshot = (velina || agent.id === "fioni") ? null : normalizeAnomalySourceSnapshot(event.anomalySource?.snapshot)
     if (sourceAgentId !== String(agent.id ?? "") && (!sourceSnapshot || sourceSnapshot.agentId !== sourceAgentId)) {
         throw new Error("外部原异常施加者必须提供与角色一致的冻结快照。")
     }
+    const releaseSkill = resolveReleaseSkillRef(catalog, agent, profile.releaseSkillRef ?? event.releaseSkillRef, options)
     return {
         profile,
         coreScalingRow: corePassiveScalingRow(agent, options.coreSkillLevel),
+        ...(releaseSkill ?? {}),
+        releaseAnomalyCritDmgBonus: Number(profile.critDmgBonus ?? 0),
         triggerActorRef: {
             agentId: requestedTriggerAgentId,
             profileId: profile.id,
@@ -3538,7 +3584,7 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
     }
     if (event.normalized === true) {
         const damageElement = DAMAGE_ELEMENTS.includes(event.damageElement) ? event.damageElement : "physical"
-        const release = releaseSettlement ? anomalyReleaseEventData(event, agent, damageElement, options) : null
+        const release = releaseSettlement ? anomalyReleaseEventData(event, agent, damageElement, options, catalog) : null
         return {
             ...event,
             id: String(event.id ?? `anomaly-${index + 1}`),
@@ -3562,6 +3608,10 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
             ...(release ? {
                 releaseProfile: release.profile,
                 releaseCoreScalingRow: release.coreScalingRow,
+                ...(release.releaseSkillRef ? { releaseSkillRef: release.releaseSkillRef } : {}),
+                ...(release.releaseSkillSource ? { releaseSkillSource: release.releaseSkillSource } : {}),
+                ...(release.releaseSkillMultiplier !== undefined ? { releaseSkillMultiplier: release.releaseSkillMultiplier } : {}),
+                releaseAnomalyCritDmgBonus: release.releaseAnomalyCritDmgBonus,
                 triggerActorRef: release.triggerActorRef,
                 anomalySource: release.anomalySource,
             } : {}),
@@ -3576,7 +3626,7 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
         : event.anomalyVariant === "polarizedAssault" && effect.id === "assault"
             ? "polarizedAssault"
             : "normal"
-    const release = releaseSettlement ? anomalyReleaseEventData(event, agent, effect.element, options) : null
+    const release = releaseSettlement ? anomalyReleaseEventData(event, agent, effect.element, options, catalog) : null
     const usesDefaultProcCount = event.procCount === undefined || event.procCount === null || event.procCount === ""
     const procCount = releaseSettlement
         ? 1
@@ -3602,6 +3652,10 @@ function normalizeAnomalyDamageEvent(event = {}, agent = {}, catalog = {}, index
         ...(release ? {
             releaseProfile: release.profile,
             releaseCoreScalingRow: release.coreScalingRow,
+            ...(release.releaseSkillRef ? { releaseSkillRef: release.releaseSkillRef } : {}),
+            ...(release.releaseSkillSource ? { releaseSkillSource: release.releaseSkillSource } : {}),
+            ...(release.releaseSkillMultiplier !== undefined ? { releaseSkillMultiplier: release.releaseSkillMultiplier } : {}),
+            releaseAnomalyCritDmgBonus: release.releaseAnomalyCritDmgBonus,
             triggerActorRef: release.triggerActorRef,
             anomalySource: release.anomalySource,
         } : {}),
@@ -4113,6 +4167,16 @@ export function damageModifierAppliesTo(modifier, event) {
         && !appliesTo.anomalyVariants.includes(matchingEvent.anomalyVariant ?? "normal")) {
         return false
     }
+    if (Array.isArray(appliesTo.releaseTargets) && appliesTo.releaseTargets.length) {
+        const actorId = String(matchingEvent.triggerActorRef?.agentId ?? "")
+        const profileId = String(matchingEvent.triggerActorRef?.profileId
+            ?? matchingEvent.releaseProfile?.id ?? "")
+        if (!appliesTo.releaseTargets.some(target =>
+            String(target?.agentId ?? "") === actorId
+            && String(target?.profileId ?? "") === profileId)) {
+            return false
+        }
+    }
     if (Array.isArray(appliesTo.elements) && appliesTo.elements.length && !appliesTo.elements.includes(matchingEvent.damageElement)) {
         return false
     }
@@ -4130,6 +4194,7 @@ const DAMAGE_MODIFIER_FILTER_KEYS = [
     "anomalyEffects",
     "anomalyVariants",
     "elements",
+    "releaseTargets",
     "skillTargets",
 ]
 
@@ -4297,6 +4362,7 @@ function releaseBreakdownForEvent(event, panel = {}, outOfCombatPanel = panel, r
         trigger: { inCombatPanel: panel, outOfCombatPanel },
         releaseModifiers,
         coreScalingRow: event.releaseCoreScalingRow,
+        releaseSkillMultiplier: event.releaseSkillMultiplier,
         event,
         eventElement: event.damageElement,
     })
@@ -4348,7 +4414,11 @@ export function resolveAnomalyCritForEvent(event, bonusTotals = {}, panel = {}, 
             ? releaseCritRateBonusForEvent(event, panel, outOfCombatPanel)
             : 0
     const critRate = clampNumber(baseCritRate + convertedCritRate, 0, 1)
-    const critDmg = Math.max(0, sumDamageModifiers(bonusTotals, event, "anomalyCritDmg"))
+    const critDmg = Math.max(
+        0,
+        sumDamageModifiers(bonusTotals, event, "anomalyCritDmg")
+            + releaseAnomalyCritDmgBonusForEvent(event),
+    )
     return {
         baseCritRate,
         convertedCritRate,
@@ -4356,6 +4426,10 @@ export function resolveAnomalyCritForEvent(event, bonusTotals = {}, panel = {}, 
         initialAnomalyMastery,
         ...resolveAnomalyCritState({ critRate, critDmg, critMode: event.critMode }),
     }
+}
+
+function releaseAnomalyCritDmgBonusForEvent(event = {}) {
+    return isReleaseSettlement(event) ? Number(event.releaseAnomalyCritDmgBonus ?? 0) : 0
 }
 
 function effectiveAttributeAnomalyDamageEvent(event, bonusTotals) {
@@ -4661,7 +4735,7 @@ function anomalyDamageWhiteBoxRows({ event, atk, selectedDmgBonus, skillDamageBo
     const fixedReleaseSource = isRelease
         && releaseBreakdown?.resultMode === "fixedAnomalyMultiplier"
         && releaseBreakdown.trace?.whiteBoxRole === "conversionSource"
-        && ["constant", "coreSkillScaling", "triggerStat"].includes(releaseBreakdown.trace.kind)
+        && ["constant", "coreSkillScaling", "triggerStat", "skillMultiplier"].includes(releaseBreakdown.trace.kind)
         && !releaseBreakdown.trace.children?.length
         ? releaseBreakdown.trace
         : null
@@ -5568,6 +5642,10 @@ function releaseOnlyBonusTotals(bonusTotals = {}) {
 }
 
 function isReleaseSourceModifier(modifier) {
+    const settlementTypes = modifier?.appliesTo?.settlementTypes
+    if (Array.isArray(settlementTypes) && settlementTypes.length && settlementTypes.includes("release")) {
+        return false
+    }
     return modifier?.id !== "velina-c6-wind-corrosion-recast-damage"
         && (
             modifier?.kind !== "anomalyDamageBonus"
@@ -6503,6 +6581,8 @@ function compileDamageScoreEvent(event = {}) {
         anomalyVariant: event.anomalyVariant ?? "normal",
         releaseProfile: event.releaseProfile ?? null,
         releaseCoreScalingRow: event.releaseCoreScalingRow ?? null,
+        releaseSkillMultiplier: Number(event.releaseSkillMultiplier ?? 0),
+        releaseAnomalyCritDmgBonus: releaseAnomalyCritDmgBonusForEvent(event),
         triggerActorRef: event.triggerActorRef ?? null,
         anomalySource: event.anomalySource ?? null,
         fixedMultiplier: Number(event.fixedMultiplier ?? 0),
@@ -6916,7 +6996,7 @@ function denseAnomalyCritMultiplier(compiledEvent, sums, panel = {}, outOfCombat
             ? releaseCritRateBonusForEvent(compiledEvent, panel, outOfCombatPanel)
             : 0
     const critRate = clampNumber(baseCritRate + convertedCritRate, 0, 1)
-    const critDmg = Math.max(0, denseModifierSum(sums, "anomalyCritDmg"))
+    const critDmg = Math.max(0, denseModifierSum(sums, "anomalyCritDmg") + releaseAnomalyCritDmgBonusForEvent(compiledEvent))
     return anomalyCritMultiplierForMode(critRate, critDmg, compiledEvent.critMode)
 }
 
@@ -9071,7 +9151,7 @@ export function createInCombatPanelCalculator(catalog, input) {
         function compileFixedDirectScoreKernel(fixedOutOfCombatTarget, fixedCombatValues, fixedEntryFlags) {
             const events = compiledDamageTarget.events ?? []
             if (!events.length
-                || dynamicFormulaEntries.length
+                || dynamicFormulaEntries.some(({ rule }) => !isInitialMasteryAnomalyCritRule(rule))
                 || events.some(event => event.kind !== "direct" || event.damageBasis === "anomalyProficiency")
                 || typeof fixedOutOfCombatTarget.panelValue !== "function") {
                 return null
@@ -9354,8 +9434,9 @@ export function createInCombatPanelCalculator(catalog, input) {
 
         function compileFixedNonDirectObjectiveKernel(fixedOutOfCombatTarget, fixedCombatValues, fixedEntryFlags) {
             const events = compiledDamageTarget.events ?? []
+            const activeDynamicFormulaEntries = dynamicFormulaEntries.filter(entry => fixedEntryFlags[entry.entryIndex])
             if (!events.length
-                || dynamicFormulaEntries.length
+                || activeDynamicFormulaEntries.some(entry => !entry.initialMasteryCrit)
                 || events.every(event => event.kind === "direct")
                 || events.some(event => !["direct", "anomaly", "disorder", "sheer", "sharp"].includes(event.kind))
                 || events.some(event => event.isLuminescence)
@@ -9399,6 +9480,8 @@ export function createInCombatPanelCalculator(catalog, input) {
                     elapsedSeconds: event.elapsedSeconds,
                     releaseProfile: event.releaseProfile,
                     releaseCoreScalingRow: event.releaseCoreScalingRow,
+                    releaseSkillMultiplier: event.releaseSkillMultiplier,
+                    releaseAnomalyCritDmgBonus: event.releaseAnomalyCritDmgBonus,
                     triggerActorRef: event.triggerActorRef,
                     anomalySource: event.anomalySource,
                     stunned: event.stunned,
@@ -9461,7 +9544,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                         1 + (event.isTurbulence ? 0 : denseModifierSum(sums, "alienationCoefficientBonus")),
                     ),
                     anomalyCritRate: denseModifierSum(sums, "anomalyCritRate"),
-                    anomalyCritDmg: Math.max(0, denseModifierSum(sums, "anomalyCritDmg")),
+                    anomalyCritDmg: Math.max(0, denseModifierSum(sums, "anomalyCritDmg") + releaseAnomalyCritDmgBonusForEvent(event)),
                     anomalyCritRatePerInitialMasteryAbove100: denseModifierSum(
                         sums,
                         "anomalyCritRatePerInitialMasteryAbove100",
@@ -9487,6 +9570,25 @@ export function createInCombatPanelCalculator(catalog, input) {
                         stunDmgMultiplierBonusAlways: denseModifierSum(sums, "stunDmgMultiplierBonusAlways"),
                         stunDmgMultiplierBonusCapAlways: denseModifierSum(sums, "stunDmgMultiplierBonusCapAlways"),
                     }),
+                }
+            })
+            const dynamicCritSources = activeDynamicFormulaEntries.map(entry => {
+                const rule = entry.rule ?? {}
+                const modifier = {
+                    kind: "anomalyCritRate",
+                    target: rule.target ?? null,
+                    appliesTo: dynamicFormulaTargetAppliesTo(rule),
+                    requirement: rule.requirement ?? null,
+                    value: 1,
+                }
+                return {
+                    coverage: entry.initialMasteryCrit.coverage,
+                    modifierFactor: entry.initialMasteryCrit.modifierFactor,
+                    evaluate: entry.initialMasteryCrit.evaluate,
+                    hitByEvent: events.map(event => damageModifierAppliesToCompiledEvent(
+                        modifier,
+                        event.event ?? event,
+                    )),
                 }
             })
             const needsSheer = compiledEvents.some(event => event.kind === "sheer")
@@ -9642,7 +9744,10 @@ export function createInCombatPanelCalculator(catalog, input) {
                         }
                     },
                 })
-                for (const event of compiledEvents) {
+                const dynamicCritValues = dynamicCritSources.map(source =>
+                    ((source.evaluate(outPanelValue("anomalyMastery")) * source.coverage) * source.modifierFactor))
+                for (let eventIndex = 0; eventIndex < compiledEvents.length; eventIndex += 1) {
+                    const event = compiledEvents[eventIndex]
                     const elementDmg = outPanelValue(event.damageKey) + denseCombatValue(fixedCombatValues, event.damageKey)
                     const resIgnore = event.resistanceFixedOne
                         ? 0
@@ -9736,6 +9841,7 @@ export function createInCombatPanelCalculator(catalog, input) {
                                 outOfCombatPanel: formulaOutOfCombatIntervalPanel,
                             },
                             coreScalingRow: event.releaseCoreScalingRow,
+                            releaseSkillMultiplier: event.releaseSkillMultiplier,
                             releaseModifiers: {
                                 releaseProficiencyYieldBonus: event.releaseProficiencyYieldBonus,
                             },
@@ -9773,13 +9879,20 @@ export function createInCombatPanelCalculator(catalog, input) {
                                         outOfCombatPanel: formulaOutOfCombatIntervalPanel,
                                     },
                                     coreScalingRow: event.releaseCoreScalingRow,
+                                    releaseSkillMultiplier: event.releaseSkillMultiplier,
                                     event,
                                     eventElement: event.damageElement,
                                 }).max)
                                 : releaseCritRateBonusForEvent(event, formulaInCombatPanel, formulaOutOfCombatPanel)
                             : 0
+                    let dynamicCritRate = 0
+                    for (let sourceIndex = 0; sourceIndex < dynamicCritSources.length; sourceIndex += 1) {
+                        if (dynamicCritSources[sourceIndex].hitByEvent[eventIndex]) {
+                            dynamicCritRate += dynamicCritValues[sourceIndex]
+                        }
+                    }
                     const anomalyCritMultiplier = anomalyCritMultiplierForMode(
-                        event.anomalyCritRate + releaseMasteryCritRate,
+                        event.anomalyCritRate + releaseMasteryCritRate + dynamicCritRate,
                         event.anomalyCritDmg,
                         event.critMode,
                         !event.isDisorder,
@@ -9850,9 +9963,22 @@ export function createInCombatPanelCalculator(catalog, input) {
                 const fixedObjectiveKernel = fixedDirectKernel ?? (fixedOutOfCombatTarget && !hasDynamicOutOfCombatRequirements
                     ? compileFixedNonDirectObjectiveKernel(fixedOutOfCombatTarget, fixedCombatValues, fixedEntryFlags)
                     : null)
+                const hasReleaseEvent = (compiledDamageTarget.events ?? []).some(event => event.isRelease)
+                const activeDynamicFormulaEntries = dynamicFormulaEntries
+                    .filter(entry => fixedEntryFlags[entry.entryIndex])
+                const releaseIntervalBoundReason = !hasReleaseEvent || fixedObjectiveKernel?.releaseIntervalBound === true
+                    ? null
+                    : fixedObjectiveKernel
+                        ? "interval-bound-unsafe"
+                        : hasDynamicOutOfCombatRequirements
+                            ? "dynamic-out-of-combat-requirement"
+                            : activeDynamicFormulaEntries.some(entry => !entry.initialMasteryCrit)
+                                ? "dynamic-formula-unsupported"
+                                : "fixed-kernel-unavailable"
                 return {
                     scoreKernel: fixedObjectiveKernel ? "compiled-objective-fixed-sets" : "compiled-dense-fixed-sets",
                     releaseIntervalBound: fixedObjectiveKernel?.releaseIntervalBound === true,
+                    releaseIntervalBoundReason,
                     scoreObjectiveScalar: fixedObjectiveKernel?.scoreObjectiveScalar,
                     scoreCombinedScalar: fixedObjectiveKernel?.scoreCombinedScalar,
                     scoreScalar(statValues = []) {

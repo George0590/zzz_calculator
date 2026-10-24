@@ -732,14 +732,23 @@ function bossRequest(group: any) {
 }
 
 function validationContext(item: any) {
-  const skillContext = { agentSkills: catalog.value?.agentSkills?.agentSkills ?? [] }
-  if (resource.value === "agents") return {
-    items: catalog.value?.agents?.agents ?? [], currentId: originalIdentity.value.id,
-    ...skillContext,
-    anomalyEffects: anomalyRecords().filter(item => anomalyMaintenanceType(item) === "anomaly"),
-    turbulenceEffects: anomalyRecords().filter(item => anomalyMaintenanceType(item) === "turbulence"),
-    disorderEffects: anomalyRecords().filter(item => anomalyMaintenanceType(item) === "disorder"),
-    driveDiscSets: catalog.value?.driveDiscSets?.sets ?? [],
+  const agents: any[] = catalog.value?.agents?.agents ?? []
+  const skillContext = { agentSkills: catalog.value?.agentSkills?.agentSkills ?? [], agents }
+  if (resource.value === "agents") {
+    // Validate against the draft so release targets added in this edit resolve.
+    const draftId = String(item?.id ?? "")
+    const roster = draftId && agents.some(agent => String(agent?.id ?? "") === draftId)
+      ? agents.map(agent => String(agent?.id ?? "") === draftId ? item : agent)
+      : [...agents, item]
+    return {
+      items: agents, currentId: originalIdentity.value.id,
+      ...skillContext,
+      agents: roster,
+      anomalyEffects: anomalyRecords().filter(candidate => anomalyMaintenanceType(candidate) === "anomaly"),
+      turbulenceEffects: anomalyRecords().filter(candidate => anomalyMaintenanceType(candidate) === "turbulence"),
+      disorderEffects: anomalyRecords().filter(candidate => anomalyMaintenanceType(candidate) === "disorder"),
+      driveDiscSets: catalog.value?.driveDiscSets?.sets ?? [],
+    }
   }
   if (resource.value === "teammate-buffs") return { ...skillContext, teammates: catalog.value?.combatBuffs?.teammates ?? [], currentBuffId: originalIdentity.value.id || undefined }
   if (resource.value === "boss-buffs") return {

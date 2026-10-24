@@ -523,7 +523,7 @@ function addDefaultTeammate() {
     <MaintenanceSection title="核心技">
       <template #actions><NSwitch :value="Boolean(model.coreSkill)" :disabled="disabled" @update:value="enableCoreSkill" /></template>
       <CoreSkillEditor v-if="model.coreSkill" :model="model.coreSkill" :disabled="disabled" @change="changed" />
-      <AnomalyReleaseProfilesEditor :model="model" :disabled="disabled" @change="changed" />
+      <AnomalyReleaseProfilesEditor :catalog="catalog" :model="model" :disabled="disabled" @change="changed" />
     </MaintenanceSection>
   </div>
 

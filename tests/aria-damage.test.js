@@ -816,6 +816,28 @@ approx(
     1.6,
     "Release should add broad, source-side precise Attribute Anomaly, and precise Release bonuses once",
 )
+const commonScopedAgent = structuredClone(agent)
+commonScopedAgent.combatBuffs.cinemaBuffs.push({
+    cinemaLevel: 5,
+    cinemaName: { zhCN: "测试：通用异常增伤" },
+    description: { zhCN: "属性异常、乱流和异放共用一条异常增伤。" },
+    scope: "inCombat",
+    defaultChecked: false,
+    effects: [{
+        id: "test-common-anomaly-damage",
+        type: "fixed",
+        stat: "anomalyDamageBonus",
+        value: 20,
+        mode: "flat",
+        target: { kind: "anomaly", settlementTypes: ["attribute", "turbulence", "release"] },
+    }],
+    buffModifiers: [],
+})
+const commonScopedPrepared = createInCombatPanelCalculator(catalogWithAria(commonScopedAgent), releaseInput({
+    activeBuffIds: ["agent:aria.corePassive", "agent:aria.additionalAbility", "agent:aria.cinema.5"],
+}))
+const commonScopedFull = commonScopedPrepared.calculate(masteryDiscs, { round: false })
+approx(commonScopedFull.damage.events[0].multipliers.anomalyDamage, 1.2, "Common anomaly damage should apply once to Release")
 const scopedBonusCompiled = scopedBonusPrepared.scoreOnlyFromSummary(summaryStats, summarySets)
 const scopedBonusLegacy = scopedBonusPrepared.scoreOnlyFromSummaryLegacy(summaryStats, summarySets)
 const scopedStatIds = [...summaryStats.keys()]

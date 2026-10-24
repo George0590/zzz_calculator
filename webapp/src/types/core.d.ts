@@ -81,14 +81,16 @@ declare module "@core/damageEventMultipliers.js" {
 
 declare module "@core/anomalyRelease.js" {
   export function isReleaseSettlement(event?: any): boolean
-  export function anomalyReleaseProfiles(agent?: any): any[]
-  export function defaultAnomalyReleaseProfile(agent?: any, damageElement?: string): any
-  export function anomalyReleaseProfile(agent?: any, profileId?: string, damageElement?: string): any
+  export function anomalyReleaseProfiles(agent?: any, cinemaLevel?: number): any[]
+  export function defaultAnomalyReleaseProfile(agent?: any, damageElement?: string, cinemaLevel?: number): any
+  export function anomalyReleaseProfile(agent?: any, profileId?: string, damageElement?: string, cinemaLevel?: number): any
   export function isAriaReleaseSourceLocked(agent?: any): boolean
+  export function isFioniReleaseSourceLocked(agent?: any): boolean
   export function isVelinaReleaseAgent(agent?: any): boolean
   export function velinaReleaseSourceId(event?: any): string
   export const VELINA_RELEASE_SOURCES: ReadonlyArray<{ value: string, label: string }>
-  export function normalizeAnomalyReleaseEventForAgent(event?: any, agent?: any): any
+  export function normalizeAnomalyReleaseEventForAgent(event?: any, agent?: any, options?: any): any
+  export function resolveReleaseSkillRef(catalog: any, agent: any, skillRef?: any, options?: any): any
   export function evaluateReleaseExpression(node?: any, context?: any): any
   export function evaluateReleaseExpressionInterval(node?: any, context?: any): { min: number, max: number }
   export function evaluateAnomalyReleaseProfile(profile?: any, context?: any): any
@@ -505,6 +507,7 @@ declare module "@core/skillTargets.js" {
 }
 
 declare module "@core/effectRuleTargets.js" {
+  export function anomalySettlementTypes(target?: any): string[]
   export const DAMAGE_ELEMENTS: readonly string[]
   export const ELEMENT_CRIT_DMG_STAT_BY_ELEMENT: Readonly<Record<string, string>>
   export const ELEMENT_DEF_IGNORE_STAT_BY_ELEMENT: Readonly<Record<string, string>>
