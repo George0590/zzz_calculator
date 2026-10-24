@@ -955,6 +955,8 @@ function applyPreferredMainStatLimits(settings, agent) {
         const explicit = mainStatValuesForSlot(settings.mainStatLimits, slot)
         const preferred = preferredMainStatLimits[String(slot)] ?? []
         explicitMainStatLimits[String(slot)] = explicit
+        // Presence wins over recommendations: an explicit empty array means
+        // unrestricted, and only an omitted slot inherits the recommendation.
         const hasExplicitLimit = settings.mainStatLimits?.[String(slot)] != null
         mainStatLimits[String(slot)] = hasExplicitLimit ? explicit : preferred
         appliedPreferredMainStatLimits[String(slot)] = hasExplicitLimit ? [] : preferred

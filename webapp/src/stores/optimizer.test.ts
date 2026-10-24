@@ -1123,6 +1123,20 @@ describe("optimizer store", () => {
       expect(reloaded.resultSchemes).toHaveLength(1)
     })
 
+    it("marks restored results from an older constraint fingerprint as stale", async () => {
+      const store = useOptimizerStore()
+      await completeRun(store, optimizerInput(), [{ rank: 1, score: 200, driveDiscs: [disc("a", 1)] }])
+
+      setActivePinia(createPinia())
+      const reloaded = useOptimizerStore()
+      reloaded.initialize(catalog)
+      expect(reloaded.restoreSavedResults("default", "agent_a", [disc("a", 1)])).toBe(true)
+      const fingerprint = JSON.parse(reloaded.completedSettingsFingerprint)
+      delete fingerprint.constraintSemanticsVersion
+      reloaded.completedSettingsFingerprint = JSON.stringify(fingerprint)
+      expect(reloaded.resultsAreStale).toBe(true)
+    })
+
     it("drops schemes whose discs were deleted or changed and restores nothing when none remain", async () => {
       const store = useOptimizerStore()
       await completeRun(store, optimizerInput(), [

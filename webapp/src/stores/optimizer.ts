@@ -375,7 +375,11 @@ function normalizeOptimizerSettings(value: any = {}, catalog: any = null, agent:
     ?? agent?.preferredDriveDiscs?.mainStats
     ?? agent?.preferredDriveDiscs
     ?? {}
-  // Keep recommendations visible in new configurations. Existing empty slots mean unrestricted.
+  // Store output is the UI's source of truth: new configurations materialize the
+  // recommended main stats so they show as checked. Core still applies the same
+  // recommendations when a slot is omitted for direct/Node callers; both layers
+  // must keep "explicit empty array means unrestricted" semantics.
+  // Existing empty slots mean unrestricted.
   const mainStatLimits = Object.fromEntries([4, 5, 6].map(slot => {
     const preferred = preferredMainStatLimits[String(slot)]
     return [String(slot), saved.mainStatLimits?.[String(slot)]
