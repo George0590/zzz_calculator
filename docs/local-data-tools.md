@@ -31,6 +31,14 @@
 
 优化 Worker 的目录数据同时带内容指纹，目录对象复用但内容变化时必须重新发送。
 
+## 仓库与选盘分页
+
+驱动盘仓库每页数量可选 5 / 10 / 20 / 50 张（默认 5，减轻低配电脑一次渲染的压力；记住上次选择，键 `zzz-calculator.webapp.discs.pageSize.v2`）。
+公共选盘弹窗与关闭使用限制界面时的旧选盘弹窗都每页显示 20 张，旧弹窗固定该数量、不提供页大小选择。
+两种选盘都默认按当前角色重要副词条的有效条数（含强化次数）从多到少排序，可切换为按套装；角色未配置重要副词条时只按套装排序。
+仓库筛选在完整库存上进行，匹配结果变化回到第一页；选盘筛选同样覆盖完整候选。两者都显示匹配总量和当前页码。
+分页仅截取渲染数组，优化候选和当前账号的批量导出不受页面、搜索或筛选限制。
+
 ## 完整个人备份
 
 入口为“设置 → 完整个人备份”。格式为 `zzz-calculator-personal-backup`，版本为 `1`。
@@ -75,4 +83,5 @@
 - `webapp/src/App.test.ts`：解析失败与事务恢复失败的用户提示边界。
 - `webapp/src/runtime/personal-backup.test.ts`：完整备份、过期预览、失败与中断恢复、坏 fallback，以及独立配置键保留。
 - `webapp/src/runtime/drive-disc-import-transaction.test.ts`：普通导入撤销的账号隔离、指纹变化、连续导入、切角色、回退与中断恢复。
+- `webapp/src/components/DriveDiscPickerModal.test.ts`、`webapp/src/views/WorkbenchView.test.ts`：仓库/新旧选盘分页、页大小记忆、有效副词条排序及旧选盘弹窗对齐。
 - `webapp/src/runtime/storage-guard.js`：统一记录解析失败并导出原始内容。

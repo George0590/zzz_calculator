@@ -24,7 +24,7 @@ import { buffLabelForId, teammateBuffCandidates } from "@/utils/combatBuffs"
 import { inferBuffPickerState, selectedTeammateOwnerIds } from '@/utils/teammateBuffPicker'
 import { sameTeammateValue, syncEnkaTeammates, type TeammateSources } from '@/utils/enkaTeammates'
 import { readTeammateSources } from '@runtime/enka-teammate-sources'
-import { countEffectiveDriveDiscSubstats } from "@/utils/driveDiscSubstats"
+import { countEffectiveDriveDiscSubstats, driveDiscEffectiveRollsById, importantSubStatsForAgent } from "@/utils/driveDiscSubstats"
 import { driveDiscImportFingerprint } from "@core/drive-disc-import/transaction-plan.js"
 import {
   buffEffectLines,
@@ -497,6 +497,21 @@ const manualDiscMainStatFilterOptions = computed(() => {
     ...stats.map((stat: string) => ({ label: statLabel(stat, catalogStore.meta), value: stat })),
   ]
 })
+// 默认选盘弹窗（关闭使用限制界面时）与公共选盘弹窗保持同一套排序语义：
+// 默认按当前角色重要副词条的有效条数排序，可切换为按套装；无重要副词条时按套装。
+const manualDiscSortMode = ref<"effective" | "set">("effective")
+const manualDiscImportantSubStats = computed(() => importantSubStatsForAgent(
+  buildStore.agentId, catalogStore.meta, catalogStore.displayAgents,
+))
+const manualDiscCanSortByEffective = computed(() => manualDiscImportantSubStats.value.length > 0)
+const manualDiscSlotDiscs = computed(() => inventoryStore.driveDiscs
+  .filter((disc: any) => Number(disc.partition) === Number(activeManualDiscSlot.value)))
+const manualDiscEffectiveRollsById = computed(() => driveDiscEffectiveRollsById(
+  manualDiscSlotDiscs.value, manualDiscImportantSubStats.value, catalogStore.meta,
+))
+function manualDiscEffectiveRolls(disc: any) {
+  return manualDiscEffectiveRollsById.value.get(String(disc?.id ?? "")) ?? 0
+}
 const filteredManualDiscOptions = computed(() => {
   const slot = Number(activeManualDiscSlot.value)
   const setIds = manualDiscSetFilterIds.value
@@ -531,12 +546,16 @@ const filteredManualDiscOptions = computed(() => {
     .sort((left: any, right: any) => {
       const leftSelected = left.id === selectedId ? 0 : 1
       const rightSelected = right.id === selectedId ? 0 : 1
+      const byEffective = manualDiscSortMode.value === "effective" && manualDiscCanSortByEffective.value
+        ? manualDiscEffectiveRolls(right) - manualDiscEffectiveRolls(left)
+        : 0
       return leftSelected - rightSelected
+        || byEffective
         || driveDiscSetName(left).localeCompare(driveDiscSetName(right), "zh-CN")
         || Number(left.source?.sequence ?? 999999) - Number(right.source?.sequence ?? 999999)
     })
 })
-const { page: manualDiscPage, pageSize: manualDiscPageSize, pagedItems: pagedManualDiscOptions } = useDriveDiscPagination(filteredManualDiscOptions)
+const { page: manualDiscPage, pageSize: manualDiscPageSize, pagedItems: pagedManualDiscOptions } = useDriveDiscPagination(filteredManualDiscOptions, 20)
 const saveLoadoutIdsBySlot = computed(() => saveLoadoutDraft.value?.driveDiscIdsBySlot ?? {})
 const saveLoadoutDiscCount = computed(() => Object.keys(saveLoadoutIdsBySlot.value).length)
 const saveLoadoutMissingSlots = computed(() => OPTIMIZER_RESULT_SLOTS.filter(slot => !saveLoadoutIdsBySlot.value[String(slot)]))
@@ -2015,7 +2034,16 @@ function formatPercentValue(value: any) {
     <div class="section-band manual-disc-picker ui-layout-scope" data-layout-surface="manual-drive-disc-picker">
       <div class="manual-disc-picker-head">
         <span>只显示当前号位的已有驱动盘</span>
-        <NTag round>{{ filteredManualDiscOptions.length }} 件可选</NTag>
+        <span class="manual-disc-picker-head-actions">
+          <label v-if="manualDiscCanSortByEffective" class="manual-disc-sort">
+            排序
+            <select v-model="manualDiscSortMode" aria-label="驱动盘排序方式">
+              <option value="effective">有效词条优先</option>
+              <option value="set">按套装</option>
+            </select>
+          </label>
+          <NTag round>{{ filteredManualDiscOptions.length }} 件可选</NTag>
+        </span>
       </div>
       <div class="manual-disc-filter-row ui-field-grid ui-field-grid--comfortable" data-layout-surface="manual-drive-disc-filters">
         <div class="metric" data-layout-field>
@@ -2068,7 +2096,10 @@ function formatPercentValue(value: any) {
             <span>{{ disc.partition }}号位 · {{ driveDiscRarityLevelText(disc) }}{{ disc.source?.sequence ? ` · #${disc.source.sequence}` : "" }}</span>
           </span>
           <span class="manual-disc-option-stat">
-            <strong>{{ driveDiscStatText(disc.mainStat) }}</strong>
+            <strong>
+              {{ driveDiscStatText(disc.mainStat) }}
+              <em v-if="manualDiscCanSortByEffective" class="manual-disc-effective" :title="`当前角色的有效副词条 ${manualDiscEffectiveRolls(disc)} 条（含强化次数）`">有效 {{ manualDiscEffectiveRolls(disc) }}</em>
+            </strong>
             <span>{{ driveDiscSubStatText(disc) }}</span>
           </span>
         </button>
@@ -3102,6 +3133,44 @@ function formatPercentValue(value: any) {
   gap: 10px;
   color: var(--app-muted);
   font-size: 12px;
+}
+
+.manual-disc-picker-head-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.manual-disc-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-muted);
+  font-size: 12px;
+}
+
+.manual-disc-sort select {
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--app-border-strong, #cbd5e1);
+  border-radius: 6px;
+  background: var(--app-panel, #fff);
+  color: var(--app-text, inherit);
+  font: inherit;
+}
+
+.manual-disc-effective {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--app-blue-soft, #edf4ff);
+  color: var(--app-blue-strong, #1d5fd6);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  vertical-align: middle;
 }
 
 .manual-disc-filter-row {

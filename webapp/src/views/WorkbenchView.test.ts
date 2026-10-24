@@ -640,3 +640,15 @@ describe("WorkbenchView drive disc scheme source", () => {
     expect(source).toContain('<NButton type="primary" size="small" data-testid="open-drive-disc-analysis"')
   })
 })
+
+describe("WorkbenchView default drive disc picker", () => {
+  it("keeps the legacy picker aligned with 20 rows and effective-substat sorting", () => {
+    expect(source).toContain("useDriveDiscPagination(filteredManualDiscOptions, 20)")
+    expect(source).toContain("driveDiscEffectiveRollsById")
+    expect(source).toContain("manualDiscSortMode")
+    expect(source).toContain("manualDiscCanSortByEffective")
+    expect(source).toContain('aria-label="驱动盘排序方式"')
+    expect(source).toContain("manualDiscEffectiveRolls")
+    expect(source).toContain('data-layout-surface="manual-drive-disc-picker"')
+  })
+})

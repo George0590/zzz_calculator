@@ -8,7 +8,7 @@ import DriveDiscConflictResolver from "@/components/DriveDiscConflictResolver.vu
 import DriveDiscImportUndo from "@/components/DriveDiscImportUndo.vue"
 import DriveDiscPickerModal from "@/components/DriveDiscPickerModal.vue"
 import DriveDiscPagination from "@/components/DriveDiscPagination.vue"
-import { useDriveDiscPagination } from "@/utils/driveDiscPagination"
+import { useDriveDiscPagination, usePersistedPageSize } from "@/utils/driveDiscPagination"
 import DriveDiscSourceTags from "@/components/DriveDiscSourceTags.vue"
 import DriveDiscSlotCard from "@/components/DriveDiscSlotCard.vue"
 import ImageAvatar from "@/components/ImageAvatar.vue"
@@ -34,7 +34,9 @@ defineOptions({ name: "DiscsView" })
 const pageActive = ref(true)
 const route = inject(routeLocationKey, null)
 const message = useMessage()
-const { page: discPage, pageSize: discPageSize, pagedItems: pagedDiscs } = useDriveDiscPagination(computed(() => inventoryStore.filteredDriveDiscs), 5)
+// 仓库每页数量可选（5 / 10 / 20 / 50），默认 5，并记住上次的选择
+const { pageSize: discPageSizeSetting, pageSizeOptions: discPageSizeOptions } = usePersistedPageSize("zzz-calculator.webapp.discs.pageSize.v2")
+const { page: discPage, pageSize: discPageSize, pagedItems: pagedDiscs } = useDriveDiscPagination(computed(() => inventoryStore.filteredDriveDiscs), discPageSizeSetting)
 const ALL_PRESET_AGENTS = "__all__"
 const presetAgentId = ref<string>(ALL_PRESET_AGENTS)
 const presetAgentOptions = computed(() => {
@@ -1296,7 +1298,7 @@ function confirmDangerImport() {
           </table>
           <div v-if="!inventoryStore.filteredDriveDiscs.length" class="empty-state">暂无数据</div>
         </div>
-        <DriveDiscPagination v-model:page="discPage" :total="inventoryStore.filteredDriveDiscs.length" :page-size="discPageSize" />
+        <DriveDiscPagination v-model:page="discPage" v-model:page-size="discPageSize" :total="inventoryStore.filteredDriveDiscs.length" :page-size-options="discPageSizeOptions" />
       </div>
     </div>
 
