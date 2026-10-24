@@ -42,7 +42,7 @@ async function restore() {
   <section class="panel" data-layout-surface="personal-backup">
     <div class="panel-header"><h2 class="panel-title">完整个人备份</h2></div>
     <div class="panel-body section-band">
-      <p>保存全部账号、驱动盘、套装预设、计算条件和绑定信息。请在同一浏览器地址使用；项目里的角色目录与游戏文件不在此备份中。</p>
+      <p>保存全部账号、驱动盘、套装预设、计算条件和绑定信息。</p>
       <NAlert v-if="error && !plan" type="error">{{ error }}</NAlert>
       <div class="toolbar">
         <NButton :loading="busy" :disabled="busy" @click="exportBackup">导出完整备份</NButton>
