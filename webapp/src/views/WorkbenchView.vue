@@ -25,6 +25,7 @@ import { inferBuffPickerState, selectedTeammateOwnerIds } from '@/utils/teammate
 import { sameTeammateValue, syncEnkaTeammates, type TeammateSources } from '@/utils/enkaTeammates'
 import { readTeammateSources } from '@runtime/enka-teammate-sources'
 import { countEffectiveDriveDiscSubstats } from "@/utils/driveDiscSubstats"
+import { driveDiscImportFingerprint } from "@core/drive-disc-import/transaction-plan.js"
 import {
   buffEffectLines,
   damageEventSummaryTitle,
@@ -188,6 +189,7 @@ async function loadWorkbench(initial = false) {
       optimizerStore.setFourPieceSets([catalogStore.displayDriveDiscSets[0]?.id ?? ""].filter(Boolean))
     }
     recalculate()
+    restoreOptimizerResults()
     await refreshAutomaticTeammates()
     await nextTick()
     if (disposed || sequence !== loadSequence || ownerId !== accountStore.currentOwnerId) return
@@ -199,6 +201,52 @@ async function loadWorkbench(initial = false) {
 }
 onMounted(() => loadWorkbench(true))
 watch(() => accountStore.currentOwnerId, () => loadWorkbench())
+
+// 优化结果只在内存里，刷新或切换角色后会丢失；这里从本地恢复该角色上次的结果。
+// 恢复不到却仍停在“优化结果”时，回到“自选”并提示，避免显示一个空方案。
+const optimizedResultsExpired = ref(false)
+const catalogFingerprint = computed(() => catalogStore.meta
+  ? driveDiscImportFingerprint(catalogStore.meta)
+  : "")
+function restoreOptimizerResults() {
+  if (!catalogStore.catalog || !inventoryStore.store || optimizerStore.isBusy) return
+  const ownerId = String(inventoryStore.store?.currentOwnerId ?? accountStore.currentOwnerId ?? "default")
+  const restored = optimizerStore.restoreSavedResults(
+    ownerId, buildStore.agentId, inventoryStore.driveDiscs, catalogFingerprint.value,
+  )
+  if (restored) {
+    // A restored set can miss the previously selected rank after filtering.
+    if (!optimizerStore.selectedResult(buildStore.selectedOptimizedRank) && optimizerStore.resultSchemes.length) {
+      buildStore.selectOptimizedRank(Number(optimizerStore.resultSchemes[0].rank))
+    }
+  }
+  if (restored || optimizerStore.resultSchemes.length) {
+    optimizedResultsExpired.value = false
+    return
+  }
+  if (buildStore.discMode === "optimized") {
+    buildStore.setDiscMode("manual")
+    optimizedResultsExpired.value = true
+  }
+}
+watch(() => buildStore.agentId, (agentId, previousAgentId) => {
+  // 加载时角色从空值初始化不算切换，不能清掉刚出现的“已失效”提示
+  if (previousAgentId && previousAgentId !== agentId) optimizedResultsExpired.value = false
+  void nextTick(restoreOptimizerResults)
+})
+const restoredResultsTimeText = computed(() => {
+  const savedAt = optimizerStore.restoredResultsSavedAt
+  const date = savedAt ? new Date(savedAt) : null
+  if (!date || Number.isNaN(date.getTime())) return ""
+  return new Intl.DateTimeFormat("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(date)
+})
+const restoredResultsNoteText = computed(() => {
+  const time = restoredResultsTimeText.value
+  if (!time) return ""
+  return optimizerResultsAreStale.value || optimizerInventoryStale.value
+    ? `正在查看 ${time} 的上次优化结果，配置或库存已变化，请重新优化。`
+    : `正在查看 ${time} 的上次优化结果，可直接使用，也可重新优化。`
+})
 
 const selectedAgent = computed(() => catalogStore.displayAgents.find((item: any) => item.id === buildStore.agentId))
 const selectedWEngine = computed(() => catalogStore.displayWEngines.find((item: any) => item.id === buildStore.wEngineId))
@@ -783,6 +831,17 @@ const buildSignature = computed(() => JSON.stringify({
 
 watch(buildSignature, () => recalculate())
 
+// 结果条的涨跌只比较同一角色、同一驱动盘方案下的参数调整；
+// 切换角色、方案来源、已有套装、优化结果第几套，或优化过程中结果刷新时只重置基准。
+// 自选模式下手动换盘属于参数调整，仍显示涨跌。
+const summaryContextKey = computed(() => {
+  const mode = buildStore.discMode
+  const scheme = mode === "manual"
+    ? ""
+    : selectedDriveDiscs.value.map((disc: any) => disc.id).join(",")
+  return `${buildStore.agentId}|${mode}|${scheme}`
+})
+
 function recalculate() {
   buildStore.calculate(catalogStore.catalog, catalogStore.meta, selectedDriveDiscs.value, selectedBuildOptions.value)
 }
@@ -895,6 +954,7 @@ async function runOptimization() {
   const requestedAgentId = buildStore.agentId
   const isCurrent = () => !disposed && request === optimizationRequest
     && requestedOwnerId === accountStore.currentOwnerId && requestedAgentId === buildStore.agentId
+  optimizerStore.setCatalogFingerprint(catalogFingerprint.value)
   try {
     await inventoryStore.load()
   } catch (error) {
@@ -1745,6 +1805,24 @@ function formatPercentValue(value: any) {
             </div>
           </div>
 
+          <NAlert
+            v-if="optimizedResultsExpired"
+            type="info"
+            :show-icon="false"
+            closable
+            data-testid="optimizer-results-expired-notice"
+            @close="optimizedResultsExpired = false"
+          >
+            上次的优化结果已失效（驱动盘有变化或尚未保存），已切换到“自选”。重新优化即可得到新方案。
+          </NAlert>
+          <p
+            v-if="buildStore.discMode === 'optimized' && restoredResultsNoteText"
+            class="restored-results-note"
+            data-testid="optimizer-restored-results-note"
+          >
+            {{ restoredResultsNoteText }}
+          </p>
+
           <NAlert v-if="optimizerStore.resultsAreProvisional" type="info" :show-icon="false" data-testid="optimizer-provisional-notice">
             {{ optimizerStore.isBusy ? '搜索仍在进行' : '搜索未完成' }}，以下为当前已找到的方案，尚未确认最终最优。完整结果出来后可保存或锁定。
             <NButton v-if="buildStore.discMode !== 'optimized'" text type="primary" @click="buildStore.selectOptimizedRank(1)">
@@ -1892,7 +1970,7 @@ function formatPercentValue(value: any) {
             </div>
           </div>
         </section>
-        <DamageSummaryBar class="workbench-summary-section" :result="buildStore.result" :error="buildStore.error" :loading="catalogStore.loading" />
+        <DamageSummaryBar class="workbench-summary-section" :result="buildStore.result" :error="buildStore.error" :loading="catalogStore.loading" :context-key="summaryContextKey" />
         <section class="workbench-section workbench-whitebox-section">
           <div class="panel-header workbench-section-header">
             <div>
@@ -2935,6 +3013,13 @@ function formatPercentValue(value: any) {
 
 .optimizer-stale-alert {
   margin-top: 2px;
+}
+
+.restored-results-note {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: var(--font-xs);
+  line-height: 1.5;
 }
 
 .disc-slot-card {

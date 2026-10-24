@@ -338,6 +338,10 @@
 相关驱动盘、配置或套装引用变化时拒绝，仅切换当前角色不受影响，无关新盘可以保留。
 撤销写入复用导入事务，失败回滚、中断恢复和冲突提示必须保留；撤销会提示其再次失效 Enka 撤销记录，成功后清除撤销记录。
 
+优化结果刷新缓存使用 `zzz-calculator.webapp.optimizer-results.v1`，按账号+角色保存最近一次完整结果并限制 6 组；
+恢复必须核对目录指纹与每张盘的内容指纹，目录或盘内容变化时不得把旧结果标为可用；缓存损坏或写入失败只能丢弃缓存，
+不得影响优化设置或当前内存结果。
+
 验证入口：[完整备份](../webapp/src/runtime/personal-backup.test.ts)、[存储兼容](../webapp/src/stores/local-store-indexeddb-compat.test.ts)、[导入事务](../tests/drive-disc-import-transaction.test.js)、[撤销](../webapp/src/runtime/drive-disc-import-transaction.test.ts)、[配装保存锁](../webapp/e2e/drive-disc-loadout-save-lock.e2e.ts)。
 
 本地可靠性扩展（2026-10-22）：账号新建、改名、切换和删除必须防止重复提交；失败时保留名称草稿或删除确认，
