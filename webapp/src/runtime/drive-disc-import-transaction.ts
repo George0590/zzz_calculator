@@ -4,6 +4,8 @@ import {
   clearPendingDriveDiscImportJournal,
   driveDiscImportBaseMatches,
   driveDiscImportSnapshotMatches,
+  driveDiscImportUndoFingerprint,
+  driveDiscImportUndoJournalFingerprint,
   pendingDriveDiscImportJournal,
   pendingDriveDiscImportOwners,
 } from "@core/drive-disc-import/transaction-plan.js"
@@ -108,6 +110,80 @@ async function persistState(snapshot: any) {
   }
 }
 
+const UNDOABLE_IMPORT_KINDS = ["scanner", "calculator-json"]
+const UNDO_JOURNAL_VERSION = 1
+
+function undoOwnerSelection(document: any, ownerId: string) {
+  const selection = document?.byOwner
+    ? document.byOwner[ownerId] ?? null : ownerId === "default" ? document : null
+  if (!selection || typeof selection !== "object") return null
+  // Switching the current agent is a UI navigation, not a data change; keep
+  // undo available while still comparing every per-agent config and loadout.
+  const { currentAgentId: _currentAgentId, ...rest } = selection
+  return { ...rest, byAgent: rest.byAgent ?? {} }
+}
+
+function undoContext(snapshot: any, ownerId: string) {
+  return {
+    build: undoOwnerSelection(snapshot.buildSelection, ownerId),
+    legacy: undoOwnerSelection(snapshot.legacySelection, ownerId),
+    loadouts: (snapshot.store.driveDiscLoadouts ?? []).filter((row: any) => (row.ownerId ?? "default") === ownerId),
+  }
+}
+
+function finishImportJournal(store: any, journal: any) {
+  const next = clearPendingDriveDiscImportJournal(store, journal.ownerId, journal.id)
+  const ownerState = next.driveDiscImportState.byOwner[journal.ownerId] ?? {}
+  if (UNDOABLE_IMPORT_KINDS.includes(journal.kind)) {
+    ownerState.undoJournal = {
+      version: UNDO_JOURNAL_VERSION,
+      id: journal.id,
+      kind: journal.kind,
+      ownerId: journal.ownerId,
+      createdAt: journal.createdAt ?? null,
+      affected: plainSnapshot(journal.affected),
+      before: plainSnapshot(journal.before),
+      afterFingerprint: driveDiscImportUndoJournalFingerprint(journal),
+      undoContext: plainSnapshot(journal.metadata?.undoContext ?? null),
+      status: "committed",
+    }
+    next.driveDiscImportState.byOwner[journal.ownerId] = ownerState
+  } else if (journal.kind === "drive-disc-undo") {
+    delete ownerState.undoJournal
+    next.driveDiscImportState.byOwner[journal.ownerId] = ownerState
+  }
+  return next
+}
+
+export async function previewLastDriveDiscImportUndo(ownerId: string): Promise<any> {
+  const current = await currentState()
+  if (current.store.personalDataRestore) {
+    throw new Error("存在未完成的个人数据恢复事务，请刷新页面完成恢复后再撤销导入。")
+  }
+  if (current.store.currentOwnerId !== ownerId) throw new Error("目标账号已切换，请重新打开撤销预览。")
+  const journal = current.store.driveDiscImportState?.byOwner?.[ownerId]?.undoJournal
+  if (journal?.status !== "committed") throw new Error("当前账号没有可撤销的 JSON 或扫描导入。")
+  const currentFingerprint = driveDiscImportUndoFingerprint({
+    store: current.store,
+    buildSelection: current.buildSelection,
+    legacySelection: current.legacySelection,
+    journal,
+  })
+  if (!journal.afterFingerprint || currentFingerprint !== journal.afterFingerprint
+    || JSON.stringify(undoContext(current, ownerId)) !== JSON.stringify(journal.undoContext)) {
+    throw new Error("导入后的相关驱动盘、配置或套装引用已变化，已阻止撤销以免覆盖新数据。")
+  }
+  const target = applyDriveDiscImportSnapshot({ ...current, journal }, "before")
+  const transactionId = globalThis.crypto?.randomUUID?.() ?? `drive-disc-undo-${Date.now()}`
+  return buildDriveDiscImportTransactionPlan({
+    kind: "drive-disc-undo", ownerId, transactionId,
+    store: current.store, nextStore: target.store,
+    buildSelection: current.buildSelection, legacySelection: current.legacySelection,
+    nextBuildSelection: target.buildSelection, nextLegacySelection: target.legacySelection,
+    metadata: { revertedImport: journal.id },
+  })
+}
+
 export { withDriveDiscImportOwnerLock } from "@runtime/drive-disc-import-lock"
 
 async function recoverPendingUnlocked(ownerId: string): Promise<"none" | "committed" | "rolled-back"> {
@@ -115,7 +191,7 @@ async function recoverPendingUnlocked(ownerId: string): Promise<"none" | "commit
   const journal = pendingDriveDiscImportJournal(current.store, ownerId)
   if (!journal) return "none"
   if (driveDiscImportSnapshotMatches({ ...current, journal }, "after")) {
-    await saveUserDriveDiscStoreUnlocked(clearPendingDriveDiscImportJournal(current.store, ownerId, journal.id))
+    await saveUserDriveDiscStoreUnlocked(finishImportJournal(current.store, journal))
     return "committed"
   }
   await persistState(applyDriveDiscImportSnapshot({ ...current, journal }, "before"))
@@ -145,11 +221,7 @@ export async function commitDriveDiscImportPlan(plan: any): Promise<any> {
       const preparedStore = await loadUserDriveDiscStoreFresh()
       const pending = pendingDriveDiscImportJournal(preparedStore, frozenPlan.ownerId)
       if (!pending || pending.id !== frozenPlan.transactionId) throw new Error("驱动盘导入事务已失效。")
-      const committedStore = clearPendingDriveDiscImportJournal(
-        preparedStore,
-        frozenPlan.ownerId,
-        frozenPlan.transactionId,
-      )
+      const committedStore = finishImportJournal(preparedStore, pending)
       await saveUserDriveDiscStoreUnlocked(committedStore)
       return {
         transactionId: frozenPlan.transactionId,
@@ -228,6 +300,13 @@ export async function freezeDriveDiscInventoryImportPlan(inventoryPlan: any, opt
     now: options.now ?? new Date(),
     hasUnresolvedConflicts: Boolean(inventoryPlan.hasUnresolvedConflicts),
   })
+  transactionPlan.journal.metadata.undoContext = plainSnapshot(undoContext({
+    store: transactionPlan.nextStore,
+    buildSelection: transactionPlan.nextBuildSelection,
+    legacySelection: transactionPlan.nextLegacySelection,
+  }, ownerId))
+  // The prepared journal must carry the same undo context across a browser crash.
+  transactionPlan.preparedStore.driveDiscImportState.byOwner[ownerId].pendingJournal = plainSnapshot(transactionPlan.journal)
   const preview = plainSnapshot(inventoryPlan.preview ?? null)
   const invalidationWarning = transactionPlan.enkaUndoInvalidation
     ? "本次导入会修改上次展柜数据导入涉及的库存或配置，原撤销记录将失效。"

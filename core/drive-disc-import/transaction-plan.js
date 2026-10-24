@@ -631,6 +631,39 @@ export function driveDiscImportSnapshotMatches({ store, buildSelection, legacySe
     && sameValue(selectionConfigsSnapshot(legacySelection, journal.ownerId, journal.affected.agentIds), snapshot.legacyConfigs)
 }
 
+// The undo journal must survive a later "switch current agent" without losing
+// undo availability, so its fingerprint ignores the volatile currentAgentId
+// while still covering the affected inventory, per-agent configs and enka state.
+function stripUndoConfigCurrentAgent(snapshot) {
+  const { currentAgentId: _ignoredCurrentAgentId, ...configs } = snapshot ?? {}
+  return configs
+}
+
+function undoConfigsSnapshot(document, ownerId, agentIds) {
+  return stripUndoConfigCurrentAgent(selectionConfigsSnapshot(document, ownerId, agentIds))
+}
+
+export function driveDiscImportUndoFingerprint({ store, buildSelection, legacySelection, journal }) {
+  const ownerId = journal?.ownerId
+  const affected = journal?.affected ?? {}
+  if (!ownerId) return ""
+  return driveDiscImportFingerprint({
+    inventory: inventorySnapshot(store, ownerId, affected),
+    buildConfigs: undoConfigsSnapshot(buildSelection, ownerId, affected.agentIds),
+    legacyConfigs: undoConfigsSnapshot(legacySelection, ownerId, affected.agentIds),
+  })
+}
+
+export function driveDiscImportUndoJournalFingerprint(journal) {
+  const after = journal?.after
+  if (!after) return ""
+  return driveDiscImportFingerprint({
+    inventory: after.inventory,
+    buildConfigs: stripUndoConfigCurrentAgent(after.buildConfigs),
+    legacyConfigs: stripUndoConfigCurrentAgent(after.legacyConfigs),
+  })
+}
+
 export function applyDriveDiscImportSnapshot({ store, buildSelection, legacySelection, journal }, phase = "before") {
   const snapshot = journal?.[phase]
   if (!snapshot) throw new Error("驱动盘导入快照不存在。")

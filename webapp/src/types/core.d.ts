@@ -557,6 +557,8 @@ declare module "@core/drive-disc-import/transaction-plan.js" {
   export function driveDiscImportBaseMatches(input: any): boolean
   export function driveDiscImportFingerprint(input: any): string
   export function driveDiscImportSnapshotMatches(input: any, phase?: "before" | "after"): boolean
+  export function driveDiscImportUndoFingerprint(input: any): string
+  export function driveDiscImportUndoJournalFingerprint(journal: any): string
   export function pendingDriveDiscImportJournal(store: any, ownerId: string): any
   export function pendingDriveDiscImportOwners(store: any): string[]
   export function positionedOwnerItemsSnapshot(items: any[], ownerId: string, ids: Iterable<string>): any
