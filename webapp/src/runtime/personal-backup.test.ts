@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
 import { createPersonalBackup, previewPersonalRestore, restorePersonalBackup, recoverPersonalRestore, validatePersonalBackup } from "./personal-backup"
-import { loadUserDriveDiscStoreFresh, saveUserDriveDiscStore } from "./local-store.js"
+import { loadUserDriveDiscStoreFresh, saveUserDriveDiscStore, saveUserDriveDiscStoreUnlocked } from "./local-store.js"
 
 const KEY = "zzz-calculator.webapp.build.v1"
 const FALLBACK = "zzz-calculator.userStore.v1"
@@ -66,7 +66,8 @@ describe("complete personal backup", () => {
 
   it("recovers an interrupted restore before normal application reads", async () => {
     const before = (await createPersonalBackup()).data
-    await saveUserDriveDiscStore({ ...before.inventory, personalDataRestore: { version: 1, id: "interrupted", before } })
+    await saveUserDriveDiscStoreUnlocked({ ...before.inventory, personalDataRestore: { version: 1, id: "interrupted", before } },
+      { personalDataRestoreTransactionId: "interrupted" })
     localStorage.setItem(KEY, '{"partiallyApplied":true}')
     await recoverPersonalRestore()
     expect(localStorage.getItem(KEY)).toBe(before.localStorage[0].value)
@@ -81,5 +82,51 @@ describe("complete personal backup", () => {
     await restorePersonalBackup(plan)
     expect((await loadUserDriveDiscStoreFresh()).driveDiscs).toHaveLength(1)
     expect(plan.before.unreadableFallback).toBe("{broken-inventory")
+  })
+
+  it("blocks ordinary inventory writes while a restore journal is pending", async () => {
+    const before = (await createPersonalBackup()).data
+    const journal = { version: 1, id: "pending-guard", before }
+    await saveUserDriveDiscStoreUnlocked({ ...before.inventory, personalDataRestore: journal },
+      { personalDataRestoreTransactionId: "pending-guard" })
+
+    const current = await loadUserDriveDiscStoreFresh()
+    current.driveDiscs[0].level = 13
+    await expect(saveUserDriveDiscStore(current)).rejects.toThrow("未完成的个人数据恢复事务")
+    expect((await loadUserDriveDiscStoreFresh()).personalDataRestore?.id).toBe("pending-guard")
+  })
+
+  it("refuses a full backup while the inventory fallback is unreadable", async () => {
+    await createPersonalBackup()
+    localStorage.setItem(FALLBACK, "{broken-inventory")
+    await expect(createPersonalBackup()).rejects.toThrow("导出原始内容")
+  })
+
+  it("keeps the app storage scope explicit and preserves unrelated site keys", async () => {
+    localStorage.setItem("zzz_maintenance_vue_draft_v4", '{"draft":true}')
+    localStorage.setItem("zzz_maintenance_agent_draft_v5", '{"draft":true}')
+    localStorage.setItem("unrelated-site", "keep")
+
+    const backup = await createPersonalBackup()
+    const keys = backup.data.localStorage.map(record => record.key)
+    expect(keys).toContain("zzz_maintenance_vue_draft_v4")
+    expect(keys).toContain("zzz_maintenance_agent_draft_v5")
+    expect(keys).not.toContain(FALLBACK)
+    expect(keys).not.toContain("unrelated-site")
+
+    await restorePersonalBackup(await previewPersonalRestore(backup))
+    expect(localStorage.getItem("zzz_maintenance_agent_draft_v5")).toBe('{"draft":true}')
+    expect(localStorage.getItem("unrelated-site")).toBe("keep")
+  })
+
+  it("generates a restore id when crypto.randomUUID is unavailable", async () => {
+    const backup = await createPersonalBackup()
+    vi.stubGlobal("crypto", {})
+    try {
+      const plan = await previewPersonalRestore(backup)
+      expect(plan.id).toMatch(/^personal-restore-/)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

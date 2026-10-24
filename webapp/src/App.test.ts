@@ -110,6 +110,12 @@ describe("App maintenance navigation", () => {
     const wrapper = mountApp({ startupError: "恢复失败" })
     expect(wrapper.get('[role="alert"]').text()).toContain("恢复失败")
     expect(wrapper.find('[data-testid="router-view"]').exists()).toBe(false)
+    expect(wrapper.text()).toContain("完整个人备份")
+  })
+
+  it("hides the backup panel when startup succeeds", () => {
+    const wrapper = mountApp()
+    expect(wrapper.text()).not.toContain("完整个人备份")
   })
 
   it("shows the raw-data export action when storage parsing fails", () => {

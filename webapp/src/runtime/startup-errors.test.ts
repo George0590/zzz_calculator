@@ -7,6 +7,7 @@ describe("startup error messages", () => {
     const error = Object.assign(new Error("构筑数据无法解析"), { code: LOCAL_DATA_PARSE_ERROR })
 
     expect(formatStartupError(error)).toContain("请先导出原始内容")
+    expect(formatStartupError(error)).toContain("完整个人备份")
     expect(formatStartupError(error)).toContain("构筑数据无法解析")
   })
 

@@ -398,6 +398,7 @@ declare module "@runtime/local-store.js" {
   export const DEFAULT_STORAGE_TIMEOUT_MS: number
   export interface LocalStoreOperationOptions {
     unreadableFallback?: string
+    personalDataRestoreTransactionId?: string
     ownerId?: string
     waitTimeoutMs?: number
     lockTimeoutMs?: number
@@ -405,6 +406,7 @@ declare module "@runtime/local-store.js" {
     purpose?: string
     signal?: AbortSignal
   }
+  export function isAppStorageKey(key: string): boolean
   export function clearAllBrowserData(): Promise<void>
   export function currentInventoryWriteRevision(): number
   export function driveDiscContentFingerprint(disc: any): string

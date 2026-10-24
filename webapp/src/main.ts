@@ -36,7 +36,7 @@ async function bootstrap() {
       await recoverPendingEnkaImport(ownerId, recoveryLockOptions)
     }
   } catch (error) {
-    startupError = `${formatStartupError(error)}；也可尝试从完整个人备份恢复。`
+    startupError = formatStartupError(error)
   }
   if (!startupError) {
     try {

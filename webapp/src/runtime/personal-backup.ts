@@ -1,12 +1,16 @@
-import { loadUserDriveDiscStoreFresh, saveUserDriveDiscStoreUnlocked, restoreUnreadableInventoryFallback } from "@runtime/local-store.js"
+import { isAppStorageKey, loadUserDriveDiscStoreFresh, saveUserDriveDiscStoreUnlocked, restoreUnreadableInventoryFallback } from "@runtime/local-store.js"
 import { withDriveDiscImportOwnerLock } from "@runtime/drive-disc-import-lock"
 import { driveDiscImportFingerprint, pendingDriveDiscImportOwners } from "@core/drive-disc-import/transaction-plan.js"
 
 const FORMAT = "zzz-calculator-personal-backup"
 const FALLBACK = "zzz-calculator.userStore.v1"
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value))
-const appKey = (key: string) => key !== FALLBACK
-  && (key.startsWith("zzz-calculator.") || key.startsWith("zzz_maintenance_vue_draft_"))
+const appKey = (key: string) => key !== FALLBACK && isAppStorageKey(key)
+
+function newRestoreId() {
+  const id = globalThis.crypto?.randomUUID?.()
+  return typeof id === "string" && id ? id : `personal-restore-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
 
 type Snapshot = { inventory: any, localStorage: Array<{ key: string, value: string }>, unreadableFallback?: string }
 
@@ -76,6 +80,9 @@ export function validatePersonalBackup(value: any): Snapshot {
 export async function createPersonalBackup() {
   return withDriveDiscImportOwnerLock("all", async () => {
     const data = await snapshot()
+    if (data.unreadableFallback !== undefined) {
+      throw new Error("当前库存数据无法解析，不能导出完整备份；请先使用“导出原始内容”保存原始数据。")
+    }
     assertSettled(data.inventory)
     const backup = { format: FORMAT, version: 1, createdAt: new Date().toISOString(), data }
     validatePersonalBackup(backup)
@@ -98,7 +105,7 @@ export async function previewPersonalRestore(value: any) {
     discs: data.inventory?.driveDiscs?.length ?? 0, loadouts: data.inventory?.driveDiscLoadouts?.length ?? 0,
     documents: data.localStorage.length, labels: (data.inventory?.owners ?? []).map((owner: any) => owner.label ?? owner.id),
     unreadable: data.unreadableFallback !== undefined })
-  return { id: globalThis.crypto.randomUUID(), target, before, base: driveDiscImportFingerprint(before),
+  return { id: newRestoreId(), target, before, base: driveDiscImportFingerprint(before),
     current: count(before), incoming: count(target) }
 }
 
@@ -128,7 +135,10 @@ export async function restorePersonalBackup(plan: any) {
     // The existing inventory record holds the journal, including raw settings.
     // No database schema or storage location changes are required.
     const prepared = { ...(before.inventory ?? frozen.target.inventory), personalDataRestore: journal }
-    await saveUserDriveDiscStoreUnlocked(prepared, { unreadableFallback: before.unreadableFallback })
+    await saveUserDriveDiscStoreUnlocked(prepared, {
+      unreadableFallback: before.unreadableFallback,
+      personalDataRestoreTransactionId: journal.id,
+    })
     try {
       writeLocalDocuments(frozen.target.localStorage)
       await saveUserDriveDiscStoreUnlocked(frozen.target.inventory)
