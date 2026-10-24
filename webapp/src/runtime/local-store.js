@@ -33,6 +33,13 @@ const DB_VERSION = 1
 const STATE_STORE = "state"
 const STORE_KEY = "userDriveDiscStore"
 const FALLBACK_STORAGE_KEY = "zzz-calculator.userStore.v1"
+const APP_STORAGE_PREFIXES = ["zzz-calculator.", "zzz_maintenance_vue_draft_", "zzz_maintenance_agent_draft_"]
+
+// Single source of truth for which localStorage keys belong to the calculator.
+// Backup and "clear browser data" must keep the same scope.
+export function isAppStorageKey(key) {
+    return typeof key === "string" && APP_STORAGE_PREFIXES.some(prefix => key.startsWith(prefix))
+}
 
 // In-tab invalidation only. Other tabs are refreshed explicitly by the user.
 let inventoryWriteRevision = 0
@@ -298,6 +305,9 @@ async function writePersistedStore(store, options = {}) {
         purpose: options.purpose ?? "写入驱动盘库存",
     })
     if (!pendingDb) {
+        if (typeof options.unreadableFallback !== "string" || localStorage.getItem(FALLBACK_STORAGE_KEY) !== options.unreadableFallback) {
+            readFallbackStore()
+        }
         localStorage.setItem(FALLBACK_STORAGE_KEY, JSON.stringify(store))
         return store
     }
@@ -420,7 +430,7 @@ export async function clearAllBrowserData() {
         const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
             .filter(Boolean)
         for (const key of keys) {
-            if (key.startsWith("zzz-calculator.") || key.startsWith("zzz_maintenance_vue_draft_")) {
+            if (isAppStorageKey(key)) {
                 localStorage.removeItem(key)
             }
         }
@@ -455,6 +465,10 @@ export async function exportCurrentUserDriveDiscs(options = {}) {
 }
 
 export async function saveUserDriveDiscStoreUnlocked(store, options = {}) {
+    const pendingRestore = store?.personalDataRestore
+    if (pendingRestore && (!pendingRestore.id || pendingRestore.id !== options?.personalDataRestoreTransactionId)) {
+        throw new Error("存在未完成的个人数据恢复事务，请刷新页面完成恢复后再修改数据。")
+    }
     const nextStore = {
         ...normalizeInventoryStore(migratePersistedInventoryStore(store)),
         updatedAt: new Date().toISOString(),
@@ -467,6 +481,15 @@ export async function saveUserDriveDiscStoreUnlocked(store, options = {}) {
         inventoryWriteRevision += 1
     }
     return nextStore
+}
+
+// Only the full-backup recovery transaction uses this to restore an original
+// unreadable fallback after a failed replacement. Normal writes remain guarded.
+export function restoreUnreadableInventoryFallback(raw, transactionId) {
+    inventoryWriteRevision += 1
+    const current = readFallbackStore()
+    if (current?.personalDataRestore?.id !== transactionId) throw new Error("数据恢复事务已变化，保留恢复记录，请刷新后重试。")
+    localStorage.setItem(FALLBACK_STORAGE_KEY, raw)
 }
 
 export async function saveUserDriveDiscStore(store, options = {}) {

@@ -19,6 +19,7 @@
 | 菲欧妮 | [角色专题](fioni-modeling.md) | 灼蚀异常暴击、焚罪异放与默认单次异放 |
 | 风属性异常与维琳娜 | [风属性专题](wind-anomaly-modeling.md) | 风化、乱流、异放、来源、公式和默认配置 |
 | 蕾米埃尔·丹评分 | [评分专题](luminescence-modeling.md) | 恒定权重近似、正式输入、兼容和评分边界 |
+| 本地个人备份与恢复 | [本地数据工具](local-data-tools.md) | 完整备份、预览、事务回滚及坏库存恢复边界 |
 | 表单和弹窗布局 | [前端布局契约](frontend-layout-contract.md) | 尺寸、滚动、可见性；保存行为引用回归契约 |
 | 驱动盘仓库性能 | [分页与缓存说明](drive-disc-performance.md) | 分页、代理人预设筛选、缓存边界与验证入口 |
 | 发布候选版本 | [生产发布手册](production-deployment-runbook.md) | 内容核对、冻结SHA、Promote、证据和恢复入口 |

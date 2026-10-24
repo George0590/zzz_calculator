@@ -541,6 +541,7 @@ describe("local-store IndexedDB compatibility", () => {
     })
     localStorage.setItem("zzz-calculator.webapp.build.v1", "{}")
     localStorage.setItem("zzz_maintenance_vue_draft_v3", "{}")
+    localStorage.setItem("zzz_maintenance_agent_draft_v5", "{}")
     localStorage.setItem("unrelated-key", "keep")
 
     const localStore = await import("@runtime/local-store.js?indexeddb-clear")
@@ -551,6 +552,7 @@ describe("local-store IndexedDB compatibility", () => {
     expect(deleteCalls).toEqual(["zzz-calculator-user-store"])
     expect(localStorage.getItem("zzz-calculator.webapp.build.v1")).toBeNull()
     expect(localStorage.getItem("zzz_maintenance_vue_draft_v3")).toBeNull()
+    expect(localStorage.getItem("zzz_maintenance_agent_draft_v5")).toBeNull()
     expect(localStorage.getItem("unrelated-key")).toBe("keep")
   })
 })
