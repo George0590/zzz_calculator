@@ -216,4 +216,31 @@ describe("App navigation indicator", () => {
       vi.useRealTimers()
     }
   })
+
+  it("moves the indicator without waiting when reduced motion is requested", async () => {
+    const boxes: Record<string, { left: number, width: number }> = { "/": { left: 3, width: 80 }, "/discs": { left: 85, width: 96 } }
+    const left = vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (this: HTMLElement) { return boxes[this.getAttribute("href") ?? ""]?.left ?? 0 })
+    const width = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) { return boxes[this.getAttribute("href") ?? ""]?.width ?? 0 })
+    vi.stubGlobal("matchMedia", vi.fn(() => ({ matches: true, addEventListener() {}, removeEventListener() {} })))
+    try {
+      const wrapper = mountApp()
+      const indicator = wrapper.get(".nav-indicator")
+      await vi.waitFor(() => expect(indicator.attributes("style")).toContain("translateX(3px) scaleX(1)"))
+      vi.useFakeTimers()
+      let settled = false
+      void Promise.resolve(routerFixture.guards[0]!({ path: "/discs" })).then(() => { settled = true })
+      await Promise.resolve()
+      await Promise.resolve()
+      // 没有过渡可播：守卫立即放行，滑块直接落到目标位置且不进入动画态。
+      expect(settled).toBe(true)
+      expect(indicator.classes()).not.toContain("is-animated")
+      expect(indicator.attributes("style")).toContain("translateX(85px) scaleX(1)")
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+      left.mockRestore()
+      width.mockRestore()
+    }
+  })
 })

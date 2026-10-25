@@ -45,6 +45,7 @@
   --app-radius: 8px;
   --app-radius-sm: 6px;
   --app-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+  --app-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.03);
 }
 
 /* 深色主题：跟随系统时由媒体查询生效；手动选择时 data-theme 覆盖系统设置。 */
@@ -82,6 +83,7 @@
     --app-red-soft: rgba(239, 99, 99, 0.14);
     --app-red-line: rgba(239, 99, 99, 0.45);
     --app-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+    --app-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
     --app-focus-ring: 3px solid rgba(110, 165, 255, 0.5);
   }
 }
@@ -119,6 +121,7 @@
   --app-red-soft: rgba(239, 99, 99, 0.14);
   --app-red-line: rgba(239, 99, 99, 0.45);
   --app-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  --app-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04);
   --app-focus-ring: 3px solid rgba(110, 165, 255, 0.5);
 }
 
@@ -247,7 +250,7 @@ textarea {
   z-index: 0;
   border-radius: 999px;
   background: var(--app-panel);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(15, 23, 42, 0.03);
+  box-shadow: var(--app-shadow-sm);
   opacity: 0;
   pointer-events: none;
   transform-origin: 0 50%;
@@ -296,7 +299,7 @@ textarea {
 /* 滑块尚未就绪（首帧、测试环境）时由链接自身画出白底。 */
 .nav:not(.nav--has-indicator) a.router-link-active {
   background: var(--app-panel);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  box-shadow: var(--app-shadow-sm);
 }
 
 .nav a svg {

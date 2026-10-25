@@ -23,6 +23,21 @@ for (const width of [320, 360, 390]) {
   })
 }
 
+test("navigation indicator follows reduced motion preference", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await page.goto("/")
+  await page.getByRole("navigation", { name: "主导航" }).getByRole("link").nth(1).click()
+  await expectNavigationFits(page)
+  // 减少动画偏好下不播放过渡，滑块直接落位。
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.querySelector(".nav-indicator")!).transitionDuration)).toBe("0s")
+  await expect.poll(() => page.evaluate(() => {
+    const nav = document.querySelector("nav.nav")!
+    const current = nav.querySelector('a[aria-current="page"]')!.getBoundingClientRect()
+    const box = nav.querySelector(".nav-indicator")!.getBoundingClientRect()
+    return Math.max(Math.abs(current.left - box.left), Math.abs(current.width - box.width))
+  })).toBeLessThanOrEqual(2)
+})
+
 // Composite transparent surfaces, including the score bar's separate fill layer.
 async function expectReadable(locator: Locator, overlay?: string) {
   const measureContrast = () => locator.evaluate((element, overlaySelector) => {

@@ -81,10 +81,18 @@ function measureNavIndicator(animate: boolean) {
   moveNavIndicator(route.path, animate)
 }
 
+function prefersReducedMotion() {
+  return typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
 // 点击后先让滑块开始滑动，再挂载新页面；后台标签页没有动画帧时，最多等 50ms。
+// 减少动画偏好下没有过渡可播，直接落位，不额外等待切页。
 const removeNavGuard = router.beforeEach(async to => {
   if (to.path === route.path || !navLinkBoxes.has(to.path)) return
-  moveNavIndicator(to.path, true)
+  const animate = !prefersReducedMotion()
+  moveNavIndicator(to.path, animate)
+  if (!animate) return
   await Promise.race([
     new Promise(resolve => requestAnimationFrame(() => resolve(null))),
     new Promise(resolve => setTimeout(resolve, 50)),
