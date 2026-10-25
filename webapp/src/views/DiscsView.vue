@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, h, inject, onMounted, onActivated, onDeactivated, ref, watch } from "vue"
+import { computed, inject, onMounted, onActivated, onDeactivated, onBeforeUnmount, ref, watch } from "vue"
 import { routeLocationKey } from "vue-router"
-import { NAlert, NButton, NCheckbox, NDrawer, NDrawerContent, NDropdown, NInput, NInputNumber, NModal, NProgress, NSelect, NSpin, NTag, useMessage } from "naive-ui"
-import { Ban, ChevronDown, Download, FileText, LockKeyhole, Plus, Radar, RefreshCw, Upload, X } from "lucide-vue-next"
+import { NAlert, NButton, NCheckbox, NDrawer, NDrawerContent, NInput, NInputNumber, NModal, NProgress, NSelect, NSpin, NTag, useMessage } from "naive-ui"
+import { Ban, Download, FileText, LockKeyhole, Plus, Radar, Upload, X } from "lucide-vue-next"
 import ConfirmDialog from "@/components/ConfirmDialog.vue"
 import DriveDiscConflictResolver from "@/components/DriveDiscConflictResolver.vue"
 import DriveDiscImportUndo from "@/components/DriveDiscImportUndo.vue"
@@ -142,6 +142,13 @@ onDeactivated(() => {
   }
   deleteLoadoutId.value = ""
 })
+
+// 其他标签页可能已改写库存；切回本标签页时重新读取，替代原来的“刷新库存”按钮。
+function reloadInventoryWhenVisible() {
+  if (document.visibilityState === "visible") void inventoryStore.load()
+}
+onMounted(() => document.addEventListener("visibilitychange", reloadInventoryWhenVisible))
+onBeforeUnmount(() => document.removeEventListener("visibilitychange", reloadInventoryWhenVisible))
 
 watch(showScan, visible => {
   if (visible) {
@@ -1129,22 +1136,6 @@ function confirmDangerImport() {
   pendingDangerImport.value = ""
 }
 
-// 工具栏“更多”：低频操作收进下拉，常用的新增、导入、扫描保持可见
-const moreToolbarOptions = computed(() => [
-  { key: "refresh", label: "刷新库存", icon: () => h(RefreshCw, { size: 16 }) },
-  {
-    key: "export",
-    label: inventoryStore.hasDriveDiscs ? "批量导出" : "批量导出（当前账号没有驱动盘）",
-    disabled: inventoryStore.loading || !inventoryStore.hasDriveDiscs,
-    icon: () => h(Download, { size: 16 }),
-  },
-])
-
-function selectMoreToolbarAction(key: string | number) {
-  if (key === "refresh") void inventoryStore.load()
-  else if (key === "export") void exportDriveDiscs()
-}
-
 // 当前生效的筛选条件，以可单独清除的标签展示
 const activeFilterChips = computed(() => {
   const chips: Array<{ key: string, label: string, clear: () => void }> = []
@@ -1191,12 +1182,14 @@ function clearAllFilters() {
             <template #icon><Upload :size="16" /></template>
             批量导入
           </NButton>
-          <NDropdown trigger="click" :options="moreToolbarOptions" placement="bottom-end" @select="selectMoreToolbarAction">
-            <NButton data-testid="drive-disc-more-actions" aria-haspopup="menu">
-              更多
-              <ChevronDown :size="14" aria-hidden="true" class="toolbar-more-chevron" />
-            </NButton>
-          </NDropdown>
+          <NButton
+            :disabled="inventoryStore.loading || !inventoryStore.hasDriveDiscs"
+            :title="inventoryStore.hasDriveDiscs ? '导出当前账号的全部驱动盘' : '当前账号没有可导出的驱动盘'"
+            @click="exportDriveDiscs"
+          >
+            <template #icon><Download :size="16" /></template>
+            批量导出
+          </NButton>
           <NButton type="primary" @click="showScan = true">
             <template #icon><Radar :size="16" /></template>
             扫描
@@ -2660,10 +2653,6 @@ function clearAllFilters() {
   margin-top: 8px;
 }
 
-.toolbar-more-chevron {
-  margin-left: 4px;
-}
-
 .active-filter-chips {
   display: flex;
   flex-wrap: wrap;
@@ -2708,6 +2697,25 @@ function clearAllFilters() {
 
 .active-filter-clear:hover {
   color: var(--app-text);
+}
+
+/* 长搜索词/ID 也必须留在页面内：限制宽度并允许换行，避免窄屏横向溢出。 */
+.active-filter-chip,
+.active-filter-clear {
+  max-width: 100%;
+  height: auto;
+  min-height: 26px;
+}
+
+.active-filter-chip {
+  padding: 3px 8px 3px 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.active-filter-chip svg {
+  flex: 0 0 auto;
 }
 
 .active-filter-chip:focus-visible,

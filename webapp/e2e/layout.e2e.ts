@@ -573,3 +573,13 @@ test("administrator default-loop events remain reachable inside the modal", asyn
 
   expect(browserErrors).toEqual([])
 })
+
+test("inventory filter chips keep long queries inside the page at narrow width", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 })
+  await page.goto("/discs")
+  await expect(page.locator("#app")).toBeVisible()
+  await page.waitForLoadState("networkidle")
+  await page.getByPlaceholder("搜索套装、主词条或 ID").fill("a".repeat(40))
+  await expect(page.locator(".active-filter-chip")).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1)
+})
