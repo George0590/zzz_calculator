@@ -116,6 +116,18 @@ vi.mock("naive-ui", () => ({
   NDrawerContent: {
     template: "<section><slot /></section>",
   },
+  NDropdown: {
+    props: ["options"],
+    emits: ["select"],
+    template: `
+      <div class="dropdown-stub">
+        <slot />
+        <div class="dropdown-menu">
+          <button v-for="option in options" :key="option.key" type="button" class="dropdown-option" :data-dropdown-key="option.key" :disabled="option.disabled" @click="$emit('select', option.key)">{{ option.label }}</button>
+        </div>
+      </div>
+    `,
+  },
   NInput: {
     props: ["value"],
     emits: ["update:value"],
@@ -370,22 +382,46 @@ describe("DiscsView", () => {
     expect(wrapper.text()).not.toContain("词条分析")
   })
 
-  it("labels bulk actions and makes scan the only primary toolbar command", async () => {
+  it("keeps scan as the only primary command and moves low-frequency actions into the more menu", async () => {
     const wrapper = await mountView()
     const toolbar = wrapper.find('[data-layout-surface="drive-discs-page"] > .panel > .panel-header .toolbar')
-    const toolbarButtons = toolbar.findAll("button")
+    const visibleButtons = toolbar.findAll("button").filter(item => !item.element.closest(".dropdown-menu"))
 
-    expect(toolbarButtons.map(item => item.text().trim())).toEqual([
+    expect(visibleButtons.map(item => item.text().trim())).toEqual([
       "新增单个",
-      "刷新",
       "撤销上次导入",
       "批量导入",
-      "批量导出",
+      "更多",
       "扫描",
     ])
-    expect(toolbarButtons
+    const menu = toolbar.findAll(".dropdown-option")
+    expect(menu.map(item => item.text().trim())).toEqual(["刷新库存", "批量导出（当前账号没有驱动盘）"])
+    expect(menu.filter(item => item.attributes("data-dropdown-key") === "export")[0]?.attributes("disabled")).toBeDefined()
+    expect(visibleButtons
       .filter(item => item.attributes("data-button-type") === "primary")
       .map(item => item.text().trim())).toEqual(["扫描"])
+  })
+
+  it("shows active filters as removable chips with a clear-all action", async () => {
+    seedInventory([driveDisc(1, { setName: "啄木鸟电音" }), driveDisc(2, { setName: "混沌爵士" })])
+    const wrapper = await mountView()
+    expect(wrapper.find('[aria-label="当前筛选条件"]').exists()).toBe(false)
+
+    const inventory = useInventoryStore()
+    inventory.search = "啄木鸟"
+    inventory.slotFilter = 1
+    await flushPromises()
+    const chips = () => wrapper.findAll(".active-filter-chip").map(chip => chip.text())
+    expect(chips()).toEqual(["搜索：啄木鸟", "1号位"])
+
+    await wrapper.findAll(".active-filter-chip")[1]!.trigger("click")
+    expect(inventory.slotFilter).toBe(0)
+    expect(chips()).toEqual(["搜索：啄木鸟"])
+
+    await wrapper.get('[data-testid="clear-drive-disc-filters"]').trigger("click")
+    expect(inventory.search).toBe("")
+    expect(wrapper.find('[aria-label="当前筛选条件"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it("keeps the production inventory UI unchanged while the reservation flag is off", async () => {
@@ -623,7 +659,7 @@ describe("DiscsView", () => {
 
   it("downloads the current account export and disables export for an empty inventory", async () => {
     const emptyWrapper = await mountView()
-    expect(button(emptyWrapper, "批量导出").attributes()).toHaveProperty("disabled")
+    expect(emptyWrapper.get('[data-dropdown-key="export"]').attributes()).toHaveProperty("disabled")
     emptyWrapper.unmount()
 
     seedInventory([{
@@ -645,7 +681,7 @@ describe("DiscsView", () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {})
     const wrapper = await mountView()
 
-    await button(wrapper, "批量导出").trigger("click")
+    await wrapper.get('[data-dropdown-key="export"]').trigger("click")
     await flushPromises()
 
     expect(createObjectURL).toHaveBeenCalledTimes(1)
@@ -655,11 +691,14 @@ describe("DiscsView", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:drive-disc-export")
   })
 
-  it("uses a refresh icon and hides manual identity, equipped agent, and rarity controls", async () => {
+  it("offers refresh in the more menu and hides manual identity, equipped agent, and rarity controls", async () => {
     const wrapper = await mountView()
 
-    const refreshButton = button(wrapper, "刷新")
-    expect(refreshButton.find("svg").classes()).toContain("lucide-refresh-cw-icon")
+    const refreshOption = wrapper.get('[data-dropdown-key="refresh"]')
+    expect(refreshOption.text()).toBe("刷新库存")
+    const load = vi.spyOn(useInventoryStore(), "load")
+    await refreshOption.trigger("click")
+    expect(load).toHaveBeenCalledTimes(1)
 
     await button(wrapper, "新增单个").trigger("click")
     const modal = wrapper.find(".test-modal")
