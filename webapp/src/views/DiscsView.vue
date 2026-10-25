@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, onActivated, onDeactivated, ref, watch } from "vue"
+import { computed, inject, onMounted, onActivated, onDeactivated, onBeforeUnmount, ref, watch } from "vue"
 import { routeLocationKey } from "vue-router"
 import { NAlert, NButton, NCheckbox, NDrawer, NDrawerContent, NInput, NInputNumber, NModal, NProgress, NSelect, NSpin, NTag, useMessage } from "naive-ui"
-import { Ban, Download, FileText, LockKeyhole, Plus, Radar, RefreshCw, Upload } from "lucide-vue-next"
+import { Ban, Download, FileText, LockKeyhole, Plus, Radar, Upload, X } from "lucide-vue-next"
 import ConfirmDialog from "@/components/ConfirmDialog.vue"
 import DriveDiscConflictResolver from "@/components/DriveDiscConflictResolver.vue"
 import DriveDiscImportUndo from "@/components/DriveDiscImportUndo.vue"
@@ -142,6 +142,13 @@ onDeactivated(() => {
   }
   deleteLoadoutId.value = ""
 })
+
+// 其他标签页可能已改写库存；切回本标签页时重新读取，替代原来的“刷新库存”按钮。
+function reloadInventoryWhenVisible() {
+  if (document.visibilityState === "visible") void inventoryStore.load()
+}
+onMounted(() => document.addEventListener("visibilitychange", reloadInventoryWhenVisible))
+onBeforeUnmount(() => document.removeEventListener("visibilitychange", reloadInventoryWhenVisible))
 
 watch(showScan, visible => {
   if (visible) {
@@ -1128,6 +1135,36 @@ function confirmDangerImport() {
   }
   pendingDangerImport.value = ""
 }
+
+// 当前生效的筛选条件，以可单独清除的标签展示
+const activeFilterChips = computed(() => {
+  const chips: Array<{ key: string, label: string, clear: () => void }> = []
+  const search = String(inventoryStore.search ?? "").trim()
+  if (search) chips.push({ key: "search", label: `搜索：${search}`, clear: () => { inventoryStore.search = "" } })
+  if (inventoryStore.mainStatFilter) {
+    chips.push({ key: "mainStat", label: `主词条：${statLabel(inventoryStore.mainStatFilter, catalogStore.meta)}`, clear: () => { inventoryStore.mainStatFilter = "" } })
+  }
+  if (inventoryStore.slotFilter) {
+    chips.push({ key: "slot", label: `${inventoryStore.slotFilter}号位`, clear: () => { inventoryStore.slotFilter = 0 } })
+  }
+  if (reservationUiEnabled.value && !exclusionUiEnabled.value && inventoryStore.reservationFilter) {
+    const option = reservationFilterOptions.value.find((item: any) => item.value === inventoryStore.reservationFilter)
+    chips.push({ key: "reservation", label: String(option?.label ?? inventoryStore.reservationFilter), clear: () => { inventoryStore.reservationFilter = "" } })
+  }
+  if (exclusionUiEnabled.value && inventoryStore.restrictionStatusFilter) {
+    const option = restrictionStatusOptions.find(item => item.value === inventoryStore.restrictionStatusFilter)
+    chips.push({ key: "restrictionStatus", label: option?.label ?? inventoryStore.restrictionStatusFilter, clear: () => { inventoryStore.restrictionStatusFilter = "" } })
+  }
+  if (exclusionUiEnabled.value && inventoryStore.restrictionAgentFilter) {
+    const option = restrictionAgentOptions.value.find((item: any) => item.value === inventoryStore.restrictionAgentFilter)
+    chips.push({ key: "restrictionAgent", label: String(option?.label ?? inventoryStore.restrictionAgentFilter), clear: () => { inventoryStore.restrictionAgentFilter = "" } })
+  }
+  return chips
+})
+
+function clearAllFilters() {
+  for (const chip of activeFilterChips.value) chip.clear()
+}
 </script>
 
 <template>
@@ -1139,10 +1176,6 @@ function confirmDangerImport() {
           <NButton data-testid="open-drive-disc-editor" @click="openNewDisc">
             <template #icon><Plus :size="16" /></template>
             新增单个
-          </NButton>
-          <NButton title="重新读取库存；其他标签页的改动请点击刷新" @click="inventoryStore.load">
-            <template #icon><RefreshCw :size="16" /></template>
-            刷新
           </NButton>
           <DriveDiscImportUndo v-if="pageActive" />
           <NButton @click="showImport = true">
@@ -1191,6 +1224,21 @@ function confirmDangerImport() {
           />
           <NTag round>{{ inventoryStore.driveDiscs.length }} 件</NTag>
           <NTag round>{{ inventoryStore.loadouts.length }} 个套装预设</NTag>
+        </div>
+        <div v-if="activeFilterChips.length" class="active-filter-chips" role="group" aria-label="当前筛选条件">
+          <span class="active-filter-label">已筛选</span>
+          <button
+            v-for="chip in activeFilterChips"
+            :key="chip.key"
+            type="button"
+            class="active-filter-chip"
+            :aria-label="`清除筛选：${chip.label}`"
+            @click="chip.clear()"
+          >
+            {{ chip.label }}
+            <X :size="12" aria-hidden="true" />
+          </button>
+          <button type="button" class="active-filter-clear" data-testid="clear-drive-disc-filters" @click="clearAllFilters">清除全部</button>
         </div>
         <div class="slot-filter-scroll">
           <div class="slot-filter-buttons" role="group" aria-label="驱动盘槽位筛选">
@@ -2603,6 +2651,77 @@ function confirmDangerImport() {
   justify-content: center;
   gap: 10px;
   margin-top: 8px;
+}
+
+.active-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.active-filter-label {
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.active-filter-chip,
+.active-filter-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px 0 10px;
+  border: 1px solid var(--app-blue-line);
+  border-radius: 999px;
+  background: var(--app-blue-soft);
+  color: var(--app-blue-strong);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.active-filter-chip:hover {
+  border-color: var(--app-blue);
+}
+
+.active-filter-clear {
+  padding: 0 8px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--app-muted);
+}
+
+.active-filter-clear:hover {
+  color: var(--app-text);
+}
+
+/* 长搜索词/ID 也必须留在页面内：限制宽度并允许换行，避免窄屏横向溢出。 */
+.active-filter-chip,
+.active-filter-clear {
+  max-width: 100%;
+  height: auto;
+  min-height: 26px;
+}
+
+.active-filter-chip {
+  padding: 3px 8px 3px 10px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.active-filter-chip svg {
+  flex: 0 0 auto;
+}
+
+.active-filter-chip:focus-visible,
+.active-filter-clear:focus-visible {
+  outline: var(--app-focus-ring);
+  outline-offset: 1px;
 }
 
 @media (max-width: 720px) {

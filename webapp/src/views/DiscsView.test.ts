@@ -370,22 +370,66 @@ describe("DiscsView", () => {
     expect(wrapper.text()).not.toContain("词条分析")
   })
 
-  it("labels bulk actions and makes scan the only primary toolbar command", async () => {
+  it("keeps scan as the only primary command and exposes bulk export directly", async () => {
     const wrapper = await mountView()
     const toolbar = wrapper.find('[data-layout-surface="drive-discs-page"] > .panel > .panel-header .toolbar')
-    const toolbarButtons = toolbar.findAll("button")
 
-    expect(toolbarButtons.map(item => item.text().trim())).toEqual([
+    expect(toolbar.findAll("button").map(item => item.text().trim())).toEqual([
       "新增单个",
-      "刷新",
       "撤销上次导入",
       "批量导入",
       "批量导出",
       "扫描",
     ])
-    expect(toolbarButtons
+    expect(toolbar.text()).not.toContain("刷新")
+    expect(toolbar.text()).not.toContain("更多")
+    expect(toolbar
+      .findAll("button")
       .filter(item => item.attributes("data-button-type") === "primary")
       .map(item => item.text().trim())).toEqual(["扫描"])
+  })
+
+  it("reloads inventory when the browser tab becomes visible again", async () => {
+    const wrapper = await mountView()
+    const inventory = useInventoryStore()
+    const load = vi.spyOn(inventory, "load")
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" })
+    try {
+      document.dispatchEvent(new Event("visibilitychange"))
+      await flushPromises()
+      expect(load).toHaveBeenCalledTimes(1)
+
+      // 页面仍处于后台时不重复读取。
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" })
+      document.dispatchEvent(new Event("visibilitychange"))
+      await flushPromises()
+      expect(load).toHaveBeenCalledTimes(1)
+    } finally {
+      delete (document as any).visibilityState
+      wrapper.unmount()
+    }
+  })
+
+  it("shows active filters as removable chips with a clear-all action", async () => {
+    seedInventory([driveDisc(1, { setName: "啄木鸟电音" }), driveDisc(2, { setName: "混沌爵士" })])
+    const wrapper = await mountView()
+    expect(wrapper.find('[aria-label="当前筛选条件"]').exists()).toBe(false)
+
+    const inventory = useInventoryStore()
+    inventory.search = "啄木鸟"
+    inventory.slotFilter = 1
+    await flushPromises()
+    const chips = () => wrapper.findAll(".active-filter-chip").map(chip => chip.text())
+    expect(chips()).toEqual(["搜索：啄木鸟", "1号位"])
+
+    await wrapper.findAll(".active-filter-chip")[1]!.trigger("click")
+    expect(inventory.slotFilter).toBe(0)
+    expect(chips()).toEqual(["搜索：啄木鸟"])
+
+    await wrapper.get('[data-testid="clear-drive-disc-filters"]').trigger("click")
+    expect(inventory.search).toBe("")
+    expect(wrapper.find('[aria-label="当前筛选条件"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it("keeps the production inventory UI unchanged while the reservation flag is off", async () => {
@@ -655,11 +699,8 @@ describe("DiscsView", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:drive-disc-export")
   })
 
-  it("uses a refresh icon and hides manual identity, equipped agent, and rarity controls", async () => {
+  it("hides manual identity, equipped agent, and rarity controls", async () => {
     const wrapper = await mountView()
-
-    const refreshButton = button(wrapper, "刷新")
-    expect(refreshButton.find("svg").classes()).toContain("lucide-refresh-cw-icon")
 
     await button(wrapper, "新增单个").trigger("click")
     const modal = wrapper.find(".test-modal")
