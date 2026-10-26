@@ -69,6 +69,7 @@ const catalogStore = useCatalogStore()
 <style scoped>
 .workbench-right-sticky {
   position: sticky;
+  /* 顶栏约 56px + 18px 间距；后续布局层会改用显式布局变量 */
   top: 74px;
 }
 
@@ -119,7 +120,6 @@ const catalogStore = useCatalogStore()
 @media (max-width: 1280px) {
   .workbench-right-sticky {
     position: static;
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>
